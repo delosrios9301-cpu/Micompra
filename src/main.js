@@ -12,6 +12,7 @@ let user = null;
 let activeList = null;
 let searchTimer;
 let selectedBranchId = '';
+let lastComparedProductId = null;
 
 const app = document.querySelector('#app');
 const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(value);
@@ -35,7 +36,7 @@ function shell() {
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
-  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; });
+  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; if (lastComparedProductId) compareProduct(lastComparedProductId); });
   document.querySelector('#search').addEventListener('input', e => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchProducts(e.target.value.trim()), 300);
@@ -71,6 +72,7 @@ async function searchProducts(term) {
 }
 
 async function compareProduct(id) {
+  lastComparedProductId = id;
   const box = document.querySelector('#results');
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
   const { data, error } = await supabase.from('store_products')
