@@ -63,13 +63,13 @@ async function compareProduct(id) {
   const box = document.querySelector('#results');
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
   const { data, error } = await supabase.from('store_products')
-    .select('id,source_product_name,package_description,source_product_url,supermarkets(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
+    .select('id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
     .eq('product_id', id).limit(40);
   if (error) { box.innerHTML = '<p class="empty">No fue posible consultar los precios.</p>'; return; }
   const rows = (data || []).flatMap(item => (item.price_observations || []).map(price => ({...price, store:item.supermarkets?.name, product:item.source_product_name, pack:item.package_description, productUrl:item.source_product_url})))
     .filter(p => p.is_verified).sort((a,b) => Number(a.price)-Number(b.price));
   if (!rows.length) { box.innerHTML = '<p class="empty">Este producto aún no tiene precios verificados. No se puede recomendar una tienda todavía.</p>'; return; }
-  box.innerHTML = rows.map((p,i) => `<article class="price-row"><div><strong>${safe(p.store || 'Tienda')}</strong><small>${safe(p.product)} · ${safe(p.pack || 'Presentación no especificada')}</small><small>Consultado: ${new Date(p.observed_at).toLocaleString('es-PA')}</small></div><div class="price-value"><b>${money(p.price)}</b>${i===0?'<em>Menor precio verificado</em>':''}<a href="${safe(p.source_url || p.productUrl || '#')}" target="_blank" rel="noreferrer">Ver fuente ↗</a></div></article>`).join('');
+  box.innerHTML = rows.map((p,i) => `<article class="price-row"><div><strong>${safe(p.store || 'Tienda')}</strong><small>${safe(p.product)} · ${safe(p.pack || 'Presentación no especificada')}</small>${p.branch ? `<small>Sucursal: ${safe(p.branch)}</small>` : '<small>Sucursal no especificada</small>'}<small>Consultado: ${new Date(p.observed_at).toLocaleString('es-PA')}</small></div><div class="price-value"><b>${money(p.price)}</b>${i===0?'<em>Menor precio verificado</em>':''}<a href="${safe(p.source_url || p.productUrl || '#')}" target="_blank" rel="noreferrer">Ver fuente ↗</a></div></article>`).join('');
 }
 
 async function renderAuth() {
