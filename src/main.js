@@ -75,14 +75,17 @@ async function compareProduct(id) {
   lastComparedProductId = id;
   const box = document.querySelector('#results');
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
+  const freshnessCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase.from('store_products')
     .select('id,branch_id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
-    .eq('product_id', id).limit(40);
+    .eq('product_id', id)
+    .gte('price_observations.observed_at', freshnessCutoff)
+    .limit(40);
   if (error) { box.innerHTML = '<p class="empty">No fue posible consultar los precios.</p>'; return; }
   const rows = (data || []).flatMap(item => (item.price_observations || []).map(price => ({...price, store:item.supermarkets?.name, branch:item.supermarket_branches?.name, branchId:item.branch_id, product:item.source_product_name, pack:item.package_description, productUrl:item.source_product_url})))
     .filter(p => p.is_verified && (p.store !== 'Super 99' || !selectedBranchId || p.branchId === selectedBranchId)).sort((a,b) => Number(a.price)-Number(b.price));
-  if (!rows.length) { box.innerHTML = '<p class="empty">Este producto aún no tiene precios verificados. No se puede recomendar una tienda todavía.</p>'; return; }
-  box.innerHTML = rows.map((p,i) => `<article class="price-row"><div><strong>${safe(p.store || 'Tienda')}</strong><small>${safe(p.product)} · ${safe(p.pack || 'Presentación no especificada')}</small>${p.branch ? `<small>Sucursal: ${safe(p.branch)}</small>` : '<small>Sucursal no especificada</small>'}<small>Consultado: ${new Date(p.observed_at).toLocaleString('es-PA')}</small></div><div class="price-value"><b>${money(p.price)}</b>${i===0?'<em>Menor precio verificado</em>':''}<a href="${safe(p.source_url || p.productUrl || '#')}" target="_blank" rel="noreferrer">Ver fuente ↗</a></div></article>`).join('');
+  if (!rows.length) { box.innerHTML = '<p class="empty">Este producto no tiene precios verificados de las últimas 24 horas. No mostraremos precios antiguos como si fueran actuales.</p>'; return; }
+  box.innerHTML = rows.map((p,i) => `<article class="price-row"><div><strong>${safe(p.store || 'Tienda')}</strong><small>${safe(p.product)} · ${safe(p.pack || 'Presentación no especificada')}</small>${p.branch ? `<small>Sucursal: ${safe(p.branch)}</small>` : '<small>Sucursal no especificada</small>'}<small>Consultado: ${new Date(p.observed_at).toLocaleString('es-PA')}</small>${p.store === 'Super 99' ? '<small>Precio web sin ITBMS; productos vendidos por kg pueden mostrar un importe aproximado.</small>' : ''}</div><div class="price-value"><b>${money(p.price)}</b>${i===0?'<em>Menor precio verificado</em>':''}<a href="${safe(p.source_url || p.productUrl || '#')}" target="_blank" rel="noreferrer">Ver fuente ↗</a></div></article>`).join('');
 }
 
 async function renderAuth() {
