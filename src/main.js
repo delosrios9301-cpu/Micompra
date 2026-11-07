@@ -33,7 +33,7 @@ function shell() {
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
       <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${s.url ? 'Tienda en línea disponible' : 'Integración pendiente'}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Visitar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
-      <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p></aside>
+      <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
   document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; if (lastComparedProductId) compareProduct(lastComparedProductId); });
