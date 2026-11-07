@@ -29,7 +29,7 @@ export async function importPriceCsv({file,supabase,user,output}) {
   for(let i=0;i<rows.length;i++){
     const r=rows[i],line=i+2,price=Number(String(r.precio).replace(',','.'));
     const regular=r.precio_regular?Number(String(r.precio_regular).replace(',','.')):null;
-    const hasTimezone=/(Z|[+-]\\d{2}:\\d{2})$/i.test(r.fecha_hora_panama);\n    const date=new Date(r.fecha_hora_panama);
+    const hasTimezone=/(Z|[+-]\d{2}:\d{2})$/i.test(r.fecha_hora_panama);\n    const date=new Date(r.fecha_hora_panama);
     if(!r.supermercado||!r.sucursal||!r.producto||!Number.isFinite(price)||price<=0||!/^https:\/\//i.test(r.url_fuente)||r.moneda.toUpperCase()!=='USD'||!hasTimezone||Number.isNaN(date.getTime())||date>new Date()||date<new Date(Date.now()-86400000)){issues.push('Fila '+line+': datos inválidos o fecha fuera de 24 horas.');skipped++;continue;}
     if(regular!==null&&(!Number.isFinite(regular)||regular<price)){issues.push('Fila '+line+': precio regular inválido.');skipped++;continue;}
     const match=mappings.find(m=>m.supermarkets?.name?.toLowerCase()===r.supermercado.toLowerCase()&&m.supermarket_branches?.name?.toLowerCase()===r.sucursal.toLowerCase()&&((r.sku&&m.source_sku===r.sku)||(m.source_product_name||'').toLowerCase()===r.producto.toLowerCase()));
