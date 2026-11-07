@@ -29,10 +29,10 @@ export async function importPriceCsv({file,supabase,user,output}) {
   for(let i=0;i<rows.length;i++){
     const r=rows[i],line=i+2,price=Number(String(r.precio).replace(',','.'));
     const regular=r.precio_regular?Number(String(r.precio_regular).replace(',','.')):null;
-    const date=new Date(r.fecha_hora_panama);
-    if(!r.supermercado||!r.sucursal||!r.producto||!Number.isFinite(price)||price<=0||!/^https:\/\//i.test(r.url_fuente)||r.moneda.toUpperCase()!=='USD'||Number.isNaN(date.getTime())||date>new Date()||date<new Date(Date.now()-86400000)){issues.push('Fila '+line+': datos inválidos o fecha fuera de 24 horas.');skipped++;continue;}
+    const hasTimezone=/(Z|[+-]\\d{2}:\\d{2})$/i.test(r.fecha_hora_panama);\n    const date=new Date(r.fecha_hora_panama);
+    if(!r.supermercado||!r.sucursal||!r.producto||!Number.isFinite(price)||price<=0||!/^https:\/\//i.test(r.url_fuente)||r.moneda.toUpperCase()!=='USD'||!hasTimezone||Number.isNaN(date.getTime())||date>new Date()||date<new Date(Date.now()-86400000)){issues.push('Fila '+line+': datos inválidos o fecha fuera de 24 horas.');skipped++;continue;}
     if(regular!==null&&(!Number.isFinite(regular)||regular<price)){issues.push('Fila '+line+': precio regular inválido.');skipped++;continue;}
-    const match=mappings.find(m=>m.supermarkets?.name?.toLowerCase()===r.supermercado.toLowerCase()&&m.supermarket_branches?.name?.toLowerCase()===r.sucursal.toLowerCase()&&((r.sku&&m.source_sku===r.sku)||m.source_product_name.toLowerCase()===r.producto.toLowerCase()));
+    const match=mappings.find(m=>m.supermarkets?.name?.toLowerCase()===r.supermercado.toLowerCase()&&m.supermarket_branches?.name?.toLowerCase()===r.sucursal.toLowerCase()&&((r.sku&&m.source_sku===r.sku)||(m.source_product_name||'').toLowerCase()===r.producto.toLowerCase()));
     if(!match){issues.push('Fila '+line+': producto/sucursal no registrados o no coinciden.');skipped++;continue;}
     const {data:dupe,error:de}=await supabase.from('price_observations').select('id').eq('store_product_id',match.id).eq('observed_at',date.toISOString()).eq('price',price).limit(1);
     if(de){issues.push('Fila '+line+': no se pudo revisar duplicados.');skipped++;continue;}
