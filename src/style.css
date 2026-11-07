@@ -6,3 +6,5 @@
 .price-value del{display:block;color:#8a9690;font-size:12px;text-decoration:line-through}.price-value em{display:block;color:#17734f;font-size:11px;font-style:normal;font-weight:700;margin-top:3px}
 
 .template-link{display:inline-block;margin-top:10px;color:#245b45;font-size:12px;font-weight:700;text-decoration:none}.template-note{display:block;margin-top:6px;color:#718078;font-size:11px;line-height:1.5}
+
+.import-panel{margin-top:14px;padding:14px;border:1px solid #dce5de;border-radius:12px;background:#f8fbf8}.import-panel p{font-size:12px;line-height:1.5;color:#718078}.import-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.import-row input{min-width:0;max-width:100%;font:12px 'DM Sans'}.import-panel>small{display:block;white-space:pre-line;margin-top:10px;color:#496457;font-size:11px;line-height:1.5}
