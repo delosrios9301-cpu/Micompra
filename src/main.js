@@ -103,7 +103,7 @@ async function renderAuth() {
   } else {
     box.innerHTML = `<div class="signed"><span>Sesión: ${safe(user.email)}</span><button id="logout" class="secondary">Cerrar sesión</button></div><section class="import-panel"><strong>Importar precios desde CSV</strong><p>Valida fecha (24 horas), fuente HTTPS y coincidencia exacta con producto y sucursal registrados. Los precios se guardan sin verificar.</p><div class="import-row"><input id="price-csv" type="file" accept=".csv,text/csv"><button id="import-csv" class="secondary">Validar e importar</button></div><small id="import-result" aria-live="polite"></small></section>`;
     box.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
-    box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });  }
+    box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });  }
 }
 
 
