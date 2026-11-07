@@ -4,3 +4,5 @@
 .branch-filter{display:grid;gap:6px;margin:12px 0 18px;padding:13px;background:#fff;border:1px solid #e5ebe6;border-radius:12px}.branch-filter label{font-size:12px;font-weight:700;color:#405b4d}.branch-filter select{width:100%;padding:11px;border:1px solid #dce5de;border-radius:9px;background:#fff;font:inherit;color:#18332d}.branch-filter small{font-size:11px;color:#78877f;line-height:1.45}
 
 .price-value del{display:block;color:#8a9690;font-size:12px;text-decoration:line-through}.price-value em{display:block;color:#17734f;font-size:11px;font-style:normal;font-weight:700;margin-top:3px}
+
+.template-link{display:inline-block;margin-top:10px;color:#245b45;font-size:12px;font-weight:700;text-decoration:none}.template-note{display:block;margin-top:6px;color:#718078;font-size:11px;line-height:1.5}
