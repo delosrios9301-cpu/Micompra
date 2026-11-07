@@ -74,7 +74,7 @@ async function compareProduct(id) {
   const box = document.querySelector('#results');
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
   const { data, error } = await supabase.from('store_products')
-    .select('id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
+    .select('id,branch_id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
     .eq('product_id', id).limit(40);
   if (error) { box.innerHTML = '<p class="empty">No fue posible consultar los precios.</p>'; return; }
   const rows = (data || []).flatMap(item => (item.price_observations || []).map(price => ({...price, store:item.supermarkets?.name, branch:item.supermarket_branches?.name, branchId:item.branch_id, product:item.source_product_name, pack:item.package_description, productUrl:item.source_product_url})))
