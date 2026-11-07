@@ -106,6 +106,33 @@ async function renderAuth() {
     box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });  }
 }
 
+
+async function renderPriceReview() {
+  const box=document.querySelector('#auth');
+  if(!box||!user||!supabase) return;
+  const {data:allowed,error:checkError}=await supabase.rpc('is_price_reviewer');
+  if(checkError||!allowed) return;
+  const panel=document.createElement('section');
+  panel.className='review-panel';
+  panel.innerHTML='<strong>Revisión de precios pendientes</strong><p>Solo se aprobarán precios con fuente HTTPS y observación dentro de las últimas 24 horas.</p><div class="review-items"><small>Cargando precios pendientes...</small></div>';
+  box.appendChild(panel);
+  const list=panel.querySelector('.review-items');
+  const {data,error}=await supabase.from('price_observations')
+    .select('id,price,currency,regular_price,promotion_label,availability,source_url,observed_at,review_status,store_products(source_product_name,package_description,supermarkets(name),supermarket_branches(name))')
+    .eq('review_status','pending').order('observed_at',{ascending:false}).limit(50);
+  if(error){list.innerHTML='<small>No se pudo cargar la cola de revisión.</small>';return;}
+  if(!data?.length){list.innerHTML='<small>No hay precios pendientes de revisión.</small>';return;}
+  list.innerHTML=data.map(p=>{const sp=p.store_products||{};return '<article class="review-item"><div><strong>'+safe(sp.source_product_name||'Producto')+'</strong><small>'+safe(sp.supermarkets?.name||'Tienda')+' · '+safe(sp.supermarket_branches?.name||'Sucursal no indicada')+'</small><small>'+safe(sp.package_description||'Presentación no indicada')+' · '+money(p.price)+'</small><small>Observado: '+new Date(p.observed_at).toLocaleString('es-PA')+'</small><a href="'+safe(p.source_url)+'" target="_blank" rel="noreferrer">Abrir fuente ↗</a></div><div class="review-actions"><button data-review="approve" data-id="'+p.id+'">Aprobar</button><button class="secondary" data-review="reject" data-id="'+p.id+'">Rechazar</button></div></article>';}).join('');
+  list.querySelectorAll('[data-review]').forEach(button=>button.addEventListener('click',async()=>{
+    button.disabled=true;
+    const approve=button.dataset.review==='approve';
+    const {error:reviewError}=await supabase.rpc('review_price_observation',{p_observation_id:Number(button.dataset.id),p_approve:approve,p_note:null});
+    if(reviewError){button.disabled=false;alert(reviewError.message||'No se pudo revisar el precio.');return;}
+    await renderPriceReview();
+    if(lastComparedProductId) compareProduct(lastComparedProductId);
+  }));
+}
+
 async function loadList() {
   const label = document.querySelector('#list-label'), cart = document.querySelector('#cart');
   if (!user) { label.textContent = 'Inicia sesión para guardar'; cart.innerHTML = '<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>'; return; }
@@ -148,8 +175,10 @@ async function start() {
     user = session?.user || null;
     renderAuth();
     loadList();
+    renderPriceReview();
   });
   await renderAuth();
+  await renderPriceReview();
   await loadBranches();
   await loadList();
 }
