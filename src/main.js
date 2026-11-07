@@ -110,6 +110,7 @@ async function renderAuth() {
 async function renderPriceReview() {
   const box=document.querySelector('#auth');
   if(!box||!user||!supabase) return;
+  box.querySelector('.review-panel')?.remove();
   const {data:allowed,error:checkError}=await supabase.rpc('is_price_reviewer');
   if(checkError||!allowed) return;
   const panel=document.createElement('section');
