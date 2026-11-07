@@ -174,9 +174,11 @@ async function start() {
   message('Conexión con Supabase lista. Los precios se mostrarán únicamente si están verificados.');
   supabase.auth.onAuthStateChange((_event, session) => {
     user = session?.user || null;
-    renderAuth();
-    loadList();
-    renderPriceReview();
+    queueMicrotask(async () => {
+      await renderAuth();
+      await loadList();
+      await renderPriceReview();
+    });
   });
   await renderAuth();
   await renderPriceReview();
