@@ -108,7 +108,7 @@ async function renderAuth() {
 async function loadList() {
   const label = document.querySelector('#list-label'), cart = document.querySelector('#cart');
   if (!user) { label.textContent = 'Inicia sesión para guardar'; cart.innerHTML = '<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>'; return; }
-  let { data: lists, error } = await supabase.from('shopping_lists').select('id,name').order('created_at', {ascending:false}).limit(1);
+  let { data: lists, error } = await supabase.from('shopping_lists').select('id,name').eq('user_id', user.id).order('created_at', {ascending:false}).limit(1);
   if (error) { cart.innerHTML = '<p class="empty">No se pudo cargar tu lista.</p>'; return; }
   if (!lists?.length) {
     const created = await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();
