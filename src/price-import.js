@@ -1,12 +1,12 @@
 export function parsePriceCsv(text) {
   const rows=[]; let row=[], field='', quoted=false;
-  const input=text.replace(/^\\uFEFF/,'');
+  const input=text.replace(/^\uFEFF/,'');
   for(let i=0;i<input.length;i++){
     const ch=input[i], next=input[i+1];
     if(ch==='"' && quoted && next==='"'){field+='"';i++;}
     else if(ch==='"'){quoted=!quoted;}
     else if(ch===','&&!quoted){row.push(field.trim());field='';}
-    else if((ch==='\\n'||ch==='\\r')&&!quoted){if(ch==='\\r'&&next==='\\n')i++;row.push(field.trim());if(row.some(v=>v!==''))rows.push(row);row=[];field='';}
+    else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&next==='\n')i++;row.push(field.trim());if(row.some(v=>v!==''))rows.push(row);row=[];field='';}
     else field+=ch;
   }
   row.push(field.trim());if(row.some(v=>v!==''))rows.push(row);
@@ -40,5 +40,5 @@ export async function importPriceCsv({file,supabase,user,output}) {
     const {error:ie}=await supabase.from('price_observations').insert({store_product_id:match.id,price,currency:'USD',regular_price:regular,promotion_label:r.promocion||null,availability:r.disponibilidad||null,source_url:r.url_fuente,observed_at:date.toISOString(),is_verified:false});
     if(ie){issues.push('Fila '+line+': error de permisos o datos.');skipped++;}else saved++;
   }
-  output.textContent='Guardados para revisión: '+saved+'. Omitidos: '+skipped+'. Los importados permanecen ocultos hasta verificarse.'+(issues.length?'\\n'+issues.slice(0,8).join('\\n'):'');
+  output.textContent='Guardados para revisión: '+saved+'. Omitidos: '+skipped+'. Los importados permanecen ocultos hasta verificarse.'+(issues.length?'\n'+issues.slice(0,8).join('\n'):'');
 }
