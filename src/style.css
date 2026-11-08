@@ -1036,3 +1036,7 @@ main{padding-top:22px}
 .dashboard-month-bar>i>span{display:block;height:100%;min-width:0;border-radius:20px;background:linear-gradient(90deg,#8bc99c,#238653);transition:width .2s ease}
 .dashboard-chart-note{color:#89958d;font-size:9px;line-height:1.45}
 @media(max-width:620px){.dashboard-spending-chart{padding:13px}.dashboard-month-bars{gap:9px}}
+
+/* Estado de sincronización personal */
+.workspace-sync-status{display:block;margin:8px 0 18px;padding:10px 13px;border:1px solid #dce9df;border-radius:11px;background:#f4f8f4;color:#376b4c;font-size:12px;line-height:1.45}
+@media(max-width:620px){.workspace-sync-status{font-size:11px;padding:9px 11px}}
