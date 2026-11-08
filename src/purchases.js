@@ -38,6 +38,7 @@ const parseInvoiceDraft = (text, products) => {
     const qtyMatch = name.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?)\s+/i);
     const quantity = qtyMatch ? Number(qtyMatch[1].replace(',', '.')) : 1;
     if (qtyMatch) name = name.replace(qtyMatch[0], ' ').trim();
+    name = name.replace(/\\s+\\d+(?:[.,]\\d+)?\\s*(?:lb|lbs|kg|g|gr|oz|ml|l|lt)\\b.*$/i, '').trim();
     const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
     drafts.push({ productId: product?.id || '', name, package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '', quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit: 'unidad', price: price.toFixed(2), selected: true });
   }
