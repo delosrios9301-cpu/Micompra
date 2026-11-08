@@ -62,7 +62,6 @@ function shell() {
     <div id="auth" class="auth auth-entry"></div>
     <main>
       <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Registra tus productos, organiza tus compras y compara los precios que tú mismo anotas.</p></section>
-      <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
       <section class="section-head"><div><p class="eyebrow">COMPARADOR</p><h2>Busca un producto</h2></div></section>
       <input id="search" class="search" type="search" placeholder="Ej. arroz, lechuga, leche, pollo..." autocomplete="off" /><div class="store-filter"><label for="store-filter">Buscar en supermercado</label><select id="store-filter"><option value="">Selecciona un supermercado</option>${guestStores.map(name => `<option value="${safe(name)}">${safe(name)}</option>`).join("")}</select></div><small class="catalog-source-note">Solo se muestran productos que tú hayas registrado manualmente para el supermercado seleccionado.</small>
       <div class="branch-filter" hidden></div>
