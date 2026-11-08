@@ -148,7 +148,7 @@ function renderGuestPantry(container) {
   const $ = selector => section.querySelector(selector);
   let items = readGuestPantry();
   const status = (message, error = false) => { $('.pantry-status').textContent = message; $('.pantry-status').classList.toggle('is-error', error); };
-  const persist = () => saveGuestPantry(items);
+  const persist = nextItems => { saveGuestPantry(nextItems); items = nextItems; };
   const render = () => {
     const summary = summarizePantry(items);
     $('[data-pantry-total]').textContent = summary.total;
@@ -176,20 +176,24 @@ function renderGuestPantry(container) {
         const data = new FormData(event.currentTarget);
         const quantity = Number(data.get('quantity')), minimum = Number(data.get('minimum_quantity')), unit = String(data.get('unit')||'').trim();
         if (!Number.isFinite(quantity)||quantity<0||!Number.isFinite(minimum)||minimum<0||!unit) return;
-        items = items.map(row => row.id===id ? {...row,quantity,minimum_quantity:minimum,unit,updated_at:new Date().toISOString()} : row);
-        persist(); render(); status('Existencias actualizadas.');
+        try { persist(items.map(row => row.id===id ? {...row,quantity,minimum_quantity:minimum,unit,updated_at:new Date().toISOString()} : row)); }
+        catch { status('No se pudieron guardar los cambios. Tus existencias anteriores se conservaron.',true); return; }
+        render(); status('Existencias actualizadas.');
       });
       card.querySelector('.pantry-delete').addEventListener('click', () => {
         if (!confirm('¿Eliminar este artículo del inventario?')) return;
-        items = items.filter(row => row.id!==id); persist(); render(); status('Artículo eliminado.');
+        try { persist(items.filter(row => row.id!==id)); }
+        catch { status('No se pudo eliminar: no hay espacio disponible. El artículo se conserva.',true); return; }
+        render(); status('Artículo eliminado.');
       });
       card.querySelector('[data-pantry-consume]').addEventListener('submit', event => {
         event.preventDefault();
         const amount = Number(new FormData(event.currentTarget).get('amount'));
         const item = items.find(row => row.id===id);
         if (!item || !Number.isFinite(amount) || amount<=0 || amount>Number(item.quantity)) { status('La cantidad de consumo no puede superar las existencias.',true); return; }
-        items = items.map(row => row.id===id ? {...row,quantity:Math.max(0,Number(row.quantity)-amount),updated_at:new Date().toISOString()} : row);
-        persist(); render(); status('Consumo registrado y existencias descontadas.');
+        try { persist(items.map(row => row.id===id ? {...row,quantity:Math.max(0,Number(row.quantity)-amount),updated_at:new Date().toISOString()} : row)); }
+        catch { status('No se pudo guardar el consumo. Las existencias anteriores se conservaron.',true); return; }
+        render(); status('Consumo registrado y existencias descontadas.');
       });
     });
   };
@@ -201,8 +205,8 @@ function renderGuestPantry(container) {
     if (!name || !Number.isFinite(quantity)||quantity<0||!Number.isFinite(minimum)||minimum<0) { status('Revisa el nombre y las cantidades.',true); return; }
     const duplicate = items.find(row => normalizePantryName(row.item_name)===normalizePantryName(name) && normalizeUnit(row.unit)===normalizeUnit(unit));
     if (duplicate) { status('Ese artículo ya existe. Actualiza su cantidad en la lista.',true); return; }
-    items.push({id:globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+Math.random().toString(36).slice(2),item_name:name,quantity,unit,minimum_quantity:minimum,location:String(data.get('location')||'').trim(),created_at:new Date().toISOString()});
-    try { persist(); } catch { items.pop(); status('No hay espacio suficiente para guardar este artículo.',true); return; }
+    const newItem={id:globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+Math.random().toString(36).slice(2),item_name:name,quantity,unit,minimum_quantity:minimum,location:String(data.get('location')||'').trim(),created_at:new Date().toISOString()};
+    try { persist([...items,newItem]); } catch { status('No hay espacio suficiente para guardar este artículo. Tus datos anteriores se conservaron.',true); return; }
     event.currentTarget.reset(); event.currentTarget.elements.quantity.value='1'; event.currentTarget.elements.minimum_quantity.value='1';
     render(); status('Artículo guardado en tu inventario.');
   });
