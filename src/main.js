@@ -44,7 +44,7 @@ function shell() {
       <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Organiza tu lista y compara precios publicados por supermercados.</p></section>
       <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
       <section class="section-head"><div><p class="eyebrow">COMPARADOR</p><h2>Busca un producto</h2></div></section>
-      <input id="search" class="search" type="search" placeholder="Ej. arroz, leche, pollo..." autocomplete="off" /><small class="catalog-source-note">Catálogo ampliado con productos de referencia de la canasta básica de ACODECO. La referencia sirve para identificar productos y presentaciones; no representa precios actuales.</small>
+      <input id="search" class="search" type="search" placeholder="Ej. arroz, lechuga, leche, pollo..." autocomplete="off" /><div class="store-filter"><label for="store-filter">Buscar en supermercado</label><select id="store-filter">${stores.map(s => `<option value="${safe(s.name)}">${safe(s.name)}</option>`).join("")}</select></div><small class="catalog-source-note">Catálogo ampliado con productos de referencia de la canasta básica de ACODECO. La referencia sirve para identificar productos y presentaciones; no representa precios actuales.</small>
       <div class="branch-filter"><label for="branch-filter">Sucursal para Super 99</label><select id="branch-filter"><option value="">Todas las sucursales</option></select><small>La sucursal elegida solo filtra los precios de Super 99; los demás supermercados siguen apareciendo.</small></div>
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
@@ -54,7 +54,8 @@ function shell() {
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
-  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; if (lastComparedProductId) compareProduct(lastComparedProductId); if (user) loadList(); });
+  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); if (user) loadList(); });
+  document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); document.querySelector('#branch-filter').closest('.branch-filter').hidden=document.querySelector('#store-filter').value!=='Super 99'; });
   document.querySelector('#search').addEventListener('input', e => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchProducts(e.target.value.trim()), 300);
@@ -76,19 +77,62 @@ async function loadBranches() {
 
 async function searchProducts(term) {
   const box = document.querySelector('#results');
-  if (!term) { box.innerHTML = '<p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p>'; return; }
+  if (!term) { box.innerHTML = '<p class="empty">Escribe el nombre de un producto para ver las presentaciones disponibles.</p>'; return; }
   if (!supabase) { box.innerHTML = '<p class="empty">La conexión de datos aún no está configurada.</p>'; return; }
-  box.innerHTML = '<p class="empty">Buscando en el catálogo...</p>';
-  const { data, error } = await supabase.from('products')
-    .select('id,canonical_name,brand,normalized_quantity,normalized_unit_name')
-    .eq('active', true).ilike('canonical_name', `%${term.replace(/[%_]/g, '')}%`)
-    .order('canonical_name').limit(20);
-  if (error) { box.innerHTML = '<p class="empty">No se pudo consultar el catálogo. Inténtalo más tarde.</p>'; return; }
-  if (!data?.length) { box.innerHTML = '<p class="empty">No hay coincidencias en el catálogo todavía. No mostraremos precios estimados.</p>'; return; }
-  box.innerHTML = data.map(p => `<article class="product"><div><strong>${safe(p.canonical_name)}</strong><small>${safe([p.brand, p.normalized_quantity && p.normalized_unit_name ? p.normalized_quantity + ' ' + p.normalized_unit_name : ''].filter(Boolean).join(' · ') || 'Presentación por confirmar')}</small></div><button data-product="${p.id}">Comparar</button></article>`).join('');
-  box.querySelectorAll('[data-product]').forEach(b => b.addEventListener('click', () => compareProduct(b.dataset.product)));
+  const clean = term.replace(/[%_]/g, '').trim();
+  const storeName = document.querySelector('#store-filter')?.value || 'Super 99';
+  box.innerHTML = '<p class="empty">Buscando presentaciones en ' + safe(storeName) + '...</p>';
+  let query = supabase.from('store_products')
+    .select('id,product_id,source_product_name,source_product_url,source_sku,package_description,branch_id,products!inner(canonical_name,brand,normalized_quantity,normalized_unit_name),supermarkets!inner(name),supermarket_branches(name),price_observations(price,currency,observed_at,is_verified,review_status)')
+    .eq('supermarkets.name', storeName).ilike('source_product_name', '%' + clean + '%')
+    .order('source_product_name').limit(50);
+  if (storeName === 'Super 99' && selectedBranchId) query = query.or('branch_id.is.null,branch_id.eq.' + selectedBranchId);
+  const { data: listings, error } = await query;
+  if (error) { box.innerHTML = '<p class="empty">No se pudieron consultar las publicaciones de ' + safe(storeName) + '. Inténtalo nuevamente.</p>'; return; }
+  if (listings?.length) {
+    box.innerHTML = listings.map(item => {
+      const price = (item.price_observations || []).filter(p => p.is_verified && p.review_status === 'approved' && p.currency === 'USD' && Number(p.price) > 0 && Date.now() - new Date(p.observed_at).getTime() <= 86400000).sort((a,b) => Number(a.price)-Number(b.price))[0];
+      return '<article class="product store-product-result"><div><strong>' + safe(item.source_product_name) + '</strong><small>' + safe(item.package_description || 'Presentación por confirmar') + (item.source_sku ? ' · SKU ' + safe(item.source_sku) : '') + '</small><small>' + safe(item.products?.canonical_name || '') + (item.supermarket_branches?.name ? ' · Sucursal: ' + safe(item.supermarket_branches.name) : ' · Sucursal por confirmar') + '</small><small class="' + (price ? 'price-current' : 'price-pending') + '">' + (price ? money(price.price) + ' · precio verificado recientemente' : 'Precio y disponibilidad pendientes de verificación') + '</small>' + (item.source_product_url ? '<a href="' + safe(item.source_product_url) + '" target="_blank" rel="noreferrer">Ver publicación oficial ↗</a>' : '') + '</div><button type="button" data-add-listing="' + safe(item.id) + '">Agregar a mi compra</button></article>';
+    }).join('');
+    box.querySelectorAll('[data-add-listing]').forEach(button => button.addEventListener('click', async () => {
+      const item = listings.find(row => row.id === button.dataset.addListing);
+      if (!item) return;
+      button.disabled = true;
+      await addSearchItem({name:item.source_product_name,store:storeName,productId:item.product_id,price:null});
+      button.disabled = false;
+    }));
+    return;
+  }
+  const { data: products, error: productError } = await supabase.from('products').select('id,canonical_name,brand,normalized_quantity,normalized_unit_name').eq('active', true).ilike('canonical_name', '%' + clean + '%').order('canonical_name').limit(20);
+  if (productError) { box.innerHTML = '<p class="empty">No se pudo consultar el catálogo. Inténtalo más tarde.</p>'; return; }
+  if (!products?.length) { box.innerHTML = '<p class="empty">No encontramos "' + safe(term) + '" en el catálogo de ' + safe(storeName) + '.</p>'; return; }
+  box.innerHTML = '<p class="catalog-empty-store">No hay publicaciones específicas registradas para ' + safe(storeName) + '. Puedes agregar el artículo como pendiente de confirmar, sin inventar precio ni disponibilidad.</p>' + products.map(p => '<article class="product store-product-result"><div><strong>' + safe(p.canonical_name) + '</strong><small>' + safe([p.brand,p.normalized_quantity && p.normalized_unit_name ? p.normalized_quantity + ' ' + p.normalized_unit_name : ''].filter(Boolean).join(' · ') || 'Presentación por confirmar') + '</small><small class="price-pending">Sin publicación ni precio confirmado en ' + safe(storeName) + '</small></div><button type="button" data-add-catalog="' + safe(p.id) + '">Agregar pendiente</button></article>').join('');
+  box.querySelectorAll('[data-add-catalog]').forEach(button => button.addEventListener('click', async () => {
+    const p = products.find(row => row.id === button.dataset.addCatalog);
+    if (!p) return;
+    button.disabled = true;
+    await addSearchItem({name:p.canonical_name,store:storeName,productId:p.id,price:null});
+    button.disabled = false;
+  }));
 }
-
+async function addSearchItem({name,store,productId=null,price=null}) {
+  if (!name) return;
+  if (user && activeList) {
+    const {error} = await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:productId,item_name:name,quantity:1,unit:'unidades'});
+    if (error) { alert('No se pudo agregar el producto a tu lista.'); return; }
+    await loadList();
+    return;
+  }
+  addGuestCartItem({name,store,qty:1,price});
+}
+function addGuestCartItem({name,store,qty=1,price=null}) {
+  const current = readGuestCart();
+  const duplicate = current.find(item => item.name.toLowerCase() === name.toLowerCase() && item.store === store);
+  if (duplicate) { duplicate.qty += qty; if (price !== null && Number.isFinite(Number(price))) duplicate.price = Number(price); }
+  else current.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,store,qty,price:price === null ? null : Number(price)});
+  saveGuestCart(current);
+  renderGuestList();
+}
 async function compareProduct(id) {
   lastComparedProductId = id;
   const box = document.querySelector('#results');
@@ -464,11 +508,12 @@ function saveGuestCart(items){localStorage.setItem(GUEST_CART_KEY,JSON.stringify
 function renderGuestList(){
   const label=document.querySelector('#list-label'),cart=document.querySelector('#cart'),panel=document.querySelector('#list-comparison');
   const items=readGuestCart();label.textContent='Lista temporal · guardada en este dispositivo';
-  cart.innerHTML='<p class="guest-cart-note">Agrega lo que vas comprando. El precio y la cantidad los introduces tú; la app calcula cada subtotal y el total por supermercado. Esta lista temporal se guarda solo en este navegador/dispositivo.</p><form id="guest-add-item" class="guest-add-form"><label>Supermercado<select id="guest-store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Producto<input id="guest-name" required maxlength="100" placeholder="Ej. Pollo"></label><div class="guest-fields"><label>Cantidad<input id="guest-qty" type="number" min="0.01" step="0.01" value="1" required></label><label>Precio por unidad ($)<input id="guest-price" type="number" min="0" step="0.01" placeholder="Ej. 3.50" required></label></div><button type="submit">Agregar a mi compra</button><small id="guest-feedback" role="status"></small></form>'+ (items.length?items.map(i=>'<article class="guest-cart-item"><div><strong>'+safe(i.name)+'</strong><small>'+safe(i.store)+' · '+safe(i.qty)+' × '+money(i.price)+'</small></div><b>'+money(i.qty*i.price)+'</b><button type="button" data-guest-remove="'+i.id+'" aria-label="Eliminar '+safe(i.name)+'">×</button></article>').join(''):'<p class="empty">Todavía no has agregado productos.</p>');
-  const totals=guestStores.map(store=>({store,total:items.filter(i=>i.store===store).reduce((sum,i)=>sum+i.qty*i.price,0),count:items.filter(i=>i.store===store).length})).filter(x=>x.count);
-  const grand=items.reduce((sum,i)=>sum+i.qty*i.price,0);
-  panel.innerHTML='<div class="comparison-heading"><p class="eyebrow">CONTROL DE TU DINERO</p><h3>Resumen de compra</h3><small>Importes calculados con los precios que registraste manualmente.</small></div><article class="guest-grand-total"><small>Total acumulado de todos los supermercados</small><b>'+money(grand)+'</b><span>'+items.length+' producto(s)</span></article>'+(totals.length?totals.map(t=>'<article class="store-total"><div><strong>'+safe(t.store)+'</strong><small>'+t.count+' producto(s)</small></div><b>'+money(t.total)+'</b></article>').join(''):'<p class="empty">Los totales por supermercado aparecerán aquí.</p>')+'<button type="button" class="secondary" id="guest-clear-cart" '+(items.length?'':'disabled')+'>Vaciar lista temporal</button><small class="comparison-footnote">No se mezcla con precios oficiales ni con tus registros privados. Para conservarla en otro dispositivo, habrá que reactivar el acceso privado.</small>';
-  cart.querySelector('#guest-add-item').addEventListener('submit',e=>{e.preventDefault();const name=cart.querySelector('#guest-name').value.trim(),store=cart.querySelector('#guest-store').value,qty=Number(cart.querySelector('#guest-qty').value),price=Number(cart.querySelector('#guest-price').value);if(!name||!Number.isFinite(qty)||qty<=0||!Number.isFinite(price)||price<0)return;const current=readGuestCart();const duplicate=current.find(i=>i.name.toLowerCase()===name.toLowerCase()&&i.store===store&&i.price===price);if(duplicate)duplicate.qty+=qty;else current.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,store,qty,price});saveGuestCart(current);renderGuestList();});
+  cart.innerHTML='<p class="guest-cart-note">Puedes agregar productos desde los resultados aunque todavía no tengan precio verificado. El precio es opcional y podrás anotarlo cuando lo confirmes en la tienda. Esta lista temporal se guarda solo en este navegador/dispositivo.</p><form id="guest-add-item" class="guest-add-form"><label>Supermercado<select id="guest-store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Producto<input id="guest-name" required maxlength="100" placeholder="Ej. Pollo"></label><div class="guest-fields"><label>Cantidad<input id="guest-qty" type="number" min="0.01" step="0.01" value="1" required></label><label>Precio por unidad ($)<input id="guest-price" type="number" min="0" step="0.01" placeholder="Opcional"></label></div><button type="submit">Agregar a mi compra</button><small id="guest-feedback" role="status"></small></form>'+ (items.length?items.map(i=>'<article class="guest-cart-item"><div><strong>'+safe(i.name)+'</strong><small>'+safe(i.store)+' · '+safe(i.qty)+' × '+(i.price===null||i.price===undefined?'Precio pendiente':money(i.price))+'</small></div><b>'+(i.price===null||i.price===undefined?'Pendiente':money(i.qty*i.price))+'</b><button type="button" data-guest-remove="'+i.id+'" aria-label="Eliminar '+safe(i.name)+'">×</button></article>').join(''):'<p class="empty">Todavía no has agregado productos.</p>');
+  const totals=guestStores.map(store=>({store,total:items.filter(i=>i.store===store&&i.price!==null&&i.price!==undefined).reduce((sum,i)=>sum+i.qty*i.price,0),count:items.filter(i=>i.store===store).length,priced:items.filter(i=>i.store===store&&i.price!==null&&i.price!==undefined).length})).filter(x=>x.count);
+  const grand=items.filter(i=>i.price!==null&&i.price!==undefined).reduce((sum,i)=>sum+i.qty*i.price,0);
+  const pending=items.filter(i=>i.price===null||i.price===undefined).length;
+  panel.innerHTML='<div class="comparison-heading"><p class="eyebrow">CONTROL DE TU DINERO</p><h3>Resumen de compra</h3><small>Los artículos sin precio se conservan en la lista, pero no se suman al total hasta que registres un importe.</small></div><article class="guest-grand-total"><small>Total de artículos con precio</small><b>'+money(grand)+'</b><span>'+items.length+' producto(s) · '+pending+' pendiente(s) de precio</span></article>'+(totals.length?totals.map(t=>'<article class="store-total"><div><strong>'+safe(t.store)+'</strong><small>'+t.count+' producto(s) · '+t.priced+' con precio</small></div><b>'+money(t.total)+'</b></article>').join(''):'<p class="empty">Los totales por supermercado aparecerán aquí.</p>')+'<button type="button" class="secondary" id="guest-clear-cart" '+(items.length?'':'disabled')+'>Vaciar lista temporal</button><small class="comparison-footnote">No se mezcla con precios oficiales ni con tus registros privados. Para conservarla en otro dispositivo, habrá que reactivar el acceso privado.</small>';
+  cart.querySelector('#guest-add-item').addEventListener('submit',e=>{e.preventDefault();const name=cart.querySelector('#guest-name').value.trim(),store=cart.querySelector('#guest-store').value,qty=Number(cart.querySelector('#guest-qty').value),rawPrice=cart.querySelector('#guest-price').value.trim(),price=rawPrice===''?null:Number(rawPrice);if(!name||!Number.isFinite(qty)||qty<=0||(price!==null&&(!Number.isFinite(price)||price<0)))return;addGuestCartItem({name,store,qty,price});});
   cart.querySelectorAll('[data-guest-remove]').forEach(b=>b.addEventListener('click',()=>{saveGuestCart(readGuestCart().filter(i=>i.id!==b.dataset.guestRemove));renderGuestList();}));
   panel.querySelector('#guest-clear-cart')?.addEventListener('click',()=>{if(confirm('¿Vaciar la lista temporal de este dispositivo?')){saveGuestCart([]);renderGuestList();}});
 }
