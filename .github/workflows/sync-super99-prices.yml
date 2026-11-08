@@ -1,24 +1,11 @@
-name: Sync Super 99 prices
+name: Supermarket price sync disabled
 on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: super99-price-sync
-  cancel-in-progress: false
 jobs:
-  sync:
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: Fetch current Super 99 online prices
-        env:
-          SUPABASE_URL: https://srebdjlnthhsgufstwjr.supabase.co
-          SUPABASE_PUBLISHABLE_KEY: sb_publishable_XG2gIm5VPBQwPlKIVZ4UPA_B7InUKQ_
-        run: |
-          curl --fail-with-body --silent --show-error \
-            --request POST "$SUPABASE_URL/functions/v1/sync-super99-prices" \
-            --header "Authorization: Bearer $SUPABASE_PUBLISHABLE_KEY" \
-            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            --header "Content-Type: application/json" \
-            --data '{"source":"github-actions"}'
+      - name: Confirm manual-only mode
+        run: echo "Disabled by design. Mi Compra no accesses supermarket websites or imports their prices."
