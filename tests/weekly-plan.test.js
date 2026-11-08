@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getWeeklyRange, summarizeWeeklyPlan, compareWeeklyPlanPrices } from '../src/weekly-plan.js';
+import { getWeeklyRange, getCalendarWeek, groupShoppingItemsByDate, summarizeWeeklyPlan, compareWeeklyPlanPrices } from '../src/weekly-plan.js';
 
 test('weekly range starts Monday and ends Sunday', () => {
   assert.deepEqual(getWeeklyRange(new Date(2026, 10, 7)), { start: '2026-11-02', end: '2026-11-08' });
@@ -40,4 +40,25 @@ test('checked items are excluded from weekly estimate and stale or unapproved pr
   const result = compareWeeklyPlanPrices(items, listings);
   assert.equal(result.complete, false);
   assert.equal(result.count, 1);
+});
+
+test('calendar creates seven Monday-to-Sunday dates and navigates by week', () => {
+  const base = getCalendarWeek(new Date(2026, 10, 7));
+  assert.equal(base.length, 7);
+  assert.equal(base[0].date, '2026-11-02');
+  assert.equal(base[6].date, '2026-11-08');
+  assert.equal(getCalendarWeek(new Date(2026, 10, 7), 1)[0].date, '2026-11-09');
+  assert.equal(getCalendarWeek(new Date(2026, 10, 7), -1)[6].date, '2026-11-01');
+});
+
+test('calendar groups items by planned date and leaves unplanned items out of day groups', () => {
+  const days = getCalendarWeek(new Date(2026, 10, 7));
+  const groups = groupShoppingItemsByDate([
+    { id: 'a', item_name: 'Arroz', planned_for: '2026-11-02' },
+    { id: 'b', item_name: 'Leche', planned_for: '2026-11-05' },
+    { id: 'c', item_name: 'Café', planned_for: null }
+  ], days);
+  assert.equal(groups[0].items[0].item_name, 'Arroz');
+  assert.equal(groups[3].items[0].item_name, 'Leche');
+  assert.equal(groups[6].items.length, 0);
 });
