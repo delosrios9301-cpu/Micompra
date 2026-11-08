@@ -180,6 +180,19 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
   let remote;
   try { remote = normalizeRemoteWorkspace(cloudRow?.data); }
   catch (error) { return { ok: false, message: error.message }; }
+
+  // An empty local store plus an existing baseline is ambiguous: browser
+  // storage may have been cleared by the OS/app. Never interpret that as a
+  // request to delete the entire cloud workspace.
+  const localIsCompletelyEmpty = COLLECTIONS.every(collection => local[collection].length === 0)
+    && Object.keys(local.settings || {}).length === 0;
+  const baselineHadData = COLLECTIONS.some(collection => Object.keys(baseline[collection] || {}).length > 0)
+    || Boolean(baseline.settings);
+  const cloudHasData = COLLECTIONS.some(collection => remote[collection].length > 0)
+    || Object.keys(remote.settings || {}).length > 0;
+  const recoveredFromEmptyLocalStore = localIsCompletelyEmpty && baselineHadData && cloudHasData;
+  if (recoveredFromEmptyLocalStore) local = remote;
+
   const merged = emptyWorkspace();
   let conflicts = [];
   for (const collection of COLLECTIONS) {
@@ -212,7 +225,7 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
   } catch (error) {
     return { ok: false, message: error.message || 'No se pudo actualizar el almacenamiento local.' };
   }
-  return { ok: true, conflicts: conflicts.length, updatedAt: cloudRow?.updated_at || new Date().toISOString(), workspace: merged };
+  return { ok: true, conflicts: conflicts.length, recoveredFromEmptyLocalStore, updatedAt: cloudRow?.updated_at || new Date().toISOString(), workspace: merged };
 }
 
 export async function startPersonalWorkspaceSync({ supabase, user, onStatus = () => {} }) {
