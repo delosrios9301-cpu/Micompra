@@ -368,7 +368,7 @@ async function renderAuth() {
   const purchasesContainer=box.querySelector('#purchases-module');
   await renderPurchases({container:purchasesContainer,supabase,user});
   await renderSpendingDashboard({container:box.querySelector('#spending-module'),supabase,user});
-  await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase,user});
+  await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase:null,user:null});
 }
 
 
@@ -697,9 +697,10 @@ function renderGuestList(){
   renderHomeDashboard();
 }
 async function loadList() {
-  const label=document.querySelector('#list-label'),cart=document.querySelector('#cart');
-  renderGuestList();document.querySelector('#weekly-plan-module').innerHTML='';return;
-  let {data:lists,error}=await supabase.from('shopping_lists').select('id,name').eq('user_id',user.id).order('created_at',{ascending:false}).limit(1);
+  // La lista de compra personal usa el mismo almacenamiento sincronizado para sesiones y dispositivos.
+  renderGuestList();
+  document.querySelector('#weekly-plan-module').innerHTML='';
+}
   if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
   if(!lists?.length){const created=await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();if(created.error){cart.innerHTML='<p class="empty">No se pudo crear la lista.</p>';return;}activeList=created.data;}else activeList=lists[0];
   label.textContent=activeList.name;
@@ -748,17 +749,37 @@ async function loadList() {
   await renderWeeklyPlan({ container: document.querySelector('#weekly-plan-module'), supabase, user, items, selectedBranchId });
 }
 
+async function connectPersonalWorkspaceSync() {
+  if (stopPersonalWorkspaceSync) { stopPersonalWorkspaceSync(); stopPersonalWorkspaceSync = null; }
+  if (!supabase || !user) return;
+  stopPersonalWorkspaceSync = await startPersonalWorkspaceSync({
+    supabase, user,
+    onStatus: message => {
+      const status = document.querySelector('#workspace-sync-status');
+      if (status) status.textContent = message;
+    }
+  });
+}
+
+function refreshWorkspaceViews() {
+  renderPersonalCatalog();
+  renderGuestList();
+  renderHomeDashboard();
+  const pantry = document.querySelector('#pantry-module');
+  if (pantry) renderPersonalPantry({ container: pantry, supabase: null, user: null });
+  renderAppSettings();
+}
+
 async function start() {
   shell();
   renderPersonalCatalog();
-  if (!supabase) { await renderAuth(); await loadList(); message('Modo temporal disponible. La consulta del catálogo requiere conexión.'); return; }
+  window.addEventListener('micompra:workspace-synced', refreshWorkspaceViews);
+  if (!supabase) { await renderAuth(); await loadList(); message('Modo local disponible. Configura el acceso para sincronizar entre dispositivos.'); return; }
   passwordRecovery = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
   const { data } = await supabase.auth.getUser();
   user = data.user;
   message('Modo de compra manual: los productos y precios los registras tú.');
   supabase.auth.onAuthStateChange((event, session) => {
-    // INITIAL_SESSION ya queda cubierto por getUser() y el render inicial de start().
-    // TOKEN_REFRESHED no debe reconstruir los módulos ni vaciar visualmente los datos.
     if (!['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) return;
     if (event === 'PASSWORD_RECOVERY') passwordRecovery = true;
     const nextUser = session?.user || null;
@@ -769,10 +790,12 @@ async function start() {
     user = nextUser;
     queueMicrotask(async () => {
       await renderAuth();
+      await connectPersonalWorkspaceSync();
       await loadList();
     });
   });
   await renderAuth();
+  await connectPersonalWorkspaceSync();
   const callbackParams = new URLSearchParams(location.hash.startsWith('#') ? location.hash.slice(1) : location.hash);
   const callbackError = callbackParams.get('error_description') || callbackParams.get('error');
   if (callbackError) {
