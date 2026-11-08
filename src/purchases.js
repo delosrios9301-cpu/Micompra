@@ -653,10 +653,10 @@ export async function renderPurchases({ container, supabase, user }) {
         const video = container.querySelector(selector);
         if (video) video.srcObject = null;
       });
-      const stopAdminButton = container.querySelector('#stop-admin-barcode');
-      if (stopAdminButton) stopAdminButton.hidden = true;
-      const stopPurchaseButton = container.querySelector('#stop-purchase-barcode');
-      if (stopPurchaseButton) stopPurchaseButton.hidden = false;
+      ['#stop-admin-barcode', '#stop-purchase-barcode'].forEach(selector => {
+        const button = container.querySelector(selector);
+        if (button) button.hidden = true;
+      });
     };
     const startBarcodeCamera = async ({ videoId, panelId, statusId, stopButtonId, onDetected }) => {
       const status = container.querySelector(statusId);
