@@ -10,7 +10,7 @@ import { renderSpendingDashboard } from './spending.js';
 import { renderPersonalPantry, GUEST_PANTRY_KEY, readGuestPantry, addPurchasedItemsToGuestPantry } from './pantry.js';
 import { renderWeeklyPlan, sortShoppingItemsByPriority } from './weekly-plan.js';
 import { startPersonalWorkspaceSync } from './personal-sync.js';
-import { readStoredArraySafely, collectLocalRecoveryCopies, restoreLocalRecoveryCopies } from './storage-recovery.js';
+import { readStoredArraySafely, readStoredObjectSafely, collectLocalRecoveryCopies, restoreLocalRecoveryCopies } from './storage-recovery.js';
 
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
@@ -644,8 +644,8 @@ async function compressProductPhoto(file){
  try{const img=await new Promise((resolve,reject)=>{const el=new Image();el.onload=()=>resolve(el);el.onerror=reject;el.src=url;});const scale=Math.min(1,520/Math.max(img.width,img.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',0.72);}finally{URL.revokeObjectURL(url);}
 }
 function renderAppSettings(){
- const key='micompra_settings_v1';let settings={defaultStore:'Super 99',currency:'USD',theme:'light',enabledStores:guestStores.slice()};
- try{settings={...settings,...JSON.parse(localStorage.getItem(key)||'{}')}}catch{}
+ const key='micompra_settings_v1';const defaults={defaultStore:'Super 99',currency:'USD',theme:'light',enabledStores:guestStores.slice()};
+ let settings={...defaults,...readStoredObjectSafely(key,{})};
  const store=document.querySelector('#settings-default-store'),currency=document.querySelector('#settings-currency'),theme=document.querySelector('#settings-theme');
  if(!store)return;store.value=settings.defaultStore;currency.value=settings.currency;theme.value=settings.theme;
  document.querySelectorAll('[name="enabled-store"]').forEach(input=>input.checked=settings.enabledStores.includes(input.value));
