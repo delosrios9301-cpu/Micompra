@@ -112,7 +112,7 @@ async function loadBranches() {
   select.innerHTML = '<option value="">Todas las sucursales</option>' + data.map(b => `<option value="${b.id}">${safe(b.name)}</option>`).join('');
 }
 
-async function searchProducts(term) {
+async function searchProductsLegacy(term) {
   const box = document.querySelector('#results');
   if (!term) { box.innerHTML = '<p class="empty">Escribe el nombre de un producto para ver las presentaciones disponibles.</p>'; return; }
   if (!supabase) { box.innerHTML = '<p class="empty">La conexión de datos aún no está configurada.</p>'; return; }
@@ -210,7 +210,7 @@ function addGuestCartItem({name,store,qty=1,price=null,priceUnit='unidad',priceS
   saveGuestCart(current);
   renderGuestList();
 }
-async function compareProduct(id) {
+async function compareProductLegacy(id) {
   lastComparedProductId = id;
   const box = document.querySelector('#results');
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
