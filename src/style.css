@@ -226,3 +226,28 @@
 .catalog-manager-edit-actions button{flex:1}
 .catalog-manager-edit-actions button:disabled{opacity:.5}
 @media(max-width:520px){.catalog-personal-manager{padding:11px}.catalog-manager-item{grid-template-columns:minmax(0,1fr) auto;padding:9px}.catalog-manager-item-actions button{flex:1}}
+
+/* Panel de gastos personales */
+.personal-spending{display:grid;gap:14px;margin:18px 0;padding:16px;border:1px solid var(--line,#dce3e0);border-radius:15px;background:var(--surface,#fff);min-width:0}
+.spending-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.spending-heading .eyebrow{margin:0 0 4px}.spending-heading h3{margin:0;font:700 22px Manrope,sans-serif}.spending-heading small{display:block;margin-top:5px;color:var(--muted,#65756e);font-size:12px}
+.spending-heading button,.spending-budget button{min-height:38px;padding:8px 12px;border:1px solid var(--line,#cbd7d1);border-radius:9px;background:#1d6950;color:#fff;font-size:12px;font-weight:700}
+.spending-heading button:disabled{opacity:.55}
+.spending-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.spending-kpis article{display:grid;gap:7px;min-width:0;padding:12px;border:1px solid var(--line,#e0e7e3);border-radius:11px;background:var(--soft,#f7faf8)}
+.spending-kpis small{font-size:11px;color:var(--muted,#65756e)}.spending-kpis strong{font:700 clamp(14px,3vw,19px) Manrope,sans-serif;overflow-wrap:anywhere}
+.spending-kpis .is-over-budget{color:#b43e35}
+.spending-budget{display:grid;gap:13px;padding:13px;border:1px solid var(--line,#dce3e0);border-radius:11px}
+.spending-budget form{display:grid;gap:7px}.spending-budget label{font-size:12px;font-weight:700}
+.spending-budget form>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.spending-budget input{width:100%;min-width:0;min-height:40px;padding:9px 10px;border:1px solid var(--line,#cbd7d1);border-radius:8px;background:var(--surface,#fff);color:inherit;font:inherit}
+.spending-budget form small{font-size:11px;color:var(--muted,#65756e);line-height:1.45}
+.spending-progress{display:grid;gap:7px}.spending-progress>div{display:flex;justify-content:space-between;gap:8px;font-size:11px}.spending-progress>div b{text-align:right}
+.spending-progress>i,.spending-bar-row>i{display:block;height:8px;overflow:hidden;border-radius:99px;background:#e8eee9}
+.spending-progress>i>span,.spending-bar-row>i>span{display:block;height:100%;border-radius:99px;background:#39845e}
+.spending-analysis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.spending-analysis section{display:grid;align-content:start;gap:10px;min-width:0}.spending-analysis h4{margin:0;font-size:13px}
+.spending-bar-row{display:grid;gap:5px}.spending-bar-row>div{display:flex;justify-content:space-between;gap:8px;font-size:11px}.spending-bar-row>div span{min-width:0;overflow-wrap:anywhere}.spending-bar-row>div b{white-space:nowrap}
+.spending-bar-row>i{height:6px}.spending-bar-row>i>span{background:#719b7c}
+.spending-empty,.spending-footnote{margin:0;color:var(--muted,#65756e);font-size:11px;line-height:1.5}
+@media(max-width:520px){.personal-spending{padding:12px}.spending-kpis{grid-template-columns:1fr 1fr}.spending-kpis article:last-child{grid-column:1/-1}.spending-analysis{grid-template-columns:1fr}.spending-heading{align-items:flex-start}.spending-budget form>div{grid-template-columns:1fr}.spending-budget form button{width:100%}}
