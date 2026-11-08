@@ -21,7 +21,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
   const compact = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const aliases = [
     { match: /\bsuper\s*99\b|\bsupermercados?\s*99\b/, names: ['super 99'] },
-    { match: /\bxtra\b|\bsuper\s*xtra\b|\bsupermercados?\s*xtra\b/, names: ['xtra','super xtra'] }
+    { match: /\bxtra\b|\bsuper\s*xtra\b|\bsupermercados?\s*xtra\b/, names: ['xtra','super xtra'] },
     { match: /\b(?:supermercados?\s+)?el\s+rey\b|\bsm rey\b/, names: ['el rey','rey'] },
     { match: /\briba\s*smith\b/, names: ['riba smith'] },
     { match: /\bel\s*machetazo\b/, names: ['el machetazo','machetazo'] },
@@ -46,7 +46,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
     if (d.getUTCFullYear()===parts[0] && d.getUTCMonth()===parts[1]-1 && d.getUTCDate()===parts[2]) date = parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
   }
   let reference = '';
-  const refMatch = source.match(/(?:factura(?:\s+fiscal)?|comprobante|recibo|ticket)\s*(?:n(?:o|[uú]m(?:ero)?|[º°.]?)|#|:|-)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
+  const refMatch = source.match(/(?:factura(?:\s+fiscal)?|comprobante|recibo|ticket)\s*(?:n(?:o\.?|[uú]m(?:ero)?|[º°.]?)|#|:|-)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
   if (refMatch) reference = refMatch[1].slice(0,120);
   let branch = null;
   if (store) {
