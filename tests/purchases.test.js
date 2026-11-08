@@ -44,3 +44,18 @@ test('CSV retains a purchase with no item rows', () => {
   assert.match(csv, /"El Rey"/);
   assert.match(csv, /"Factura pendiente"/);
 });
+
+test('CSV neutralizes formulas preceded by whitespace', () => {
+  const csv = buildPurchasesCsv([{
+    purchase_date: '2026-11-07',
+    supermarkets: { name: 'Xtra' },
+    purchase_items: [{ item_name: '  =1+1', quantity: 1, unit: 'unidad', unit_price: 1, line_total: 1 }]
+  }]);
+  assert.match(csv, /"'  =1\+1"/);
+});
+
+test('Empty purchase rows have the same number of columns as the header', () => {
+  const csv = buildPurchasesCsv([{ purchase_date: '2026-11-07', supermarkets: { name: 'El Rey' }, notes: 'Sin detalle', purchase_items: [] }]);
+  const lines = csv.replace(/^\uFEFF/, '').split('\r\n');
+  assert.equal(lines[0].split(',').length, lines[1].split(',').length);
+});
