@@ -686,6 +686,7 @@ function renderGuestList(){
       alert('No se pudo actualizar el inventario. Tus compras guardadas se conservaron.');
     }
   }));
+  renderHomeDashboard();
 }
 async function loadList() {
   const label=document.querySelector('#list-label'),cart=document.querySelector('#cart');
