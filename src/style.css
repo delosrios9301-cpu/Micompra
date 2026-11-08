@@ -1023,3 +1023,16 @@ main{padding-top:22px}
 @media(max-width:900px){.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.home-dashboard{gap:12px;margin-bottom:17px}.dashboard-heading{align-items:flex-start}.dashboard-date{font-size:9px}.dashboard-metrics{gap:8px}.dashboard-metric{gap:8px;padding:12px 10px;border-radius:13px}.dashboard-metric-icon{flex-basis:31px;width:31px;height:31px;font-size:16px}.dashboard-metric strong{font-size:19px}.dashboard-detail-grid{grid-template-columns:1fr;gap:10px}.dashboard-panel{padding:13px}.dashboard-heading h2{font-size:23px}}
 @media(max-width:360px){.dashboard-metric{display:grid;gap:7px}.dashboard-metric strong{font-size:18px}.dashboard-heading{display:grid}}
+
+
+/* Gráfica compacta de gastos del dashboard personal */
+.dashboard-spending-chart{gap:12px}
+.dashboard-chart-caption{color:#87948b;font-size:9px;font-weight:700}
+.dashboard-month-bars{display:grid;gap:10px}
+.dashboard-month-bar{display:grid;gap:5px;min-width:0}
+.dashboard-month-bar>div{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#748278;font-size:10px;text-transform:capitalize}
+.dashboard-month-bar>div b{color:#294b38;font-size:10px;font-weight:800}
+.dashboard-month-bar>i{display:block;height:8px;overflow:hidden;border-radius:20px;background:#edf3ee}
+.dashboard-month-bar>i>span{display:block;height:100%;min-width:0;border-radius:20px;background:linear-gradient(90deg,#8bc99c,#238653);transition:width .2s ease}
+.dashboard-chart-note{color:#89958d;font-size:9px;line-height:1.45}
+@media(max-width:620px){.dashboard-spending-chart{padding:13px}.dashboard-month-bars{gap:9px}}
