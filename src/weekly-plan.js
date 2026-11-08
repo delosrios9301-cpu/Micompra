@@ -107,10 +107,7 @@ export async function renderWeeklyPlan({ container, supabase, user, items = [], 
     ]);
     const now = new Date();
     const summary = summarizeWeeklyPlan(items, pantryResult.error ? [] : pantryResult.data || [], now);
-    const dateFormat = new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' });
-    const start = new Date(summary.start + 'T12:00:00');
-    const end = new Date(summary.end + 'T12:00:00');
-    $('#weekly-plan-range').textContent = `Semana del ${dateFormat.format(start)} al ${dateFormat.format(end)}`;
+    renderCalendar();
     $('#weekly-plan-pending').textContent = summary.pending.length;
     $('#weekly-plan-done').textContent = summary.completed.length;
     $('#weekly-plan-low').textContent = summary.lowStock.length;
