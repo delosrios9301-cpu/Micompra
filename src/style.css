@@ -102,3 +102,11 @@
 .invoice-metadata label{display:grid;gap:6px;min-width:0}
 .invoice-metadata input,.invoice-metadata select{width:100%;min-width:0}
 .invoice-metadata button{justify-self:start}
+
+
+.barcode-camera-panel{display:grid;gap:8px;padding:10px;border:1px solid #dce5de;border-radius:12px;background:#f7faf7}
+.barcode-camera-panel[hidden]{display:none}
+.barcode-camera-panel video{display:block;width:100%;max-height:280px;object-fit:cover;border-radius:8px;background:#10231c}
+.purchase-form button.secondary{background:#e9f1eb;color:#245b45;border:1px solid #d4e2d7}
+.purchase-form .wide{grid-column:1/-1}
+@media(max-width:520px){.barcode-camera-panel video{max-height:220px}.purchase-form .wide{grid-column:1/-1}}
