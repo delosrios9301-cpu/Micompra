@@ -44,8 +44,8 @@ function shell() {
       <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Organiza tu lista y compara precios publicados por supermercados.</p></section>
       <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
       <section class="section-head"><div><p class="eyebrow">COMPARADOR</p><h2>Busca un producto</h2></div></section>
-      <input id="search" class="search" type="search" placeholder="Ej. arroz, lechuga, leche, pollo..." autocomplete="off" /><div class="store-filter"><label for="store-filter">Buscar en supermercado</label><select id="store-filter">${stores.map(s => `<option value="${safe(s.name)}">${safe(s.name)}</option>`).join("")}</select></div><small class="catalog-source-note">Catálogo ampliado con productos de referencia de la canasta básica de ACODECO. La referencia sirve para identificar productos y presentaciones; no representa precios actuales.</small>
-      <div class="branch-filter"><label for="branch-filter">Sucursal para Super 99</label><select id="branch-filter"><option value="">Todas las sucursales</option></select><small>La sucursal filtra las publicaciones de Super 99. Para otras tiendas, este filtro no aplica.</small></div>
+      <input id="search" class="search" type="search" placeholder="Ej. arroz, lechuga, leche, pollo..." autocomplete="off" /><div class="store-filter"><label for="store-filter">Buscar en supermercado</label><select id="store-filter"><option value="">Selecciona un supermercado</option>${guestStores.map(name => `<option value="${safe(name)}">${safe(name)}</option>`).join("")}</select></div><small class="catalog-source-note">Solo se muestran productos que tú hayas registrado manualmente para el supermercado seleccionado.</small>
+      <div class="branch-filter" hidden></div>
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para ver las presentaciones disponibles.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section><div id="weekly-plan-module"></div>
@@ -715,4 +715,44 @@ async function start() {
   await loadBranches();
   await loadList();
 }
+
+/* Modo de operación manual: sin búsquedas ni extracción desde sitios de supermercados. */
+function searchProducts(term){
+ const box=document.querySelector('#results');if(!box)return;
+ const storeName=document.querySelector('#store-filter')?.value||'';
+ if(!storeName){box.innerHTML='<p class="empty">Primero selecciona el supermercado donde estás comprando. Después aparecerán únicamente tus productos registrados para esa tienda.</p>';return;}
+ const clean=String(term||'').trim().toLocaleLowerCase('es');
+ const products=readPersonalCatalog().filter(p=>p.store===storeName&&(!clean||(p.name+' '+p.category).toLocaleLowerCase('es').includes(clean)));
+ if(!products.length){
+  box.innerHTML='<section class="manual-empty-state"><div class="manual-empty-icon">＋</div><h3>Este producto aún no está en tu catálogo</h3><p>Regístralo con su foto y precio del supermercado seleccionado. Después quedará disponible para tus próximas compras y comparaciones.</p><button type="button" id="manual-create-product">Agregar producto a '+safe(storeName)+'</button></section>';
+  box.querySelector('#manual-create-product')?.addEventListener('click',()=>{
+   document.querySelector('[data-open-view="catalogo"]')?.click();
+   const form=document.querySelector('#personal-product-form');if(!form)return;
+   form.querySelector('[name="name"]').value=String(term||'').trim();
+   form.querySelector('[name="store"]').value=storeName;
+   form.querySelector('[name="name"]').focus();
+  });
+  return;
+ }
+ box.innerHTML='<div class="manual-results-heading"><strong>'+products.length+' producto(s)</strong><small>Catálogo personal · '+safe(storeName)+'</small></div>'+products.map(p=>'<article class="manual-product-result">'+(p.imageData?'<img src="'+p.imageData+'" alt="'+safe(p.name)+'">':'<div class="manual-result-placeholder">🛒</div>')+'<div class="manual-result-info"><strong>'+safe(p.name)+'</strong><small>'+safe(p.category)+' · '+safe(p.unit||'unidad')+'</small><b>'+(p.price!==null&&p.price!==undefined?money(p.price):'Precio pendiente')+'</b></div><button type="button" data-manual-add="'+safe(p.id)+'">＋ Agregar</button></article>').join('')+'<button type="button" class="manual-add-another" id="manual-create-product">＋ Registrar otro producto para '+safe(storeName)+'</button>';
+ box.querySelectorAll('[data-manual-add]').forEach(button=>button.addEventListener('click',()=>{
+  const p=products.find(item=>item.id===button.dataset.manualAdd);if(!p)return;
+  addGuestCartItem({name:p.name,store:p.store,qty:1,price:p.price===null?null:Number(p.price),priceUnit:p.unit||'unidad',imageData:p.imageData||null});
+  button.textContent='Agregado ✓';button.disabled=true;
+ }));
+ box.querySelector('#manual-create-product')?.addEventListener('click',()=>{
+  document.querySelector('[data-open-view="catalogo"]')?.click();
+  const form=document.querySelector('#personal-product-form');if(form)form.querySelector('[name="store"]').value=storeName;
+ });
+}
+function compareProduct(){
+ const box=document.querySelector('#results');if(!box)return;
+ const all=readPersonalCatalog();
+ const groups=new Map();
+ all.forEach(p=>{const key=(p.name||'').trim().toLocaleLowerCase('es');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p);});
+ const rows=[...groups.values()].filter(group=>group.length>1&&group.every(p=>p.price!==null&&p.price!==undefined&&Number(p.price)>0)).map(group=>({name:group[0].name,rows:group.slice().sort((a,b)=>Number(a.price)-Number(b.price))}));
+ box.innerHTML=rows.length?'<h3>Comparación de tus precios registrados</h3>'+rows.map(group=>'<section class="manual-compare-card"><strong>'+safe(group.name)+'</strong>'+group.rows.map((p,i)=>'<div><span>'+safe(p.store)+(i===0?' · menor precio':'')+'</span><b>'+money(p.price)+'</b></div>').join('')+'</section>').join(''):'<section class="manual-empty-state"><h3>Aún faltan datos para comparar</h3><p>Registra el mismo producto en dos o más supermercados y coloca sus precios. El comparador identificará automáticamente la opción más económica.</p><button type="button" id="go-catalog-comparison">Ir a Mi catálogo</button></section>';
+ box.querySelector('#go-catalog-comparison')?.addEventListener('click',()=>document.querySelector('[data-open-view="catalogo"]')?.click());
+}
+
 start();
