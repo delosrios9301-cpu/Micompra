@@ -115,3 +115,17 @@
 .barcode-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .barcode-actions button{width:100%;min-width:0}
 @media(max-width:380px){.barcode-actions{grid-template-columns:1fr}}
+
+
+/* Administración segura de códigos de barras */
+.barcode-admin-panel { border-color: var(--line, #dce3ea); }
+.barcode-admin-form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+.barcode-admin-form button { min-height: 44px; }
+.barcode-admin-list { display: grid; gap: 8px; margin-top: 14px; }
+.barcode-admin-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line, #dce3ea); border-radius: 12px; min-width: 0; }
+.barcode-admin-row > div { display: grid; gap: 4px; min-width: 0; }
+.barcode-admin-row strong, .barcode-admin-row small { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .barcode-admin-form { grid-template-columns: minmax(0, 1fr); }
+  .barcode-admin-row { align-items: flex-start; }
+}
