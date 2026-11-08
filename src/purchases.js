@@ -1,3 +1,19 @@
+export function buildPurchasesCsv(purchases = []) {
+  const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
+  const cell = value => {
+    let v = String(value ?? '');
+    if (/^[=+@\\t\\r-]/.test(v)) v = "'" + v;
+    return '"' + v.replace(/"/g, '""') + '"';
+  };
+  const rows = [headers, ...purchases.flatMap(p => {
+    const items = p.purchase_items || [];
+    const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
+    if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
+    return items.map(i => [...base,i.item_name,i.package_description,i.quantity,i.unit,i.unit_price,i.line_total,p.notes].map(cell));
+  })];
+  return '\\uFEFF' + rows.map(row => row.join(',')).join('\\r\\n');
+}
+
 const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
@@ -149,13 +165,13 @@ export async function renderPurchases({ container, supabase, user }) {
       </section>`;
 
     container.querySelector('#export-purchases')?.addEventListener('click', () => {
-      const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
-      const cell = value => {
-        let v = String(value ?? '');
-        if (/^[=+@\\t\\r]/.test(v) || /^-/.test(v)) v = "'" + v;
-        return '"' + v.replace(/"/g, '""') + '"';
-      };
-      const rows = [headers, ...purchases.flatMap(p => {
+      const blob = new Blob([buildPurchasesCsv(purchases)], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'mi-compra-gastos-' + localDate() + '.csv';
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    });nst rows = [headers, ...purchases.flatMap(p => {
         const items = p.purchase_items || [];
         const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
         if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
