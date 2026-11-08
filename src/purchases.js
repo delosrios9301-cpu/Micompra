@@ -15,6 +15,16 @@ export function buildPurchasesCsv(purchases = []) {
 }
 
 
+export function normalizeProductBarcode(value) {
+  return String(value ?? '').trim().replace(/\s+/g, '').replace(/-/g, '');
+}
+
+export function findProductByBarcode(products = [], barcode) {
+  const code = normalizeProductBarcode(barcode);
+  if (!code) return null;
+  return products.find(product => normalizeProductBarcode(product.barcode) === code) || null;
+}
+
 export function parseInvoiceMetadata(text, stores = [], branches = []) {
   const source = String(text || '');
   const normalized = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -177,12 +187,15 @@ export async function renderPurchases({ container, supabase, user }) {
   let stores = [], branches = [], products = [], purchases = [], adjustments = [];
   let rangeDays = '30';
   let invoiceDraft = [];
+  let barcodeStream = null;
+  let barcodeFrame = 0;
+  let barcodeDetecting = false;
   container.innerHTML = '<section class="purchase-module"><p class="empty">Cargando compras e inventario…</p></section>';
 
   const [storeResult, branchResult, productResult] = await Promise.all([
     supabase.from('supermarkets').select('id,name').eq('active', true).order('name'),
     supabase.from('supermarket_branches').select('id,name,supermarket_id').eq('active', true).order('name'),
-    supabase.from('products').select('id,canonical_name,normalized_quantity,normalized_unit_name').eq('active', true).order('canonical_name')
+    supabase.from('products').select('id,canonical_name,barcode,normalized_quantity,normalized_unit_name').eq('active', true).order('canonical_name')
   ]);
   if (storeResult.error || branchResult.error || productResult.error) {
     container.innerHTML = '<section class="purchase-module"><p class="empty">No se pudo cargar el catálogo de compras. Inténtalo de nuevo más tarde.</p></section>';
@@ -299,6 +312,10 @@ export async function renderPurchases({ container, supabase, user }) {
           </section>
           <form id="purchase-add-item" class="purchase-form item-form">
             <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
+            <label class="wide">Código de barras<input id="purchase-barcode" type="text" inputmode="numeric" autocomplete="off" placeholder="Escanea o escribe el código"></label>
+            <button type="button" class="secondary wide" id="scan-purchase-barcode">Abrir cámara para escanear</button>
+            <div id="barcode-camera-panel" class="barcode-camera-panel wide" hidden><video id="barcode-camera-video" autoplay playsinline muted></video><button type="button" class="secondary" id="stop-purchase-barcode">Detener cámara</button></div>
+            <small id="barcode-scan-status" class="purchase-message wide" aria-live="polite">Puedes usar la cámara o un lector USB/Bluetooth. El código se consulta contra el catálogo.</small>
             <label>Nombre del artículo<input id="purchase-item-name" maxlength="180" placeholder="Ej. arroz blanco"></label>
             <label>Presentación<input id="purchase-package" maxlength="180" placeholder="Ej. bolsa de 5 lb"></label>
             <label>Cantidad<input id="purchase-quantity" type="number" min="0.001" step="0.001" value="1" required></label>
@@ -584,6 +601,105 @@ export async function renderPurchases({ container, supabase, user }) {
     });
 
     container.querySelector('#close-active-purchase')?.addEventListener('click', () => { activePurchaseId = null; render(); });
+
+    const stopBarcodeCamera = () => {
+      barcodeDetecting = false;
+      if (barcodeFrame) cancelAnimationFrame(barcodeFrame);
+      barcodeFrame = 0;
+      if (barcodeStream) barcodeStream.getTracks().forEach(track => track.stop());
+      barcodeStream = null;
+      const panel = container.querySelector('#barcode-camera-panel');
+      const video = container.querySelector('#barcode-camera-video');
+      if (video) video.srcObject = null;
+      if (panel) panel.hidden = true;
+    };
+    const applyScannedBarcode = async rawValue => {
+      const code = normalizeProductBarcode(rawValue);
+      const field = container.querySelector('#purchase-barcode');
+      const status = container.querySelector('#barcode-scan-status');
+      if (!code) return;
+      if (field) field.value = code;
+      const product = findProductByBarcode(products, code);
+      if (product) {
+        const selector = container.querySelector('#purchase-product');
+        if (selector) {
+          selector.value = product.id;
+          selector.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (status) status.textContent = 'Producto identificado: ' + product.canonical_name + '. Revisa cantidad y precio antes de agregarlo.';
+        stopBarcodeCamera();
+        container.querySelector('#purchase-quantity')?.focus();
+        return;
+      }
+      if (status) status.textContent = 'Código ' + code + ' leído, pero todavía no está asociado a un producto del catálogo. Selecciona el artículo manualmente; no se creó ni modificó ningún producto.';
+    };
+    const lookupBarcode = async () => {
+      const code = normalizeProductBarcode(container.querySelector('#purchase-barcode')?.value);
+      if (!code) return;
+      const status = container.querySelector('#barcode-scan-status');
+      const product = findProductByBarcode(products, code);
+      if (product) { await applyScannedBarcode(code); return; }
+      if (status) status.textContent = 'Código leído, pero no encontrado en los códigos registrados del catálogo. Selecciona el producto manualmente.';
+    };
+    container.querySelector('#purchase-barcode')?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); lookupBarcode(); }
+    });
+    container.querySelector('#scan-purchase-barcode')?.addEventListener('click', async () => {
+      const status = container.querySelector('#barcode-scan-status');
+      if (!('BarcodeDetector' in globalThis)) {
+        if (status) status.textContent = 'Este navegador no ofrece lectura de códigos por cámara. Puedes escribir el código o usar un lector USB/Bluetooth que actúa como teclado.';
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (status) status.textContent = 'La cámara requiere HTTPS y permiso del navegador. Usa el campo manual si no está disponible.';
+        return;
+      }
+      try {
+        const supported = await globalThis.BarcodeDetector.getSupportedFormats();
+        const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code'].filter(format => supported.includes(format));
+        if (!formats.length) throw new Error('Este navegador no admite formatos de productos compatibles.');
+        const detector = new globalThis.BarcodeDetector({ formats });
+        barcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        const video = container.querySelector('#barcode-camera-video');
+        const panel = container.querySelector('#barcode-camera-panel');
+        if (!video || !panel) { stopBarcodeCamera(); return; }
+        video.srcObject = barcodeStream;
+        panel.hidden = false;
+        await video.play();
+        barcodeDetecting = true;
+        if (status) status.textContent = 'Cámara activa. Coloca el código dentro del encuadre.';
+        let lastScan = 0;
+        const scanFrame = async () => {
+          if (!barcodeDetecting || !video || video.readyState < 2) {
+            if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
+            return;
+          }
+          const now = Date.now();
+          if (now - lastScan >= 220) {
+            lastScan = now;
+            try {
+              const results = await detector.detect(video);
+              if (results.length && barcodeDetecting) {
+                await applyScannedBarcode(results[0].rawValue);
+                return;
+              }
+            } catch (_) {}
+          }
+          if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
+        };
+        barcodeFrame = requestAnimationFrame(scanFrame);
+      } catch (error) {
+        stopBarcodeCamera();
+        if (status) status.textContent = error.name === 'NotAllowedError'
+          ? 'No se concedió permiso para usar la cámara. Habilítalo en el navegador o escribe el código manualmente.'
+          : 'No se pudo iniciar el escáner: ' + (error.message || 'revisa la cámara y los permisos') + '. También puedes escribir el código manualmente.';
+      }
+    });
+    container.querySelector('#stop-purchase-barcode')?.addEventListener('click', () => {
+      stopBarcodeCamera();
+      const status = container.querySelector('#barcode-scan-status');
+      if (status) status.textContent = 'Escáner detenido.';
+    });
     container.querySelector('#purchase-product')?.addEventListener('change', event => {
       const p = products.find(x => x.id === event.target.value);
       if (!p) return;
@@ -630,6 +746,7 @@ export async function renderPurchases({ container, supabase, user }) {
   };
 
   const refresh = async () => {
+    stopBarcodeCamera();
     try { await loadData(); await render(); }
     catch (error) { container.innerHTML = '<section class="purchase-module"><p class="empty">' + safe(error.message) + '</p></section>'; }
   };
