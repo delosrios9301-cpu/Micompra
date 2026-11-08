@@ -95,6 +95,7 @@ function shell() {
   };
   nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button)openView(button.dataset.openView);});
   shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-view]');if(button)openView(button.dataset.homeView);});
+  shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-category]');if(!button)return;const term=button.dataset.homeCategory;openView('comprar');const search=document.querySelector('#search');if(search){search.value=term;searchProducts(term);}});
   window.addEventListener('hashchange',()=>{});
   document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); if (user) loadList(); });
   document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); document.querySelector('#branch-filter').closest('.branch-filter').hidden=document.querySelector('#store-filter').value!=='Super 99'; });
