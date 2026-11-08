@@ -77,31 +77,31 @@ export async function renderPurchases({ container, supabase, user }) {
     }
     const stockRows = [...stockMap.values()].sort((a,b) => a.name.localeCompare(b.name, 'es'));
 
-    container.innerHTML = \`
+    container.innerHTML = `
       <section class="purchase-module">
         <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras.</small></div></div>
         <div class="purchase-kpis">
-          <article><small>Gastado este mes</small><b>\${money(totalMonth)}</b></article>
-          <article><small>Gasto acumulado</small><b>\${money(totalAll)}</b></article>
-          <article><small>Compras registradas</small><b>\${purchases.length}</b></article>
+          <article><small>Gastado este mes</small><b>${money(totalMonth)}</b></article>
+          <article><small>Gasto acumulado</small><b>${money(totalAll)}</b></article>
+          <article><small>Compras registradas</small><b>${purchases.length}</b></article>
         </div>
         <section class="purchase-card">
           <strong>Registrar una compra</strong>
           <form id="purchase-create" class="purchase-form">
-            <label>Supermercado<select id="purchase-store" required><option value="">Selecciona</option>\${storeOptions}</select></label>
-            <label>Sucursal (opcional)<select id="purchase-branch"><option value="">No especificada / tienda en línea</option>\${branchOptions}</select></label>
-            <label>Fecha de compra<input id="purchase-date" type="date" value="\${new Date().toISOString().slice(0,10)}" required></label>
+            <label>Supermercado<select id="purchase-store" required><option value="">Selecciona</option>${storeOptions}</select></label>
+            <label>Sucursal (opcional)<select id="purchase-branch"><option value="">No especificada / tienda en línea</option>${branchOptions}</select></label>
+            <label>Fecha de compra<input id="purchase-date" type="date" value="${localDate()}" required></label>
             <label>Factura o referencia (opcional)<input id="purchase-reference" maxlength="120" placeholder="N.º de factura"></label>
             <label class="wide">Notas (opcional)<input id="purchase-notes" maxlength="1000" placeholder="Observaciones de la compra"></label>
             <button type="submit">Crear compra</button>
           </form>
           <small id="purchase-message" class="purchase-message" aria-live="polite"></small>
         </section>
-        \${activePurchaseId ? (() => {
+        ${activePurchaseId ? (() => {
           const p = purchases.find(x => x.id === activePurchaseId);
-          return p ? \`<section class="purchase-card active-purchase"><div class="purchase-card-head"><div><strong>Compra en curso · \${safe(p.supermarkets?.name || 'Supermercado')}</strong><small>\${dateLabel(p.purchase_date)} · \${safe(p.supermarket_branches?.name || 'Sucursal no indicada')}</small></div><button type="button" class="secondary" id="close-active-purchase">Cerrar</button></div>
+          return p ? `<section class="purchase-card active-purchase"><div class="purchase-card-head"><div><strong>Compra en curso · ${safe(p.supermarkets?.name || 'Supermercado')}</strong><small>${dateLabel(p.purchase_date)} · ${safe(p.supermarket_branches?.name || 'Sucursal no indicada')}</small></div><button type="button" class="secondary" id="close-active-purchase">Cerrar</button></div>
           <form id="purchase-add-item" class="purchase-form item-form">
-            <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>\${productOptions}</select></label>
+            <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label>Nombre del artículo<input id="purchase-item-name" maxlength="180" placeholder="Ej. arroz blanco"></label>
             <label>Presentación<input id="purchase-package" maxlength="180" placeholder="Ej. bolsa de 5 lb"></label>
             <label>Cantidad<input id="purchase-quantity" type="number" min="0.001" step="0.001" value="1" required></label>
@@ -109,24 +109,24 @@ export async function renderPurchases({ container, supabase, user }) {
             <label>Precio por unidad (USD)<input id="purchase-unit-price" type="number" min="0" step="0.01" required placeholder="0.00"></label>
             <button type="submit">Agregar artículo</button>
           </form>
-          <div id="active-purchase-items">\${(p.purchase_items || []).map(i => '<div class="purchase-line"><span>' + safe(i.item_name) + ' · ' + safe(i.quantity) + ' ' + safe(i.unit) + '</span><b>' + money(i.line_total) + '</b></div>').join('') || '<small>Aún no has agregado artículos.</small>'}</div>
-          <div class="purchase-grand-total"><span>Total registrado</span><b>\${money((p.purchase_items || []).reduce((sum,i)=>sum+Number(i.line_total || 0),0))}</b></div>
-          </section>\` : '' })() : ''}
+          <div id="active-purchase-items">${(p.purchase_items || []).map(i => '<div class="purchase-line"><span>' + safe(i.item_name) + ' · ' + safe(i.quantity) + ' ' + safe(i.unit) + '</span><b>' + money(i.line_total) + '</b></div>').join('') || '<small>Aún no has agregado artículos.</small>'}</div>
+          <div class="purchase-grand-total"><span>Total registrado</span><b>${money((p.purchase_items || []).reduce((sum,i)=>sum+Number(i.line_total || 0),0))}</b></div>
+          </section>` : '' })() : ''}
         <section class="purchase-card">
           <div class="purchase-card-head"><div><strong>Gastos por supermercado</strong><small>Totales de compras registradas durante el mes actual.</small></div></div>
-          \${monthByStore.size ? [...monthByStore].sort((a,b)=>b[1]-a[1]).map(([name,total])=>'<div class="store-spend"><span>'+safe(name)+'</span><b>'+money(total)+'</b></div>').join('') : '<small>Aún no hay compras registradas este mes.</small>'}
+          ${monthByStore.size ? [...monthByStore].sort((a,b)=>b[1]-a[1]).map(([name,total])=>'<div class="store-spend"><span>'+safe(name)+'</span><b>'+money(total)+'</b></div>').join('') : '<small>Aún no hay compras registradas este mes.</small>'}
         </section>
         <section class="purchase-card">
-          <div class="purchase-card-head"><div><strong>Comparativa de compras entre supermercados</strong><small>Indica dónde sí registraste cada producto y dónde no aparece comprado en el periodo.</small></div><select id="purchase-range" aria-label="Periodo de comparación"><option value="30" \${rangeDays==='30'?'selected':''}>Últimos 30 días</option><option value="90" \${rangeDays==='90'?'selected':''}>Últimos 90 días</option><option value="all" \${rangeDays==='all'?'selected':''}>Todo el historial</option></select></div>
-          <div class="purchase-compare-wrap">\${productGroups.size ? '<table class="purchase-compare"><thead><tr><th>Producto</th>'+stores.map(s=>'<th>'+safe(s.name)+'</th>').join('')+'</tr></thead><tbody>'+[...productGroups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(g=>'<tr><td><strong>'+safe(g.name)+'</strong><small>'+safe(g.package)+'</small></td>'+stores.map(s=>{const bought=g.stores.get(s.name);return '<td class="'+(bought?'bought':'not-bought')+'">'+(bought?'<b>Comprado</b><small>'+dateLabel(bought.date)+'</small><small>'+money(bought.price)+' / '+safe(bought.unit)+'</small>':'<span>No registrado</span>')+'</td>';}).join('')+'</tr>').join('')+'</tbody></table>' : '<small>Registra compras para comparar qué productos adquiriste en cada supermercado.</small>'}</div>
+          <div class="purchase-card-head"><div><strong>Comparativa de compras entre supermercados</strong><small>Indica dónde sí registraste cada producto y dónde no aparece comprado en el periodo.</small></div><select id="purchase-range" aria-label="Periodo de comparación"><option value="30" ${rangeDays==='30'?'selected':''}>Últimos 30 días</option><option value="90" ${rangeDays==='90'?'selected':''}>Últimos 90 días</option><option value="all" ${rangeDays==='all'?'selected':''}>Todo el historial</option></select></div>
+          <div class="purchase-compare-wrap">${productGroups.size ? '<table class="purchase-compare"><thead><tr><th>Producto</th>'+stores.map(s=>'<th>'+safe(s.name)+'</th>').join('')+'</tr></thead><tbody>'+[...productGroups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(g=>'<tr><td><strong>'+safe(g.name)+'</strong><small>'+safe(g.package)+'</small></td>'+stores.map(s=>{const bought=g.stores.get(s.name);return '<td class="'+(bought?'bought':'not-bought')+'">'+(bought?'<b>Comprado</b><small>'+dateLabel(bought.date)+'</small><small>'+money(bought.price)+' / '+safe(bought.unit)+'</small>':'<span>No registrado</span>')+'</td>';}).join('')+'</tr>').join('')+'</tbody></table>' : '<small>Registra compras para comparar qué productos adquiriste en cada supermercado.</small>'}</div>
           <small class="purchase-footnote">“No registrado” significa que no hay una compra guardada de ese producto en ese supermercado durante el periodo elegido; no significa que el supermercado no lo venda.</small>
         </section>
         <section class="purchase-card">
           <strong>Inventario estimado de lo comprado</strong>
           <small>Se suman las cantidades compradas y se restan consumos, mermas o correcciones que registres.</small>
-          \${stockRows.length ? stockRows.map(s=>'<div class="store-spend"><span>'+safe(s.name)+' <small>'+safe(s.unit)+'</small></span><b class="'+(s.quantity<0?'negative-stock':'')+'">'+s.quantity.toLocaleString('es-PA',{maximumFractionDigits:3})+'</b></div>').join('') : '<small>El inventario aparecerá cuando registres compras.</small>'}
+          ${stockRows.length ? stockRows.map(s=>'<div class="store-spend"><span>'+safe(s.name)+' <small>'+safe(s.unit)+'</small></span><b class="'+(s.quantity<0?'negative-stock':'')+'">'+s.quantity.toLocaleString('es-PA',{maximumFractionDigits:3})+'</b></div>').join('') : '<small>El inventario aparecerá cuando registres compras.</small>'}
           <form id="inventory-adjust" class="purchase-form inventory-form">
-            <label>Producto<select id="adjust-product"><option value="">Artículo libre</option>\${productOptions}</select></label>
+            <label>Producto<select id="adjust-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label>Nombre<input id="adjust-name" maxlength="180" placeholder="Producto"></label>
             <label>Tipo<select id="adjust-reason"><option value="consumption">Consumo</option><option value="spoilage">Merma / vencido</option><option value="correction">Corrección de inventario</option></select></label>
             <label>Cantidad<input id="adjust-quantity" type="number" step="0.001" min="0.001" required placeholder="Cantidad"></label>
@@ -136,9 +136,9 @@ export async function renderPurchases({ container, supabase, user }) {
         </section>
         <section class="purchase-card">
           <strong>Historial de compras</strong>
-          \${purchases.length ? purchases.map(p=>{const items=p.purchase_items||[],total=items.reduce((sum,i)=>sum+Number(i.line_total||0),0);return '<details class="purchase-history"><summary><span><b>'+safe(p.supermarkets?.name||'Supermercado')+'</b><small>'+dateLabel(p.purchase_date)+' · '+items.length+' artículo(s)'+(p.supermarket_branches?.name?' · '+safe(p.supermarket_branches.name):'')+'</small></span><strong>'+money(total)+'</strong></summary><div class="history-items">'+items.map(i=>'<div><span>'+safe(i.item_name)+' · '+safe(i.quantity)+' '+safe(i.unit)+'</span><b>'+money(i.line_total)+'</b></div>').join('')+(p.receipt_reference?'<small>Factura: '+safe(p.receipt_reference)+'</small>':'')+(p.notes?'<small>'+safe(p.notes)+'</small>':'')+'</div></details>';}).join('') : '<small>Aún no hay compras guardadas.</small>'}
+          ${purchases.length ? purchases.map(p=>{const items=p.purchase_items||[],total=items.reduce((sum,i)=>sum+Number(i.line_total||0),0);return '<details class="purchase-history"><summary><span><b>'+safe(p.supermarkets?.name||'Supermercado')+'</b><small>'+dateLabel(p.purchase_date)+' · '+items.length+' artículo(s)'+(p.supermarket_branches?.name?' · '+safe(p.supermarket_branches.name):'')+'</small></span><strong>'+money(total)+'</strong></summary><div class="history-items">'+items.map(i=>'<div><span>'+safe(i.item_name)+' · '+safe(i.quantity)+' '+safe(i.unit)+'</span><b>'+money(i.line_total)+'</b></div>').join('')+(p.receipt_reference?'<small>Factura: '+safe(p.receipt_reference)+'</small>':'')+(p.notes?'<small>'+safe(p.notes)+'</small>':'')+'</div></details>';}).join('') : '<small>Aún no hay compras guardadas.</small>'}
         </section>
-      </section>\`;
+      </section>`;
 
     const storeSelect = container.querySelector('#purchase-store');
     const branchSelect = container.querySelector('#purchase-branch');
