@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPurchasesCsv } from '../src/purchases.js';
+import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode } from '../src/purchases.js';
 
 test('CSV includes UTF-8 BOM and Spanish headers', () => {
   const csv = buildPurchasesCsv([]);
@@ -58,4 +58,19 @@ test('Empty purchase rows have the same number of columns as the header', () => 
   const csv = buildPurchasesCsv([{ purchase_date: '2026-11-07', supermarkets: { name: 'El Rey' }, notes: 'Sin detalle', purchase_items: [] }]);
   const lines = csv.replace(/^\uFEFF/, '').split('\r\n');
   assert.equal(lines[0].split(',').length, lines[1].split(',').length);
+});
+
+test('barcode normalization preserves leading zeros and removes spaces or hyphens', () => {
+  assert.equal(normalizeProductBarcode(' 0 123-456 789 '), '0123456789');
+});
+
+test('barcode lookup requires an exact normalized match', () => {
+  const products = [
+    { id: 'rice', canonical_name: 'Arroz', barcode: '0012345678905' },
+    { id: 'milk', canonical_name: 'Leche', barcode: '7501234567890' }
+  ];
+  assert.equal(findProductByBarcode(products, '0012345678905')?.id, 'rice');
+  assert.equal(findProductByBarcode(products, ' 001234 5678905 ')?.id, 'rice');
+  assert.equal(findProductByBarcode(products, '001234567890') , null);
+  assert.equal(findProductByBarcode(products, '') , null);
 });
