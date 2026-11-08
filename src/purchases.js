@@ -69,7 +69,8 @@ const parseInvoiceDraft = (text, products) => {
     return Number(raw.replace(',', '.'));
   };
   const ignoredLine = name => /^(?:total|subtotal|itbms|i\.t\.b\.m\.s|impuesto|tax|descuento|descto|desc\.?|ahorro|promocion|promoción|promo|cupon|cup[oó]n|bonificacion|bonificación|cambio|efectivo|visa|mastercard|debito|débito|credito|crédito|vuelto)\b/i.test(name)
-    || /\b(?:total general|total a pagar|subtotal|itbms|impuesto|descuento|descto|ahorro|cup[oó]n|bonificacion|bonificación)\b/i.test(name);
+    || /\b(?:total general|total a pagar|subtotal|itbms|impuesto|descuento|descto|ahorro|cup[oó]n|bonificacion|bonificación)\b/i.test(name)
+    || /(?:^|\s)(?:promo(?:cion)?|oferta|2\s*[x×]\s*1|3\s*[x×]\s*2)(?:\s|$)/i.test(name);
   const weightedPattern = /(?:^|\s)(\d+(?:[.,]\d+)?)\s*(kg|kilo(?:s)?|g|gr|gramos?|lb|lbs|libras?|oz|onzas?)\s*$/i;
   for (const line of lines) {
     const match = line.match(moneyPattern);
@@ -84,7 +85,8 @@ const parseInvoiceDraft = (text, products) => {
     if (quantityMatch) {
       quantity = parseAmount(quantityMatch[1]);
       const rawUnit = quantityMatch[2].toLowerCase();
-      unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'kg' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';\n      if (/^(?:g|gr|gram)/.test(rawUnit)) quantity = quantity / 1000;
+      unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'kg' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';
+      if (/^(?:g|gr|gram)/.test(rawUnit)) quantity = quantity / 1000;
       name = name.slice(0, quantityMatch.index + (quantityMatch[0].startsWith(' ') ? 0 : 0)).trim();
     } else {
       quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
