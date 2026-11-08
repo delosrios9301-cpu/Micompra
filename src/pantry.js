@@ -15,6 +15,39 @@ export function findPantryListDuplicate(listItems = [], pantryItem) {
   ) || null;
 }
 
+export function buildPantryRestockPlan(pantryItems = [], listItems = []) {
+  const plannedList = (listItems || []).map(item => ({ ...item }));
+  const updates = [];
+  const inserts = [];
+  const lowItems = (pantryItems || []).filter(isPantryLowStock);
+  for (const pantryItem of lowItems) {
+    const duplicate = findPantryListDuplicate(plannedList, pantryItem);
+    if (duplicate) {
+      const nextQuantity = (Number(duplicate.quantity) || 0) + 1;
+      duplicate.quantity = nextQuantity;
+      duplicate.checked = false;
+      updates.push({ id: duplicate.id, quantity: nextQuantity, checked: false });
+    } else {
+      const newItem = {
+        id: null,
+        item_name: pantryItem.item_name,
+        quantity: 1,
+        unit: pantryItem.unit || 'unidades',
+        checked: false
+      };
+      inserts.push({
+        list_id: null,
+        product_id: null,
+        item_name: newItem.item_name,
+        quantity: newItem.quantity,
+        unit: newItem.unit
+      });
+      plannedList.push(newItem);
+    }
+  }
+  return { updates, inserts, total: lowItems.length };
+}
+
 export function isPantryLowStock(item) {
   const quantity = Number(item?.quantity) || 0;
   const minimum = Number(item?.minimum_quantity) || 0;
@@ -47,7 +80,7 @@ export async function renderPersonalPantry({ container, supabase, user }) {
       <label>Notas (opcional)<input name="notes" maxlength="500" placeholder="Marca, tamaño o detalles"></label>
       <button type="submit">Guardar artículo</button><small class="pantry-status" aria-live="polite"></small>
     </form>
-    <section class="pantry-list-section"><div class="pantry-list-heading"><h4>Mi inventario del hogar</h4><select id="pantry-filter" aria-label="Filtrar despensa"><option value="all">Todos los artículos</option><option value="low">Por reponer</option><option value="empty">Agotados</option></select></div><div id="pantry-list" class="pantry-list"><p class="pantry-empty">Cargando tu despensa…</p></div></section>
+    <section class="pantry-list-section"><div class="pantry-list-heading"><h4>Mi inventario del hogar</h4><button type="button" class="pantry-add-all-to-list" disabled>Añadir todos por reponer</button><select id="pantry-filter" aria-label="Filtrar despensa"><option value="all">Todos los artículos</option><option value="low">Por reponer</option><option value="empty">Agotados</option></select></div><div id="pantry-list" class="pantry-list"><p class="pantry-empty">Cargando tu despensa…</p></div></section>
     <p class="pantry-footnote">La cantidad se actualiza manualmente. Un artículo se marca “Por reponer” al llegar al mínimo que indiques; si llega a cero, aparece como “Agotado”.</p>`;
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
@@ -59,6 +92,8 @@ export async function renderPersonalPantry({ container, supabase, user }) {
     $('#pantry-total').textContent = summary.total;
     $('#pantry-low').textContent = summary.low;
     $('#pantry-empty').textContent = summary.empty;
+    $('.pantry-add-all-to-list').disabled = summary.low === 0;
+    $('.pantry-add-all-to-list').textContent = summary.low ? `Añadir todos por reponer (${summary.low})` : 'No hay artículos por reponer';
     const visible = items.filter(item => filter === 'all' || (filter === 'low' && isPantryLowStock(item)) || (filter === 'empty' && Number(item.quantity) <= 0));
     $('#pantry-list').innerHTML = visible.length ? visible.map(item => {
       const low = isPantryLowStock(item), empty = Number(item.quantity) <= 0;
@@ -155,6 +190,46 @@ export async function renderPersonalPantry({ container, supabase, user }) {
     items = [...items, data].sort((a,b) => a.item_name.localeCompare(b.item_name, 'es'));
     formElement.reset(); formElement.elements.quantity.value = '1'; formElement.elements.minimum_quantity.value = '1';
     renderList(); status('Artículo guardado en tu despensa.');
+  });
+  $('.pantry-add-all-to-list').addEventListener('click', async () => {
+    const lowItems = items.filter(isPantryLowStock);
+    if (!lowItems.length) return;
+    const button = $('.pantry-add-all-to-list');
+    button.disabled = true;
+    button.textContent = 'Añadiendo artículos…';
+    let completed = 0;
+    let failed = 0;
+    try {
+      let { data: lists, error: listError } = await supabase.from('shopping_lists').select('id,name').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1);
+      if (listError) throw listError;
+      let activeList = lists?.[0];
+      if (!activeList) {
+        const created = await supabase.from('shopping_lists').insert({ user_id: user.id, name: 'Mi lista' }).select('id,name').single();
+        if (created.error) throw created.error;
+        activeList = created.data;
+      }
+      const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id', activeList.id);
+      if (itemsError) throw itemsError;
+      const plan = buildPantryRestockPlan(lowItems, listItems || []);
+      for (const update of plan.updates) {
+        const { error } = await supabase.from('shopping_list_items').update({ quantity: update.quantity, checked: false }).eq('id', update.id).eq('list_id', activeList.id);
+        if (error) failed++; else completed++;
+      }
+      if (plan.inserts.length) {
+        const rows = plan.inserts.map(({ product_id, item_name, quantity, unit }) => ({
+          list_id: activeList.id, product_id, item_name, quantity, unit
+        }));
+        const { error } = await supabase.from('shopping_list_items').insert(rows);
+        if (error) failed += rows.length; else completed += rows.length;
+      }
+      status(failed
+        ? `Se añadieron ${completed} artículos; ${failed} no se pudieron añadir. Puedes reintentar.`
+        : `Se añadieron ${completed} artículos por reponer a tu lista de compras.`);
+    } catch (error) {
+      status('No se pudo completar la incorporación. Comprueba la conexión e inténtalo de nuevo.', true);
+    }
+    button.disabled = false;
+    renderList();
   });
   $('#pantry-filter').addEventListener('change', renderList);
   $('.pantry-refresh').addEventListener('click', refresh);
