@@ -27,7 +27,7 @@ export async function renderPurchases({ container, supabase, user }) {
   const loadData = async () => {
     const [purchaseResult, adjustmentResult] = await Promise.all([
       supabase.from('purchase_records')
-        .select('id,user_id,supermarket_id,branch_id,purchase_date,receipt_reference,notes,supermarkets(name),supermarket_branches(name),purchase_items(id,product_id,item_name,package_description,quantity,unit,unit_price,line_total)')
+        .select('id,user_id,supermarket_id,branch_id,purchase_date,receipt_reference,receipt_path,notes,supermarkets(name),supermarket_branches(name),purchase_items(id,product_id,item_name,package_description,quantity,unit,unit_price,line_total)')
         .eq('user_id', user.id).order('purchase_date', { ascending: false }).limit(300),
       supabase.from('inventory_adjustments')
         .select('id,product_id,item_name,package_description,unit,quantity_delta,reason,notes,occurred_at')
@@ -79,7 +79,7 @@ export async function renderPurchases({ container, supabase, user }) {
 
     container.innerHTML = `
       <section class="purchase-module">
-        <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras.</small></div></div>
+        <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
         <div class="purchase-kpis">
           <article><small>Gastado este mes</small><b>${money(totalMonth)}</b></article>
           <article><small>Gasto acumulado</small><b>${money(totalAll)}</b></article>
@@ -100,6 +100,12 @@ export async function renderPurchases({ container, supabase, user }) {
         ${activePurchaseId ? (() => {
           const p = purchases.find(x => x.id === activePurchaseId);
           return p ? `<section class="purchase-card active-purchase"><div class="purchase-card-head"><div><strong>Compra en curso · ${safe(p.supermarkets?.name || 'Supermercado')}</strong><small>${dateLabel(p.purchase_date)} · ${safe(p.supermarket_branches?.name || 'Sucursal no indicada')}</small></div><button type="button" class="secondary" id="close-active-purchase">Cerrar</button></div>
+          <div class="receipt-upload">
+            <label>Comprobante de compra (foto o PDF, máximo 8 MB)<input id="purchase-receipt-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
+            <button type="button" class="secondary" id="upload-purchase-receipt">Guardar comprobante</button>
+            <small id="receipt-message" class="purchase-message" aria-live="polite"></small>
+            ${p.receipt_path ? '<button type="button" class="secondary" data-receipt-path="' + safe(p.receipt_path) + '">Ver comprobante guardado</button>' : ''}
+          </div>
           <form id="purchase-add-item" class="purchase-form item-form">
             <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label>Nombre del artículo<input id="purchase-item-name" maxlength="180" placeholder="Ej. arroz blanco"></label>
@@ -138,9 +144,61 @@ export async function renderPurchases({ container, supabase, user }) {
         </section>
         <section class="purchase-card">
           <strong>Historial de compras</strong>
-          ${purchases.length ? purchases.map(p=>{const items=p.purchase_items||[],total=items.reduce((sum,i)=>sum+Number(i.line_total||0),0);return '<details class="purchase-history"><summary><span><b>'+safe(p.supermarkets?.name||'Supermercado')+'</b><small>'+dateLabel(p.purchase_date)+' · '+items.length+' artículo(s)'+(p.supermarket_branches?.name?' · '+safe(p.supermarket_branches.name):'')+'</small></span><strong>'+money(total)+'</strong></summary><div class="history-items">'+items.map(i=>'<div><span>'+safe(i.item_name)+' · '+safe(i.quantity)+' '+safe(i.unit)+'</span><b>'+money(i.line_total)+'</b></div>').join('')+(p.receipt_reference?'<small>Factura: '+safe(p.receipt_reference)+'</small>':'')+(p.notes?'<small>'+safe(p.notes)+'</small>':'')+'</div></details>';}).join('') : '<small>Aún no hay compras guardadas.</small>'}
+          ${purchases.length ? purchases.map(p=>{const items=p.purchase_items||[],total=items.reduce((sum,i)=>sum+Number(i.line_total||0),0);return '<details class="purchase-history"><summary><span><b>'+safe(p.supermarkets?.name||'Supermercado')+'</b><small>'+dateLabel(p.purchase_date)+' · '+items.length+' artículo(s)'+(p.supermarket_branches?.name?' · '+safe(p.supermarket_branches.name):'')+'</small></span><strong>'+money(total)+'</strong></summary><div class="history-items">'+items.map(i=>'<div><span>'+safe(i.item_name)+' · '+safe(i.quantity)+' '+safe(i.unit)+'</span><b>'+money(i.line_total)+'</b></div>').join('')+(p.receipt_reference?'<small>Factura: '+safe(p.receipt_reference)+'</small>':'')+(p.receipt_path?'<button type="button" class="secondary" data-receipt-path="'+safe(p.receipt_path)+'">Ver comprobante</button>':'')+(p.notes?'<small>'+safe(p.notes)+'</small>':'')+'</div></details>';}).join('') : '<small>Aún no hay compras guardadas.</small>'}
         </section>
       </section>`;
+
+    container.querySelector('#export-purchases')?.addEventListener('click', () => {
+      const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
+      const cell = value => {
+        let v = String(value ?? '');
+        if (/^[=+@\\t\\r]/.test(v) || /^-/.test(v)) v = "'" + v;
+        return '"' + v.replace(/"/g, '""') + '"';
+      };
+      const rows = [headers, ...purchases.flatMap(p => {
+        const items = p.purchase_items || [];
+        const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
+        if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
+        return items.map(i => [...base,i.item_name,i.package_description,i.quantity,i.unit,i.unit_price,i.line_total,p.notes].map(cell));
+      })];
+      const csv = '\\uFEFF' + rows.map(row => row.join(',')).join('\\r\\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'mi-compra-gastos-' + localDate() + '.csv';
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    });
+
+    container.querySelector('#upload-purchase-receipt')?.addEventListener('click', async () => {
+      const input = container.querySelector('#purchase-receipt-file');
+      const message = container.querySelector('#receipt-message');
+      const file = input?.files?.[0];
+      if (!file || !activePurchaseId) { message.textContent = 'Selecciona primero una foto o PDF.'; return; }
+      const allowed = ['image/jpeg','image/png','image/webp','application/pdf'];
+      if (!allowed.includes(file.type) || file.size > 8 * 1024 * 1024) { message.textContent = 'Formato no permitido o archivo mayor de 8 MB.'; return; }
+      message.textContent = 'Guardando comprobante…';
+      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'comprobante';
+      const path = user.id + '/' + activePurchaseId + '/' + crypto.randomUUID() + '-' + cleanName;
+      const { error: uploadError } = await supabase.storage.from('purchase-receipts').upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) { message.textContent = 'No se pudo guardar el archivo. Comprueba tu conexión e inténtalo de nuevo.'; return; }
+      const { error: updateError } = await supabase.from('purchase_records').update({ receipt_path: path }).eq('id', activePurchaseId).eq('user_id', user.id);
+      if (updateError) {
+        await supabase.storage.from('purchase-receipts').remove([path]);
+        message.textContent = 'El archivo se subió, pero no se pudo vincular a la compra.';
+        return;
+      }
+      message.textContent = 'Comprobante guardado de forma privada.';
+      await refresh();
+    });
+
+    container.querySelectorAll('[data-receipt-path]').forEach(button => button.addEventListener('click', async () => {
+      const tab = window.open('about:blank', '_blank');
+      const { data, error } = await supabase.storage.from('purchase-receipts').createSignedUrl(button.dataset.receiptPath, 3600);
+      if (error || !data?.signedUrl) { if (tab) tab.close(); alert('No se pudo abrir el comprobante.'); return; }
+      if (tab) tab.location.href = data.signedUrl;
+      else window.location.href = data.signedUrl;
+    }));
 
     const storeSelect = container.querySelector('#purchase-store');
     const branchSelect = container.querySelector('#purchase-branch');
