@@ -33,9 +33,24 @@ function conflictId(id, record) {
   return String(id) + '-conflict-' + hashWorkspaceRecord(record);
 }
 
+function uniqueRows(rows = []) {
+  const result = [], seen = new Set();
+  for (const row of rows || []) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || row.id === undefined || row.id === null) throw new Error('Se encontró un registro sin identificador. No se modificó ningún dato.');
+    const id = String(row.id);
+    if (!seen.has(id)) { seen.add(id); result.push(row); continue; }
+    const copy = { ...row, id: conflictId(id, row), syncConflictOf: id };
+    while (seen.has(String(copy.id))) copy.id += '-copy';
+    seen.add(String(copy.id));
+    result.push(copy);
+  }
+  return result;
+}
+
 export function mergeWorkspaceCollection(localRows = [], remoteRows = [], previousHashes = {}) {
-  const local = new Map((localRows || []).map(row => [String(row.id), row]));
-  const remote = new Map((remoteRows || []).map(row => [String(row.id), row]));
+  const safeLocalRows = uniqueRows(localRows), safeRemoteRows = uniqueRows(remoteRows);
+  const local = new Map(safeLocalRows.map(row => [String(row.id), row]));
+  const remote = new Map(safeRemoteRows.map(row => [String(row.id), row]));
   const ids = [...new Set([...local.keys(), ...remote.keys(), ...Object.keys(previousHashes || {})])];
   const merged = [], conflicts = [];
   for (const id of ids) {
@@ -100,7 +115,9 @@ function normalizeRemoteWorkspace(data) {
   const result = emptyWorkspace();
   for (const collection of COLLECTIONS) {
     if (data[collection] !== undefined && !Array.isArray(data[collection])) throw new Error('La colección ' + collection + ' en la nube no es válida. No se modificó ningún dato.');
-    result[collection] = (data[collection] || []).filter(row => row && typeof row === 'object' && !Array.isArray(row) && row.id !== undefined).map(row => row);
+    const rows = data[collection] || [];
+    if (rows.some(row => !row || typeof row !== 'object' || Array.isArray(row) || row.id === undefined || row.id === null)) throw new Error('La colección ' + collection + ' contiene registros incompletos. No se modificó ningún dato.');
+    result[collection] = rows;
   }
   result.settings = data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) ? data.settings : {};
   return result;
@@ -125,7 +142,7 @@ function mergeSettings(local, remote, previousHash) {
   const localChanged = localHash !== previousHash, remoteChanged = remoteHash !== previousHash;
   if (localChanged && !remoteChanged) return local || {};
   if (remoteChanged && !localChanged) return remote || {};
-  return localChanged ? (local || {}) : (remote || {});
+  return localChanged && remoteChanged ? { ...(remote || {}), ...(local || {}) } : localChanged ? (local || {}) : (remote || {});
 }
 
 function writeLocalWorkspace(storage, workspace) {
