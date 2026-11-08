@@ -264,3 +264,10 @@
 .spending-month-row>i{display:block;height:9px;overflow:hidden;border-radius:99px;background:#e8eee9}
 .spending-month-row>i>span{display:block;height:100%;border-radius:99px;background:#39845e;min-width:0}
 .spending-month-row>small{font-size:10px;color:var(--muted,#65756e)}
+
+/* Avisos personales de presupuesto mensual */
+.spending-alerts{display:grid;gap:9px;padding:13px;border:1px solid var(--line,#dce3e0);border-radius:11px;min-width:0}
+.spending-alerts h4{margin:0;font-size:13px}
+.spending-alert{display:grid;gap:4px;padding:10px 11px;border:1px solid var(--line,#dce3e0);border-radius:9px;background:var(--soft,#f7faf8);min-width:0}
+.spending-alert b{font-size:12px}.spending-alert span{font-size:12px;line-height:1.45}.spending-alert small{font-size:10px;color:var(--muted,#65756e)}
+.spending-alert-75{border-left:4px solid #c58a35}.spending-alert-90{border-left:4px solid #d16b32}.spending-alert-100{border-left:4px solid #b43e35}
