@@ -14,6 +14,7 @@ let activeList = null;
 let searchTimer;
 let selectedBranchId = '';
 let lastComparedProductId = null;
+let productCatalogCache = [];
 
 const app = document.querySelector('#app');
 const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(value);
@@ -31,7 +32,7 @@ function shell() {
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista de compras</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
       <div id="auth" class="auth"></div>
-      <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div>
+      <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
       <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${s.url ? 'Tienda en línea disponible' : 'Integración pendiente'}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Visitar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
@@ -134,36 +135,54 @@ async function renderPriceReview() {
   }));
 }
 
+async function loadProductCatalog() {
+  if(productCatalogCache.length)return productCatalogCache;
+  const {data,error}=await supabase.from('products').select('id,canonical_name,brand,normalized_quantity,normalized_unit_name').eq('active',true).order('canonical_name');
+  if(error)throw error;productCatalogCache=data||[];return productCatalogCache;
+}
+async function renderListComparison(items) {
+  const panel=document.querySelector('#list-comparison'),linked=(items||[]).filter(i=>i.product_id),unlinked=(items||[]).length-linked.length;
+  if(!items?.length){panel.innerHTML='<p class="empty">Agrega productos para calcular el costo de tu lista.</p>';return;}
+  if(!linked.length){panel.innerHTML='<p class="empty">Vincula artículos con el catálogo para comparar. Los artículos libres no entran en los totales.</p>';return;}
+  panel.innerHTML='<div class="comparison-heading"><p class="eyebrow">COSTO DE TU LISTA</p><h3>Comparación por supermercado</h3><small>Solo precios aprobados y verificados de las últimas 24 horas; se comparan productos con la misma presentación.</small></div><p class="empty">Calculando...</p>';
+  const ids=[...new Set(linked.map(i=>i.product_id))],cutoff=new Date(Date.now()-86400000).toISOString();
+  const {data,error}=await supabase.from('store_products').select('product_id,branch_id,supermarkets(name),supermarket_branches(name),price_observations(price,currency,observed_at,is_verified,review_status)').in('product_id',ids).gte('price_observations.observed_at',cutoff).eq('price_observations.is_verified',true).eq('price_observations.review_status','approved').limit(300);
+  if(error){panel.innerHTML='<p class="empty">No se pudo calcular la lista.</p>';return;}
+  const stores=new Map();
+  for(const listing of data||[]){
+    const name=listing.supermarkets?.name;if(!name||(name==='Super 99'&&selectedBranchId&&listing.branch_id!==selectedBranchId))continue;
+    const valid=(listing.price_observations||[]).filter(p=>p.is_verified&&p.review_status==='approved'&&p.currency==='USD'&&Number(p.price)>0&&new Date(p.observed_at).getTime()>=Date.now()-86400000);
+    if(!valid.length)continue;const price=valid.reduce((x,y)=>Number(x.price)<Number(y.price)?x:y);
+    if(!stores.has(name))stores.set(name,new Map());const map=stores.get(name),old=map.get(listing.product_id);
+    if(!old||Number(price.price)<old.price)map.set(listing.product_id,{price:Number(price.price)});
+  }
+  const totals=[];for(const [name,prices] of stores){let total=0,covered=0;for(const item of linked){const p=prices.get(item.product_id);if(p){total+=Number(item.quantity)*p.price;covered++;}}totals.push({name,total,covered,complete:covered===linked.length});}
+  totals.sort((x,y)=>Number(y.complete)-Number(x.complete)||x.total-y.total);
+  const full=totals.filter(x=>x.complete),best=full[0]||null;
+  const combo=linked.map(item=>{const opts=[];for(const [name,prices] of stores){const p=prices.get(item.product_id);if(p)opts.push({name,price:p.price});}opts.sort((x,y)=>x.price-y.price);return {item,choice:opts[0]||null};});
+  const comboComplete=combo.every(x=>x.choice),comboTotal=combo.reduce((sum,x)=>sum+(x.choice?Number(x.item.quantity)*x.choice.price:0),0),comboStores=[...new Set(combo.filter(x=>x.choice).map(x=>x.choice.name))],savings=best&&comboComplete?Math.max(0,best.total-comboTotal):null;
+  let html='<div class="comparison-heading"><p class="eyebrow">COSTO DE TU LISTA</p><h3>Comparación por supermercado</h3><small>USD · precios actuales, aprobados y verificados.</small></div>';
+  if(unlinked)html+='<p class="comparison-note">'+unlinked+' artículo(s) sin vincular al catálogo quedan fuera del cálculo.</p>';
+  html+=best?'<article class="best-total"><small>Menor total en una sola tienda</small><strong>'+safe(best.name)+'</strong><b>'+money(best.total)+'</b><span>Todos los '+linked.length+' productos tienen precio</span></article>':'<p class="comparison-note">Ningún supermercado tiene precio actual para todos los productos. No se presenta un total parcial como total de compra.</p>';
+  html+='<div class="store-totals">'+(totals.length?totals.map(x=>'<article class="store-total"><div><strong>'+safe(x.name)+'</strong><small>'+x.covered+'/'+linked.length+' productos con precio</small></div><b>'+(x.complete?money(x.total):'Incompleto')+'</b></article>').join(''):'<p class="empty">No hay precios aprobados y actuales para estos productos.</p>')+'</div>';
+  html+='<div class="combo-total"><strong>Combinación de menor precio</strong>'+(comboComplete?'<b>'+money(comboTotal)+'</b><small>Comprando en '+comboStores.length+' supermercado(s): '+safe(comboStores.join(', '))+'</small><small class="covered">'+(savings>0?'Ahorro potencial frente a la mejor tienda única: '+money(savings):'Sin ahorro adicional frente a la mejor tienda única.')+'</small>':'<small>Solo '+combo.filter(x=>x.choice).length+' de '+linked.length+' productos tienen precio actual; falta información para el total.</small>')+'<ul>'+combo.map(x=>'<li><span>'+safe(x.item.item_name)+' × '+safe(x.item.quantity)+'</span><span>'+(x.choice?safe(x.choice.name)+' · '+money(x.choice.price):'Sin precio verificado')+'</span></li>').join('')+'</ul></div><small class="comparison-footnote">Se multiplica el precio de la presentación catalogada por la cantidad indicada. No incluye entrega ni productos sin precio verificado.</small>';
+  panel.innerHTML=html;
+}
 async function loadList() {
-  const label = document.querySelector('#list-label'), cart = document.querySelector('#cart');
-  if (!user) { label.textContent = 'Inicia sesión para guardar'; cart.innerHTML = '<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>'; return; }
-  let { data: lists, error } = await supabase.from('shopping_lists').select('id,name').eq('user_id', user.id).order('created_at', {ascending:false}).limit(1);
-  if (error) { cart.innerHTML = '<p class="empty">No se pudo cargar tu lista.</p>'; return; }
-  if (!lists?.length) {
-    const created = await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();
-    if (created.error) { cart.innerHTML = '<p class="empty">No se pudo crear la lista.</p>'; return; }
-    activeList = created.data;
-  } else activeList = lists[0];
-  label.textContent = activeList.name;
-  const { data: items, error: itemError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id',activeList.id).order('created_at');
-  if (itemError) { cart.innerHTML = '<p class="empty">No se pudieron cargar los artículos.</p>'; return; }
-  const total = (items || []).length;
-  cart.innerHTML = `<form id="add-item" class="add-row"><input id="item-name" required placeholder="Agregar artículo"><input id="item-qty" type="number" min="0.01" step="0.01" value="1" aria-label="Cantidad"><button>Agregar</button></form>${total ? items.map(i => `<div class="cart-item"><label><input type="checkbox" data-check="${i.id}" ${i.checked?'checked':''}><span class="${i.checked?'done':''}">${safe(i.item_name)} <small>× ${safe(i.quantity)} ${safe(i.unit || '')}</small></span></label><button class="remove" data-remove="${i.id}" aria-label="Eliminar ${safe(i.item_name)}">×</button></div>`).join('') : '<p class="empty">Tu lista está vacía. Agrega tu primer artículo.</p>'}`;
-  cart.querySelector('#add-item').addEventListener('submit', async e => {
-    e.preventDefault();
-    const item_name = cart.querySelector('#item-name').value.trim();
-    const quantity = Number(cart.querySelector('#item-qty').value);
-    const { error } = await supabase.from('shopping_list_items').insert({list_id:activeList.id,item_name,quantity});
-    if (!error) loadList(); else alert('No se pudo agregar el artículo.');
-  });
-  cart.querySelectorAll('[data-check]').forEach(c => c.addEventListener('change', async () => {
-    const {error} = await supabase.from('shopping_list_items').update({checked:c.checked}).eq('id',c.dataset.check);
-    if (error) loadList();
-  }));
-  cart.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', async () => {
-    const {error} = await supabase.from('shopping_list_items').delete().eq('id',b.dataset.remove);
-    if (!error) loadList();
-  }));
+  const label=document.querySelector('#list-label'),cart=document.querySelector('#cart');
+  if(!user){label.textContent='Inicia sesión para guardar';cart.innerHTML='<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>';document.querySelector('#list-comparison').innerHTML='<p class="empty">Inicia sesión para comparar tu lista.</p>';return;}
+  let {data:lists,error}=await supabase.from('shopping_lists').select('id,name').eq('user_id',user.id).order('created_at',{ascending:false}).limit(1);
+  if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';return;}
+  if(!lists?.length){const created=await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();if(created.error){cart.innerHTML='<p class="empty">No se pudo crear la lista.</p>';return;}activeList=created.data;}else activeList=lists[0];
+  label.textContent=activeList.name;
+  const [result,catalog]=await Promise.all([supabase.from('shopping_list_items').select('id,product_id,item_name,quantity,unit,checked').eq('list_id',activeList.id).order('created_at'),loadProductCatalog()]);
+  const items=result.data||[];if(result.error){cart.innerHTML='<p class="empty">No se pudieron cargar los artículos.</p>';return;}
+  const options=catalog.map(p=>'<option value="'+p.id+'">'+safe(p.canonical_name)+(p.normalized_quantity&&p.normalized_unit_name?' · '+safe(p.normalized_quantity)+' '+safe(p.normalized_unit_name):'')+'</option>').join('');
+  cart.innerHTML='<form id="add-item" class="add-row"><select id="item-product" required aria-label="Producto del catálogo"><option value="">Selecciona un producto del catálogo</option>'+options+'</select><input id="item-qty" type="number" min="0.01" step="0.01" value="1" aria-label="Cantidad de unidades"><button '+(catalog.length?'':'disabled')+'>Agregar</button></form>'+(items.length?items.map(i=>'<div class="cart-item"><label><input type="checkbox" data-check="'+i.id+'" '+(i.checked?'checked':'')+'><span class="'+(i.checked?'done':'')+'">'+safe(i.item_name)+' <small>× '+safe(i.quantity)+' '+safe(i.unit||'unidades')+'</small><small class="'+(i.product_id?'linked-product':'unlinked-product')+'">'+(i.product_id?'Producto vinculado al catálogo':'Sin vincular · no se compara')+'</small></span></label><button class="remove" data-remove="'+i.id+'" aria-label="Eliminar '+safe(i.item_name)+'">×</button></div>').join(''):'<p class="empty">Tu lista está vacía. Agrega un producto del catálogo.</p>');
+  cart.querySelector('#add-item').addEventListener('submit',async e=>{e.preventDefault();const id=cart.querySelector('#item-product').value,product=catalog.find(p=>p.id===id),quantity=Number(cart.querySelector('#item-qty').value);if(!product||!Number.isFinite(quantity)||quantity<=0)return;const unit=product.normalized_quantity&&product.normalized_unit_name?product.normalized_quantity+' '+product.normalized_unit_name+' por unidad':'unidades';const {error}=await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:id,item_name:product.canonical_name,quantity,unit});if(!error)loadList();else alert('No se pudo agregar el artículo.');});
+  cart.querySelectorAll('[data-check]').forEach(c=>c.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({checked:c.checked}).eq('id',c.dataset.check);if(error)loadList();}));
+  cart.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',async()=>{const {error}=await supabase.from('shopping_list_items').delete().eq('id',b.dataset.remove);if(!error)loadList();}));
+  await renderListComparison(items);
 }
 
 async function start() {
