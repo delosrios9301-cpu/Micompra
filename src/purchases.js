@@ -21,7 +21,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
   const compact = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const aliases = [
     { match: /\bsuper\s*99\b|\bsupermercados?\s*99\b/, names: ['super 99'] },
-    { match: /\bsuper\s*xtra\b|\bsupermercados?\s*xtra\b/, names: ['xtra','super xtra'] },
+    { match: /\bxtra\b|\bsuper\s*xtra\b|\bsupermercados?\s*xtra\b/, names: ['xtra','super xtra'] }
     { match: /\b(?:supermercados?\s+)?el\s+rey\b|\bsm rey\b/, names: ['el rey','rey'] },
     { match: /\briba\s*smith\b/, names: ['riba smith'] },
     { match: /\bel\s*machetazo\b/, names: ['el machetazo','machetazo'] },
