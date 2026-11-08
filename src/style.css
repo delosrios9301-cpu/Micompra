@@ -300,3 +300,6 @@
 .pantry-empty,.pantry-footnote{margin:0;color:var(--muted,#65756e);font-size:11px;line-height:1.5}
 @media(max-width:620px){.personal-pantry{padding:12px}.pantry-list{grid-template-columns:1fr}.pantry-form-grid{grid-template-columns:1fr 1fr}.pantry-item-form{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:380px){.pantry-form-grid{grid-template-columns:1fr}.pantry-summary{gap:6px}.pantry-summary article{padding:9px}.pantry-summary small{font-size:10px}.pantry-summary b{font-size:16px}.pantry-heading{align-items:flex-start}.pantry-heading button{padding:7px 9px}}
+
+.pantry-item-actions .pantry-add-to-list{flex:1 0 100%;background:#eaf3ef;color:#205b45;border-color:#b9d4c7}
+.pantry-item-actions .pantry-add-to-list:disabled{opacity:.7;cursor:default}
