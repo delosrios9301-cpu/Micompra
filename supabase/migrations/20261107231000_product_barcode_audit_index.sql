@@ -1,0 +1,1 @@
+create index product_barcodes_created_by_idx on public.product_barcodes(created_by);
