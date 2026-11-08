@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getWeeklyRange, getCalendarWeek, groupShoppingItemsByDate, summarizeWeeklyPlan, compareWeeklyPlanPrices, getShoppingReminders } from '../src/weekly-plan.js';
+import { getWeeklyRange, getCalendarWeek, groupShoppingItemsByDate, summarizeWeeklyPlan, compareWeeklyPlanPrices, getShoppingReminders, sortShoppingItemsByPriority } from '../src/weekly-plan.js';
 
 test('weekly range starts Monday and ends Sunday', () => {
   assert.deepEqual(getWeeklyRange(new Date(2026, 10, 7)), { start: '2026-11-02', end: '2026-11-08' });
@@ -82,4 +82,21 @@ test('shopping reminders group overdue, today, tomorrow and the next seven days,
 test('shopping reminders return empty groups when no pending dated items exist', () => {
   const result = getShoppingReminders([{ planned_for: '2026-11-07', checked: true }], new Date(2026, 10, 7));
   assert.deepEqual(result, { overdue: [], upcoming: [], total: 0 });
+});
+
+
+test('shopping items sort by urgency, normal, low and completed last without losing same-priority order', () => {
+  const sorted = sortShoppingItemsByPriority([
+    { id: 'low', priority: 'low', checked: false },
+    { id: 'normal', priority: 'normal', checked: false },
+    { id: 'urgent', priority: 'urgent', checked: false },
+    { id: 'done', priority: 'urgent', checked: true },
+    { id: 'normal-2', priority: 'normal', checked: false }
+  ]);
+  assert.deepEqual(sorted.map(item => item.id), ['urgent', 'normal', 'normal-2', 'low', 'done']);
+});
+
+test('unknown or missing priority safely defaults to normal order', () => {
+  const sorted = sortShoppingItemsByPriority([{ id: 'low', priority: 'low' }, { id: 'missing' }, { id: 'urgent', priority: 'urgent' }]);
+  assert.deepEqual(sorted.map(item => item.id), ['urgent', 'missing', 'low']);
 });
