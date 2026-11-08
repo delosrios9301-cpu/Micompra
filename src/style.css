@@ -418,3 +418,9 @@
 .auth-gate .login-card .eyebrow{margin-top:0}
 .auth-gate .login-card .login-message{padding:12px;background:#fff6e8;border-radius:9px;color:#805b27;font-size:12px}
 @media(max-width:480px){.auth.auth-gate{padding:16px}.auth-gate .login-card{border-radius:18px;padding:25px 21px}.login-mark{margin-bottom:25px}}
+
+/* El acceso y el estado de cuenta se muestran antes del contenido principal. */
+.auth-entry:not(.auth-gate){max-width:1100px;margin:14px auto 0;padding:0 24px}
+.auth-entry:not(.auth-gate)>.signed{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border:1px solid #e0e9e2;border-radius:14px;background:#fff}
+.auth-entry:not(.auth-gate)>.import-panel{margin-top:12px}
+@media(max-width:520px){.auth-entry:not(.auth-gate){padding:0 16px}}
