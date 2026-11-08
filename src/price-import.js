@@ -37,7 +37,7 @@ export async function importPriceCsv({file,supabase,user,output}) {
     const {data:dupe,error:de}=await supabase.from('price_observations').select('id').eq('store_product_id',match.id).eq('observed_at',date.toISOString()).eq('price',price).limit(1);
     if(de){issues.push('Fila '+line+': no se pudo revisar duplicados.');skipped++;continue;}
     if(dupe?.length){skipped++;continue;}
-    const {error:ie}=await supabase.from('price_observations').insert({store_product_id:match.id,price,currency:'USD',regular_price:regular,promotion_label:r.promocion||null,availability:r.disponibilidad||null,source_url:r.url_fuente,observed_at:date.toISOString(),is_verified:false});
+    const {error:ie}=await supabase.from('price_observations').insert({store_product_id:match.id,price,currency:'USD',regular_price:regular,promotion_label:r.promocion||null,availability:r.disponibilidad||null,source_url:r.url_fuente,observed_at:date.toISOString()});
     if(ie){issues.push('Fila '+line+': error de permisos o datos.');skipped++;}else saved++;
   }
   output.textContent='Guardados para revisión: '+saved+'. Omitidos: '+skipped+'. Los importados permanecen ocultos hasta verificarse.'+(issues.length?'\n'+issues.slice(0,8).join('\n'):'');
