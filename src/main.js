@@ -13,14 +13,7 @@ import { renderWeeklyPlan, sortShoppingItemsByPriority } from './weekly-plan.js'
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
 const supabase = configured ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY) : null;
-const stores = [
-  { name: 'Super 99', url: 'https://www.super99.com/nuestra-tienda-en-linea', sourceLabel: 'Catálogo en línea · precios sujetos a sucursal' },
-  { name: 'El Rey', sourceLabel: 'Sin catálogo público de precios verificado' },
-  { name: 'Xtra', url: 'https://nuevatienda.superxtra.com/supermercado', sourceLabel: 'Catálogo en línea · ubicación por confirmar' },
-  { name: 'Riba Smith', url: 'https://www.ribasmith.com/', sourceLabel: 'Catálogo en línea · precio por verificar al consultar' },
-  { name: 'Machetazo', url: 'https://www.elmachetazo.com/supermercado', sourceLabel: 'Catálogo público · precios aún no validados' },
-  { name: 'Jumbo', url: 'https://jumbo.com.pa/497-alimentos-frescos-y-congelados', sourceLabel: 'Catálogo web · fecha y sucursal por validar' }
-];
+const stores = ['Super 99','El Rey','Xtra','Riba Smith','Machetazo','Jumbo'].map(name=>({name,sourceLabel:'Precios y productos registrados manualmente por ti'}));
 // Acceso temporal de consulta mientras se termina de configurar el correo de autenticación.
 // Mantiene RLS intacto: no abre datos personales ni crea usuarios anónimos.
 const TEMPORARY_GUEST_MODE = true;
@@ -41,7 +34,7 @@ function shell() {
     <header><a class="brand" href="#">Mi<span>Compra</span></a><span class="country">Panamá</span></header>
     <div id="auth" class="auth auth-entry"></div>
     <main>
-      <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Organiza tu lista y compara precios publicados por supermercados.</p></section>
+      <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Registra tus productos, organiza tus compras y compara los precios que tú mismo anotas.</p></section>
       <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
       <section class="section-head"><div><p class="eyebrow">COMPARADOR</p><h2>Busca un producto</h2></div></section>
       <input id="search" class="search" type="search" placeholder="Ej. arroz, lechuga, leche, pollo..." autocomplete="off" /><div class="store-filter"><label for="store-filter">Buscar en supermercado</label><select id="store-filter"><option value="">Selecciona un supermercado</option>${guestStores.map(name => `<option value="${safe(name)}">${safe(name)}</option>`).join("")}</select></div><small class="catalog-source-note">Solo se muestran productos que tú hayas registrado manualmente para el supermercado seleccionado.</small>
@@ -50,8 +43,8 @@ function shell() {
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section><div id="weekly-plan-module"></div>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
-      <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${safe(s.sourceLabel)}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Consultar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
-      <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
+      <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${safe(s.sourceLabel)}</small></div><em>Catálogo personal</em></article>`).join('')}</section>
+      <aside><strong>Comparaciones basadas en tus datos</strong><p>Mi Compra no consulta páginas de supermercados. Tú registras cada producto, fotografía, presentación y precio; el sistema compara esos datos y señala cuándo faltan registros.</p></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
   const main=document.querySelector('main');
@@ -686,7 +679,7 @@ async function start() {
   passwordRecovery = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
   const { data } = await supabase.auth.getUser();
   user = data.user;
-  message('Conexión con Supabase lista. Los precios se mostrarán únicamente si están verificados.');
+  message('Modo de compra manual: los productos y precios los registras tú.');
   supabase.auth.onAuthStateChange((event, session) => {
     // INITIAL_SESSION ya queda cubierto por getUser() y el render inicial de start().
     // TOKEN_REFRESHED no debe reconstruir los módulos ni vaciar visualmente los datos.
@@ -701,7 +694,6 @@ async function start() {
     queueMicrotask(async () => {
       await renderAuth();
       await loadList();
-      await renderPriceReview();
     });
   });
   await renderAuth();
@@ -711,8 +703,6 @@ async function start() {
     const feedback = document.querySelector('#auth-feedback');
     if (feedback) feedback.textContent = 'El enlace de acceso no pudo validarse: ' + callbackError.replace(/\+/g, ' ');
   }
-  await renderPriceReview();
-  await loadBranches();
   await loadList();
 }
 
