@@ -18,18 +18,24 @@ const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', curre
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const parseInvoiceDraft = (text, products) => {
-  const lines = String(text || '').split(/\\r?\\n/).map(x => x.replace(/\\s+/g, ' ').trim()).filter(Boolean);
-  const moneyPattern = /(?:B\\/?\\.?|USD|\\$)?\\s*(\\d{1,4}(?:[.,]\\d{3})*[.,]\\d{2})\\s*$/i;
+  const lines = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const moneyPattern = /(?:B\/?\.?|USD|\$)?\s*(\d{1,4}(?:[.,]\d{3})*[.,]\d{2})\s*$/i;
   const drafts = [];
   for (const line of lines) {
     const match = line.match(moneyPattern);
     if (!match) continue;
-    const price = Number(match[1].replace(/\\./g, '').replace(',', '.'));
+    let rawPrice = match[1];
+    if (rawPrice.includes('.') && rawPrice.includes(',')) {
+      rawPrice = rawPrice.lastIndexOf('.') > rawPrice.lastIndexOf(',') ? rawPrice.replace(/,/g, '') : rawPrice.replace(/\./g, '').replace(',', '.');
+    } else if (rawPrice.includes(',')) {
+      rawPrice = rawPrice.replace(',', '.');
+    }
+    const price = Number(rawPrice);
     if (!Number.isFinite(price) || price <= 0 || price > 10000) continue;
     let name = line.slice(0, match.index).replace(/[|*•]+/g, ' ').trim();
-    name = name.replace(/\\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento)\\b.*$/i, '').trim();
+    if (/\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento)\b/i.test(name)) continue;
     if (name.length < 3 || !/[a-záéíóúñ]/i.test(name)) continue;
-    const qtyMatch = name.match(/(?:^|\\s)(\\d+(?:[.,]\\d+)?)\\s*(?:x|unid(?:ad(?:es)?)?|uds?)\\s+/i);
+    const qtyMatch = name.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?)\s+/i);
     const quantity = qtyMatch ? Number(qtyMatch[1].replace(',', '.')) : 1;
     if (qtyMatch) name = name.replace(qtyMatch[0], ' ').trim();
     const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
