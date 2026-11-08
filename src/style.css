@@ -491,3 +491,13 @@ main{max-width:1120px;padding:28px 24px 54px}.hero{padding:24px 26px;margin:14px
 @keyframes mc-view-in{from{opacity:.65;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:620px){.app-navigation{top:58px;gap:3px;padding:6px;margin:0 -2px 14px;border-radius:14px}.app-nav-item{min-height:51px;padding:6px 2px}.app-nav-item>span{font-size:19px}.app-nav-item small{font-size:9px}.app-view{min-height:50vh}}
 @media(min-width:760px){.app-navigation{grid-template-columns:repeat(5,minmax(100px,1fr));max-width:720px;margin:0 auto 22px}.app-nav-item{flex-direction:row;min-height:48px;gap:8px}.app-nav-item>span{font-size:17px}.app-nav-item small{font-size:11px}}
+
+
+/* Total inmediato dentro de Comprar: no obliga a cambiar a Comparar */
+.guest-cart-live-total{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0 4px;padding:15px 17px;border:1px solid #cfe5d5;border-radius:15px;background:linear-gradient(115deg,#e8f5eb,#f6fbf7);box-shadow:0 5px 16px rgba(26,91,53,.07)}
+.guest-cart-live-total>div{display:grid;gap:4px;min-width:0}
+.guest-cart-live-total>div small{font-size:10px;letter-spacing:.8px;font-weight:800;color:#527360}
+.guest-cart-live-total strong{font:800 27px Manrope,system-ui;color:#17663e;line-height:1.15}
+.guest-cart-live-total>span{font-size:12px;font-weight:700;color:#496457}
+.guest-cart-live-total>small:last-child{flex-basis:100%;font-size:10px;color:#728277}
+@media(max-width:520px){.guest-cart-live-total{padding:13px;gap:7px}.guest-cart-live-total strong{font-size:25px}.guest-cart-live-total>span{font-size:11px}}
