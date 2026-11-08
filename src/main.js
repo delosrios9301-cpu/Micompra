@@ -36,6 +36,7 @@ const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;'
 function shell() {
   app.innerHTML = `
     <header><a class="brand" href="#">Mi<span>Compra</span></a><span class="country">Panamá</span></header>
+    <div id="auth" class="auth auth-entry"></div>
     <main>
       <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Organiza tu lista y compara precios publicados por supermercados.</p></section>
       <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
@@ -44,7 +45,6 @@ function shell() {
       <div class="branch-filter"><label for="branch-filter">Sucursal para Super 99</label><select id="branch-filter"><option value="">Todas las sucursales</option></select><small>La sucursal elegida solo filtra los precios de Super 99; los demás supermercados siguen apareciendo.</small></div>
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
-      <div id="auth" class="auth"></div>
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section><div id="weekly-plan-module"></div>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
       <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${safe(s.sourceLabel)}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Consultar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
@@ -526,6 +526,12 @@ async function start() {
     });
   });
   await renderAuth();
+  const callbackParams = new URLSearchParams(location.hash.startsWith('#') ? location.hash.slice(1) : location.hash);
+  const callbackError = callbackParams.get('error_description') || callbackParams.get('error');
+  if (callbackError) {
+    const feedback = document.querySelector('#auth-feedback');
+    if (feedback) feedback.textContent = 'El enlace de acceso no pudo validarse: ' + callbackError.replace(/\+/g, ' ');
+  }
   await renderPriceReview();
   await loadBranches();
   await loadList();
