@@ -20,3 +20,19 @@ test('pantry summary counts all, low and empty items', () => {
   ]);
   assert.deepEqual({ total: result.total, low: result.low, empty: result.empty }, { total: 3, low: 2, empty: 1 });
 });
+
+import { findPantryListDuplicate } from '../src/pantry.js';
+
+test('pantry to shopping list finds duplicate by normalized name and same unit', () => {
+  const rows = [
+    { id: 'a', item_name: 'Café molido', unit: 'paquete' },
+    { id: 'b', item_name: 'Arroz', unit: 'kg' }
+  ];
+  assert.equal(findPantryListDuplicate(rows, { item_name: '  CAFE MOLIDO ', unit: 'paquete' })?.id, 'a');
+  assert.equal(findPantryListDuplicate(rows, { item_name: 'Arroz', unit: 'lb' }), null);
+  assert.equal(findPantryListDuplicate(rows, { item_name: 'Leche', unit: 'litro' }), null);
+});
+
+test('pantry list duplicate defaults missing units to unidades', () => {
+  assert.equal(findPantryListDuplicate([{ id: 'x', item_name: 'Sal' }], { item_name: 'sal', unit: 'unidades' })?.id, 'x');
+});
