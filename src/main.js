@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import './style.css';
 import { importPriceCsv } from './price-import.js';
+import { renderPurchases } from './purchases.js';
 
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
@@ -102,9 +103,11 @@ async function renderAuth() {
       box.querySelector('small').textContent = error ? 'No se pudo enviar el enlace. Verifica el correo e inténtalo de nuevo.' : 'Enlace enviado. Revisa tu correo para iniciar sesión.';
     });
   } else {
-    box.innerHTML = `<div class="signed"><span>Sesión: ${safe(user.email)}</span><button id="logout" class="secondary">Cerrar sesión</button></div><section class="import-panel"><strong>Importar precios desde CSV</strong><p>Usa fecha ISO 8601 con zona horaria, por ejemplo 2026-11-07T17:00:00-05:00. Solo acepta precios de las últimas 24 horas, fuentes HTTPS y coincidencias exactas con producto y sucursal. Los precios importados quedan pendientes de revisión.</p><div class="import-row"><input id="price-csv" type="file" accept=".csv,text/csv"><button id="import-csv" class="secondary">Validar e importar</button></div><small id="import-result" aria-live="polite"></small></section>`;
+    box.innerHTML = `<div class="signed"><span>Sesión: ${safe(user.email)}</span><button id="logout" class="secondary">Cerrar sesión</button></div><section class="import-panel"><strong>Importar precios desde CSV</strong><p>Usa fecha ISO 8601 con zona horaria, por ejemplo 2026-11-07T17:00:00-05:00. Solo acepta precios de las últimas 24 horas, fuentes HTTPS y coincidencias exactas con producto y sucursal. Los precios importados quedan pendientes de revisión.</p><div class="import-row"><input id="price-csv" type="file" accept=".csv,text/csv"><button id="import-csv" class="secondary">Validar e importar</button></div><small id="import-result" aria-live="polite"></small></section><div id="purchases-module"></div>`;
     box.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
-    box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });  }
+    box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });
+  }
+  if(user) await renderPurchases({container:box.querySelector('#purchases-module'),supabase,user});
 }
 
 
