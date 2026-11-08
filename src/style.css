@@ -76,3 +76,12 @@
 .receipt-upload small{grid-column:1/-1}
 .purchase-title #export-purchases{white-space:nowrap;font-size:11px}
 @media(max-width:520px){.purchase-title{align-items:flex-start;flex-direction:column}.receipt-upload{grid-template-columns:1fr}.receipt-upload button{width:100%}}
+
+
+.invoice-ocr{display:grid;gap:8px;margin-top:12px;padding:13px;border:1px solid #dce5de;border-radius:11px;background:#f8fbf8;min-width:0}
+.invoice-ocr>strong{font:700 13px Manrope;color:#244b39}
+.invoice-ocr>small{font-size:11px;line-height:1.5;color:#718078}
+.invoice-ocr>label{font-size:11px;font-weight:700;color:#4d6558}
+.invoice-ocr textarea{width:100%;min-width:0;resize:vertical;border:1px solid #dce5de;border-radius:8px;padding:10px;background:#fff;color:#18332d;font:12px/1.5 'DM Sans',sans-serif}
+.invoice-ocr button{justify-self:start}
+@media(max-width:520px){.invoice-ocr button{width:100%}.invoice-ocr textarea{font-size:13px}}
