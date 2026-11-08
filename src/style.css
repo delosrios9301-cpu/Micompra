@@ -135,3 +135,8 @@
 .barcode-admin-camera-actions button{min-height:42px}
 #barcode-admin-camera-panel video{max-height:260px}
 @media(max-width:520px){.barcode-admin-camera-actions{display:grid;grid-template-columns:1fr}.barcode-admin-camera-actions button{width:100%}}
+
+.barcode-package-confirm { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-weight: 500; }
+.barcode-package-confirm input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
+#barcode-admin-package-warning { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid var(--line, #dce3ea); border-radius: 10px; }
+#barcode-admin-package-warning[hidden] { display: none; }
