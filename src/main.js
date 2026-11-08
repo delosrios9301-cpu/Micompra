@@ -232,7 +232,9 @@ async function renderAuth() {
   const box = document.querySelector('#auth');
   if (TEMPORARY_GUEST_MODE && !user) {
     box.classList.remove('auth-gate');
-    box.innerHTML = '<section class="guest-access"><strong>Acceso temporal de consulta</strong><p>El comparador y el catálogo están disponibles sin iniciar sesión mientras terminamos la configuración.</p><small>Por seguridad, las listas personales, compras, gastos y despensa permanecerán protegidos y no estarán disponibles en este modo. Tus datos existentes no se eliminan.</small></section>';
+    const catalogCount=readPersonalCatalog().length,purchaseCount=readGuestPurchases().length;
+    box.innerHTML='<section class="account-overview"><div class="account-avatar">MC</div><p class="eyebrow">TU ESPACIO PERSONAL</p><h2>Mi cuenta</h2><p>Tu centro personal para administrar productos, compras y preferencias de Mi Compra.</p><div class="account-stats"><article><b>'+catalogCount+'</b><small>Productos guardados</small></article><article><b>'+purchaseCount+'</b><small>Compras registradas</small></article></div><div class="account-actions"><button type="button" data-account-view="catalogo">Mi catálogo</button><button type="button" data-account-view="configuracion">Configuración</button><button type="button" data-account-view="comprar">Mi compra</button></div><small class="account-local-note">Actualmente, la información personal se guarda en este dispositivo. Puedes crear una copia de seguridad desde Configuración.</small></section>';
+    box.querySelectorAll('[data-account-view]').forEach(button=>button.addEventListener('click',()=>document.querySelector('[data-open-view="'+button.dataset.accountView+'"]')?.click()));
     return;
   }
   if (!supabase) {
