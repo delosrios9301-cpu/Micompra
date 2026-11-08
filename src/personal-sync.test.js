@@ -96,3 +96,47 @@ test('no aplica una copia antigua si el usuario edita el dispositivo durante la 
   assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.catalog)), newest);
   assert.equal(cloudData.catalog[0].name, 'Arroz');
 });
+
+test('restaura desde la nube si el almacenamiento local está vacío pero existe una línea base previa', async () => {
+  const cloudWorkspace = {
+    version: 1,
+    catalog: [{ id: 'p1', name: 'Arroz guardado en la nube' }],
+    cart: [],
+    purchases: [],
+    pantry: [],
+    settings: { currency: 'USD' }
+  };
+  const values = new Map([
+    [PERSONAL_WORKSPACE_KEYS.catalog, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.cart, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.purchases, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.pantry, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.settings, '{}'],
+    ['micompra_workspace_baseline_v1', JSON.stringify({
+      version: 1,
+      catalog: { p1: hashWorkspaceRecord(cloudWorkspace.catalog[0]) },
+      cart: {},
+      purchases: {},
+      pantry: {},
+      settings: hashWorkspaceRecord({ currency: 'USD' })
+    })]
+  ]);
+  const storage = {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key)
+  };
+  let upsertCalled = false;
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: { data: cloudWorkspace, updated_at: '2026-11-08T12:00:00Z' }, error: null }; },
+    async upsert() { upsertCalled = true; return { error: null }; }
+  };
+  const result = await syncPersonalWorkspace({ supabase: { from: () => query }, user: { id: 'user-1' }, storage });
+  assert.equal(result.ok, true);
+  assert.equal(result.recoveredFromEmptyLocalStore, true);
+  assert.equal(upsertCalled, false);
+  assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.catalog)), cloudWorkspace.catalog);
+  assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.settings)), cloudWorkspace.settings);
+});
