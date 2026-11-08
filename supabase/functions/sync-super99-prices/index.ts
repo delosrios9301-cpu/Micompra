@@ -25,11 +25,10 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: listings, error } = await supabase
       .from("store_products")
-      .select("id,source_product_name,source_product_url,source_sku,package_description")
+      .select("id,source_product_name,source_product_url,source_sku,package_description,supermarkets!inner(name)")
+      .eq("supermarkets.name", "Super 99")
       .not("source_product_url", "is", null)
       .not("source_sku", "is", null)
-      .eq("supermarkets.name", "Super 99")
-      .select("id,source_product_name,source_product_url,source_sku,package_description,supermarkets!inner(name)")
       .order("source_product_name")
       .limit(100);
 
