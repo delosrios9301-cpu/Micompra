@@ -13,8 +13,12 @@ const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
 const supabase = configured ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY) : null;
 const stores = [
-  { name: 'Super 99', url: 'https://www.super99.com/nuestra-tienda-en-linea' },
-  { name: 'El Rey' }, { name: 'Xtra', url: 'https://www.superxtra.com/supermercado' }, { name: 'Riba Smith' }, { name: 'Machetazo' }, { name: 'Jumbo' }
+  { name: 'Super 99', url: 'https://www.super99.com/nuestra-tienda-en-linea', sourceLabel: 'Catálogo en línea · precios sujetos a sucursal' },
+  { name: 'El Rey', sourceLabel: 'Sin catálogo público de precios verificado' },
+  { name: 'Xtra', url: 'https://nuevatienda.superxtra.com/supermercado', sourceLabel: 'Catálogo en línea · ubicación por confirmar' },
+  { name: 'Riba Smith', url: 'https://www.ribasmith.com/', sourceLabel: 'Catálogo en línea · precio por verificar al consultar' },
+  { name: 'Machetazo', url: 'https://www.elmachetazo.com/supermercado', sourceLabel: 'Catálogo público · precios aún no validados' },
+  { name: 'Jumbo', url: 'https://jumbo.com.pa/497-alimentos-frescos-y-congelados', sourceLabel: 'Catálogo web · fecha y sucursal por validar' }
 ];
 let user = null;
 let activeList = null;
@@ -41,7 +45,7 @@ function shell() {
       <div id="auth" class="auth"></div>
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section><div id="weekly-plan-module"></div>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
-      <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${s.url ? 'Tienda en línea disponible' : 'Integración pendiente'}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Visitar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
+      <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${safe(s.sourceLabel)}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Consultar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
