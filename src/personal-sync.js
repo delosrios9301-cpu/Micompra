@@ -249,9 +249,11 @@ export async function startPersonalWorkspaceSync({ supabase, user, onStatus = ()
       }
       if (!result.ok) onStatus(result.message);
       else {
-        onStatus(result.conflicts
-          ? 'Sincronizado. Se conservaron ' + result.conflicts + ' cambio(s) simultáneo(s) como copias para evitar pérdidas.'
-          : 'Sincronizado con tu cuenta. Tus datos están disponibles en tus otros dispositivos.');
+        onStatus(result.recoveredFromEmptyLocalStore
+          ? 'Se recuperaron los datos desde tu cuenta porque el almacenamiento de este dispositivo aparecía vacío. No se borró la información de la nube.'
+          : result.conflicts
+            ? 'Sincronizado. Se conservaron ' + result.conflicts + ' cambio(s) simultáneo(s) como copias para evitar pérdidas.'
+            : 'Sincronizado con tu cuenta. Tus datos están disponibles en tus otros dispositivos.');
         window.dispatchEvent(new CustomEvent('micompra:workspace-synced', { detail: { conflicts: result.conflicts } }));
       }
     } while (pending && !stopped);
