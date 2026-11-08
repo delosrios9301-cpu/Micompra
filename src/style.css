@@ -140,3 +140,15 @@
 .barcode-package-confirm input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
 #barcode-admin-package-warning { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid var(--line, #dce3ea); border-radius: 10px; }
 #barcode-admin-package-warning[hidden] { display: none; }
+
+
+/* Auditoría preventiva del catálogo */
+.catalog-audit-panel{display:grid;gap:10px}
+.catalog-audit-panel .purchase-card-head{margin-bottom:0}
+.catalog-audit-alert,.catalog-audit-variants{display:grid;gap:8px;padding:12px;border:1px solid var(--line,#dce3ea);border-radius:11px;min-width:0}
+.catalog-audit-alert{background:#fff8ed;border-color:#ead6b4}
+.catalog-audit-variants{background:#f4f8f5}
+.catalog-audit-alert>div,.catalog-audit-variants>div{display:grid;gap:3px;padding-top:7px;border-top:1px solid var(--line,#dce3ea);overflow-wrap:anywhere}
+.catalog-audit-panel small{overflow-wrap:anywhere}
+.catalog-audit-ok,.catalog-audit-footnote{margin:0;color:var(--muted,#64756c);font-size:12px}
+.catalog-audit-ok{padding:10px 12px;border:1px solid #cfe1d3;border-radius:10px;background:#f4faf5;color:#28583e}
