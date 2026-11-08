@@ -699,54 +699,7 @@ function renderGuestList(){
 async function loadList() {
   // La lista de compra personal usa el mismo almacenamiento sincronizado para sesiones y dispositivos.
   renderGuestList();
-  document.querySelector('#weekly-plan-module').innerHTML='';
-}
-  if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
-  if(!lists?.length){const created=await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();if(created.error){cart.innerHTML='<p class="empty">No se pudo crear la lista.</p>';return;}activeList=created.data;}else activeList=lists[0];
-  label.textContent=activeList.name;
-  const [result,catalog]=await Promise.all([supabase.from('shopping_list_items').select('id,product_id,item_name,quantity,unit,checked,planned_for,priority').eq('list_id',activeList.id).order('created_at'),loadProductCatalog()]);
-  const items=result.data||[];if(result.error){cart.innerHTML='<p class="empty">No se pudieron cargar los artículos.</p>';return;}
-  const options=catalog.map(p=>'<option value="'+p.id+'">'+safe(p.canonical_name)+(p.normalized_quantity&&p.normalized_unit_name?' · '+safe(p.normalized_quantity)+' '+safe(p.normalized_unit_name):'')+'</option>').join('');
-  cart.innerHTML='<form id="add-item" class="add-row"><select id="item-product" aria-label="Vincular producto del catálogo"><option value="">Artículo libre (sin vincular)</option>'+options+'</select><input id="item-name" type="text" placeholder="O escribe un artículo" aria-label="Artículo libre" autocomplete="off"><input id="item-qty" type="number" min="0.01" step="0.01" value="1" aria-label="Cantidad de unidades"><button id="add-list-item" '+(catalog.length?'':'disabled')+'>Agregar</button><div id="catalog-name-match" class="catalog-name-match" hidden aria-live="polite"></div></form>'+(items.length?sortShoppingItemsByPriority(items).map(i=>'<div class="cart-item priority-'+(i.priority||'normal')+'"><label><input type="checkbox" data-check="'+i.id+'" '+(i.checked?'checked':'')+'><span class="'+(i.checked?'done':'')+'">'+safe(i.item_name)+' <small>× '+safe(i.quantity)+' '+safe(i.unit||'unidades')+'</small><small class="'+(i.product_id?'linked-product':'unlinked-product')+'">'+(i.product_id?'Producto vinculado al catálogo':'Sin vincular · no se compara')+'</small></span></label><select class="cart-priority" data-priority="'+i.id+'" aria-label="Prioridad de '+safe(i.item_name)+'"><option value="urgent" '+((i.priority||'normal')==='urgent'?'selected':'')+'>Urgente</option><option value="normal" '+((i.priority||'normal')==='normal'?'selected':'')+'>Normal</option><option value="low" '+((i.priority||'normal')==='low'?'selected':'')+'>Baja</option></select><input class="cart-plan-date" type="date" data-plan-date="'+i.id+'" value="'+(i.planned_for||'')+'" aria-label="Programar '+safe(i.item_name)+'"><button class="remove" data-remove="'+i.id+'" aria-label="Eliminar '+safe(i.item_name)+'">×</button></div>').join(''):'<p class="empty">Tu lista está vacía. Agrega un producto del catálogo.</p>');
-  const addForm=cart.querySelector('#add-item'),nameInput=cart.querySelector('#item-name'),productSelect=cart.querySelector('#item-product'),matchBox=cart.querySelector('#catalog-name-match'),addButton=cart.querySelector('#add-list-item');
-  const updateCatalogSuggestions=()=>{
-    const matches=productSelect.value?[]:findCatalogNameMatches(catalog,nameInput.value);
-    const exact=matches.some(match=>match.isExactName);
-    addButton.disabled=!catalog.length||exact;
-    if(!matches.length){matchBox.hidden=true;matchBox.innerHTML='';return;}
-    matchBox.hidden=false;
-    matchBox.innerHTML='<strong>'+(exact?'Este producto ya existe en el catálogo. Selecciona la presentación correcta:':'¿Quizás buscabas uno de estos productos?')+'</strong>'+matches.map(p=>'<button type="button" class="catalog-match-option" data-catalog-match="'+safe(p.id)+'"><span>'+safe(p.canonical_name)+'</span><small>'+safe([p.brand,p.normalized_quantity&&p.normalized_unit_name?p.normalized_quantity+' '+p.normalized_unit_name:'Presentación por confirmar'].filter(Boolean).join(' · '))+'</small></button>').join('');
-    matchBox.querySelectorAll('[data-catalog-match]').forEach(button=>button.addEventListener('click',()=>{
-      productSelect.value=button.dataset.catalogMatch;
-      nameInput.value='';
-      matchBox.hidden=true;
-      matchBox.innerHTML='';
-      addButton.disabled=false;
-    }));
-  };
-  nameInput.addEventListener('input',updateCatalogSuggestions);
-  productSelect.addEventListener('change',updateCatalogSuggestions);
-  addForm.addEventListener('submit',async e=>{
-    e.preventDefault();
-    const id=productSelect.value,product=catalog.find(p=>p.id===id),customName=nameInput.value.trim(),quantity=Number(cart.querySelector('#item-qty').value);
-    if((!product&&!customName)||!Number.isFinite(quantity)||quantity<=0)return;
-    if(!product&&findCatalogNameMatches(catalog,customName).some(match=>match.isExactName)){updateCatalogSuggestions();return;}
-    const unit=product?(product.normalized_quantity&&product.normalized_unit_name?product.normalized_quantity+' '+product.normalized_unit_name+' por unidad':'unidades'):'unidades';
-    const duplicate=findDuplicateListItem(items,product?.id||null,customName);
-    if(duplicate){
-      const {error}=await supabase.from('shopping_list_items').update({quantity:Number(duplicate.quantity)+quantity,checked:false}).eq('id',duplicate.id).eq('list_id',activeList.id);
-      if(error)alert('No se pudo actualizar la cantidad del artículo.');else await loadList();
-      return;
-    }
-    const {error}=await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:product?.id||null,item_name:product?.canonical_name||customName,quantity,unit});
-    if(!error)await loadList();else alert('No se pudo agregar el artículo.');
-  });
-  cart.querySelectorAll('[data-priority]').forEach(input=>input.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({priority:input.value}).eq('id',input.dataset.priority).eq('list_id',activeList.id);if(error){alert('No se pudo guardar la prioridad.');}await loadList();}));
-  cart.querySelectorAll('[data-plan-date]').forEach(input=>input.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({planned_for:input.value||null}).eq('id',input.dataset.planDate).eq('list_id',activeList.id);if(error){alert('No se pudo guardar la fecha de compra.');}await loadList();}));
-  cart.querySelectorAll('[data-check]').forEach(c=>c.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({checked:c.checked}).eq('id',c.dataset.check);await loadList();if(error)alert('No se pudo actualizar el artículo.');}));
-  cart.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',async()=>{const {error}=await supabase.from('shopping_list_items').delete().eq('id',b.dataset.remove);if(!error)loadList();}));
-  await renderListComparison(items);
-  await renderWeeklyPlan({ container: document.querySelector('#weekly-plan-module'), supabase, user, items, selectedBranchId });
+  document.querySelector('#weekly-plan-module').innerHTML = '';
 }
 
 async function connectPersonalWorkspaceSync() {
