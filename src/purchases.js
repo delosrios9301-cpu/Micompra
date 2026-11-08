@@ -54,8 +54,8 @@ export async function renderPurchases({ container, supabase, user }) {
     const comparedItems = allItems.filter(i => !cutoff || i.date >= cutoff);
     const productGroups = new Map();
     for (const item of comparedItems) {
-      const key = (item.product_id || 'name:' + norm(item.item_name)) + '|' + norm(item.package_description);
-      if (!productGroups.has(key)) productGroups.set(key, { name: item.item_name, package: item.package_description || '', productId: item.product_id, stores: new Map() });
+      const key = (item.product_id || 'name:' + norm(item.item_name)) + '|' + norm(item.package_description) + '|' + norm(item.unit);
+      if (!productGroups.has(key)) productGroups.set(key, { name: item.item_name, package: item.package_description || '', unit: item.unit || 'unidad', productId: item.product_id, stores: new Map() });
       const group = productGroups.get(key);
       const current = group.stores.get(item.store);
       const entry = { date: item.date, price: Number(item.unit_price), quantity: Number(item.quantity), unit: item.unit || 'unidad' };
