@@ -19,6 +19,35 @@ export function normalizeProductBarcode(value) {
   return String(value ?? '').trim().replace(/\s+/g, '').replace(/-/g, '').toUpperCase();
 }
 
+export function isValidBarcodeChecksum(value, format = '') {
+  const code = normalizeProductBarcode(value);
+  const kind = String(format || '').toLowerCase();
+  if (!/^\\d+$/.test(code)) return true;
+  const checkDigitValid = digits => {
+    const data = digits.slice(0, -1).split('').map(Number);
+    const check = Number(digits.at(-1));
+    const sum = data.reduce((total, digit, index) => {
+      const weight = (data.length - 1 - index) % 2 === 0 ? 3 : 1;
+      return total + digit * weight;
+    }, 0);
+    return (10 - (sum % 10)) % 10 === check;
+  };
+  if (kind === 'upc_e') {
+    if (code.length !== 8 || !/^[01]/.test(code)) return false;
+    const ns = code[0], a = code[1], b = code[2], c = code[3], d = code[4], e = code[5], f = code[6], check = code[7];
+    let expanded;
+    if (f <= '2') expanded = ns + a + b + f + '0000' + c + d + e + check;
+    else if (f === '3') expanded = ns + a + b + c + '00000' + d + e + check;
+    else if (f === '4') expanded = ns + a + b + c + d + '00000' + e + check;
+    else expanded = ns + a + b + c + d + e + '0000' + f + check;
+    return checkDigitValid(expanded);
+  }
+  if (kind === 'ean_13' || (!kind && code.length === 13)) return code.length === 13 && checkDigitValid(code);
+  if (kind === 'ean_8' || (!kind && code.length === 8)) return code.length === 8 && checkDigitValid(code);
+  if (kind === 'upc_a' || (!kind && code.length === 12)) return code.length === 12 && checkDigitValid(code);
+  return true;
+}
+
 export function findProductByBarcode(products = [], barcode, mappings = []) {
   const code = normalizeProductBarcode(barcode);
   if (!code) return null;
@@ -193,7 +222,7 @@ export async function renderPurchases({ container, supabase, user }) {
   let invoiceDraft = [];
   let barcodeStream = null;
   let barcodeFrame = 0;
-  let barcodeDetecting = false;
+  let barcodeDetecting = false;\n  let barcodeAdminFormat = '';
   container.innerHTML = '<section class="purchase-module"><p class="empty">Cargando compras e inventario…</p></section>';
 
   const [storeResult, branchResult, productResult, barcodeAccess] = await Promise.all([
@@ -698,7 +727,7 @@ export async function renderPurchases({ container, supabase, user }) {
               const results = await detector.detect(video);
               if (results.length && barcodeDetecting) {
                 barcodeDetecting = false;
-                onDetected(results[0].rawValue);
+                onDetected(results[0].rawValue, results[0].format);
                 stopBarcodeCamera();
                 return;
               }
@@ -714,7 +743,7 @@ export async function renderPurchases({ container, supabase, user }) {
           : 'No se pudo iniciar el escáner: ' + (error.message || 'revisa la cámara y los permisos') + '.';
       }
     };
-    const applyScannedBarcode = async rawValue => {
+    const applyScannedBarcode = async (rawValue, format = '') => {
       const code = normalizeProductBarcode(rawValue);
       const field = container.querySelector('#purchase-barcode');
       const status = container.querySelector('#barcode-scan-status');
@@ -749,7 +778,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const code = normalizeProductBarcode(container.querySelector('#barcode-admin-value')?.value);
       const status = container.querySelector('#barcode-admin-status');
       if (!productId || !code) { if (status) status.textContent = 'Selecciona un producto e introduce un código válido.'; return; }
-      if (!/^[A-Z0-9]{4,64}$/.test(code)) { if (status) status.textContent = 'El código debe tener entre 4 y 64 caracteres alfanuméricos.'; return; }
+      if (!/^[A-Z0-9]{4,64}$/.test(code)) { if (status) status.textContent = 'El código debe tener entre 4 y 64 caracteres alfanuméricos.'; return; }\n      if (!isValidBarcodeChecksum(code, barcodeAdminFormat)) { if (status) status.textContent = 'El dígito de control no coincide. Revisa el código antes de asociarlo.'; return; }
       if (findProductByBarcode(products, code, barcodeMappings)) {
         if (status) status.textContent = 'Este código ya está asociado a un producto del catálogo. No se creó un duplicado.';
         return;
@@ -782,7 +811,7 @@ export async function renderPurchases({ container, supabase, user }) {
         onDetected: applyScannedBarcode
       });
     });
-    container.querySelector('#scan-admin-barcode')?.addEventListener('click', () => {
+    container.querySelector('#barcode-admin-value')?.addEventListener('input', () => { barcodeAdminFormat = ''; });\n    container.querySelector('#scan-admin-barcode')?.addEventListener('click', () => {
       startBarcodeCamera({
         videoId: '#barcode-admin-camera-video',
         panelId: '#barcode-admin-camera-panel',
