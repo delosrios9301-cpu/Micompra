@@ -303,3 +303,9 @@
 
 .pantry-item-actions .pantry-add-to-list{flex:1 0 100%;background:#eaf3ef;color:#205b45;border-color:#b9d4c7}
 .pantry-item-actions .pantry-add-to-list:disabled{opacity:.7;cursor:default}
+
+/* Acción para reponer la despensa completa desde la lista de compras */
+.pantry-list-heading{flex-wrap:wrap}
+.pantry-list-heading .pantry-add-all-to-list{min-height:36px;padding:7px 10px;border:1px solid #b9d4c7;border-radius:8px;background:#eaf3ef;color:#205b45;font-size:11px;font-weight:700}
+.pantry-list-heading .pantry-add-all-to-list:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:520px){.pantry-list-heading .pantry-add-all-to-list{order:3;width:100%}.pantry-list-heading select{max-width:none}}
