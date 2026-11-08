@@ -313,7 +313,7 @@ export async function renderPurchases({ container, supabase, user }) {
           <form id="purchase-add-item" class="purchase-form item-form">
             <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label class="wide">Código de barras<input id="purchase-barcode" type="text" inputmode="numeric" autocomplete="off" placeholder="Escanea o escribe el código"></label>
-            <button type="button" class="secondary wide" id="scan-purchase-barcode">Abrir cámara para escanear</button>
+            <div class="barcode-actions wide"><button type="button" class="secondary" id="lookup-purchase-barcode">Buscar código</button><button type="button" class="secondary" id="scan-purchase-barcode">Abrir cámara para escanear</button></div>
             <div id="barcode-camera-panel" class="barcode-camera-panel wide" hidden><video id="barcode-camera-video" autoplay playsinline muted></video><button type="button" class="secondary" id="stop-purchase-barcode">Detener cámara</button></div>
             <small id="barcode-scan-status" class="purchase-message wide" aria-live="polite">Puedes usar la cámara o un lector USB/Bluetooth. El código se consulta contra el catálogo.</small>
             <label>Nombre del artículo<input id="purchase-item-name" maxlength="180" placeholder="Ej. arroz blanco"></label>
@@ -632,6 +632,7 @@ export async function renderPurchases({ container, supabase, user }) {
         return;
       }
       if (status) status.textContent = 'Código ' + code + ' leído, pero todavía no está asociado a un producto del catálogo. Selecciona el artículo manualmente; no se creó ni modificó ningún producto.';
+      stopBarcodeCamera();
     };
     const lookupBarcode = async () => {
       const code = normalizeProductBarcode(container.querySelector('#purchase-barcode')?.value);
@@ -641,6 +642,7 @@ export async function renderPurchases({ container, supabase, user }) {
       if (product) { await applyScannedBarcode(code); return; }
       if (status) status.textContent = 'Código leído, pero no encontrado en los códigos registrados del catálogo. Selecciona el producto manualmente.';
     };
+    container.querySelector('#lookup-purchase-barcode')?.addEventListener('click', lookupBarcode);
     container.querySelector('#purchase-barcode')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); lookupBarcode(); }
     });
