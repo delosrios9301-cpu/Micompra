@@ -11,6 +11,21 @@ export function getWeeklyRange(today = new Date()) {
   return { start: key(start), end: key(end) };
 }
 
+export function getCalendarWeek(today = new Date(), offset = 0) {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + (Number(offset) || 0) * 7);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+    return { date: key, day: new Intl.DateTimeFormat('es-PA', { weekday: 'short' }).format(date), label: new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(date) };
+  });
+}
+
+export function groupShoppingItemsByDate(items = [], days = []) {
+  return days.map(day => ({ ...day, items: (items || []).filter(item => item.planned_for === day.date) }));
+}
+
 export function summarizeWeeklyPlan(items = [], pantryItems = [], today = new Date()) {
   const pending = (items || []).filter(item => !item.checked);
   const completed = (items || []).filter(item => item.checked);
@@ -61,7 +76,7 @@ export async function renderWeeklyPlan({ container, supabase, user, items = [], 
   container.querySelector('.weekly-plan')?.remove();
   const section = document.createElement('section');
   section.className = 'weekly-plan';
-  section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
+  section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="shopping-calendar"><div class="shopping-calendar-heading"><div><h4>Calendario de compras</h4><small>Asigna una fecha a cada artículo desde tu lista.</small></div><div class="shopping-calendar-nav"><button type="button" class="calendar-prev" aria-label="Semana anterior">‹</button><button type="button" class="calendar-next" aria-label="Semana siguiente">›</button></div></div><div class="shopping-calendar-grid" id="shopping-calendar-grid"></div><p class="shopping-calendar-unassigned" id="shopping-calendar-unassigned"></p></div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
   const refresh = async () => {
