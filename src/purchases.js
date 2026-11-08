@@ -17,6 +17,27 @@ export function buildPurchasesCsv(purchases = []) {
 const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const parseInvoiceDraft = (text, products) => {
+  const lines = String(text || '').split(/\\r?\\n/).map(x => x.replace(/\\s+/g, ' ').trim()).filter(Boolean);
+  const moneyPattern = /(?:B\\/?\\.?|USD|\\$)?\\s*(\\d{1,4}(?:[.,]\\d{3})*[.,]\\d{2})\\s*$/i;
+  const drafts = [];
+  for (const line of lines) {
+    const match = line.match(moneyPattern);
+    if (!match) continue;
+    const price = Number(match[1].replace(/\\./g, '').replace(',', '.'));
+    if (!Number.isFinite(price) || price <= 0 || price > 10000) continue;
+    let name = line.slice(0, match.index).replace(/[|*•]+/g, ' ').trim();
+    name = name.replace(/\\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento)\\b.*$/i, '').trim();
+    if (name.length < 3 || !/[a-záéíóúñ]/i.test(name)) continue;
+    const qtyMatch = name.match(/(?:^|\\s)(\\d+(?:[.,]\\d+)?)\\s*(?:x|unid(?:ad(?:es)?)?|uds?)\\s+/i);
+    const quantity = qtyMatch ? Number(qtyMatch[1].replace(',', '.')) : 1;
+    if (qtyMatch) name = name.replace(qtyMatch[0], ' ').trim();
+    const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
+    drafts.push({ productId: product?.id || '', name, package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '', quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit: 'unidad', price: price.toFixed(2), selected: true });
+  }
+  return drafts.slice(0, 100);
+};
+
 const dateLabel = value => value ? new Date(value + (String(value).length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-PA') : '—';
 const norm = value => String(value ?? '').trim().toLocaleLowerCase('es').replace(/\s+/g, ' ');
 
@@ -25,6 +46,7 @@ export async function renderPurchases({ container, supabase, user }) {
   let activePurchaseId = null;
   let stores = [], branches = [], products = [], purchases = [], adjustments = [];
   let rangeDays = '30';
+  let invoiceDraft = [];
   container.innerHTML = '<section class="purchase-module"><p class="empty">Cargando compras e inventario…</p></section>';
 
   const [storeResult, branchResult, productResult] = await Promise.all([
@@ -129,6 +151,9 @@ export async function renderPurchases({ container, supabase, user }) {
             <small id="invoice-ocr-status" class="purchase-message" aria-live="polite"></small>
             <label for="invoice-ocr-text">Texto reconocido (editable)</label>
             <textarea id="invoice-ocr-text" rows="7" maxlength="12000" placeholder="El texto reconocido aparecerá aquí para que puedas revisarlo."></textarea>
+            <button type="button" class="secondary" id="prepare-invoice-draft">Preparar artículos desde el texto</button>
+            <div id="invoice-draft-list"></div>
+            <button type="button" id="confirm-invoice-draft" disabled>Agregar artículos revisados a esta compra</button>
           </section>
           <form id="purchase-add-item" class="purchase-form item-form">
             <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
@@ -215,6 +240,57 @@ export async function renderPurchases({ container, supabase, user }) {
       } catch (error) {
         status.textContent = error?.message || 'No se pudo leer la factura. Puedes guardar el comprobante y registrar la compra manualmente.';
       }
+    });
+
+    const drawInvoiceDraft = () => {
+      const host = container.querySelector('#invoice-draft-list');
+      const confirm = container.querySelector('#confirm-invoice-draft');
+      if (!host) return;
+      host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>Precio unitario USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
+      if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
+    };
+    container.querySelector('#prepare-invoice-draft')?.addEventListener('click', () => {
+      invoiceDraft = parseInvoiceDraft(container.querySelector('#invoice-ocr-text')?.value || '', products);
+      drawInvoiceDraft();
+      const status = container.querySelector('#invoice-ocr-status');
+      status.textContent = invoiceDraft.length ? 'Se prepararon '+invoiceDraft.length+' línea(s) preliminares. Revisa nombres, cantidades y precios; el OCR puede equivocarse.' : 'No se encontraron líneas con un precio reconocible. Puedes ingresar los artículos manualmente.';
+    });
+    container.querySelector('#invoice-draft-list')?.addEventListener('input', event => {
+      const row = event.target.closest('[data-invoice-row]');
+      if (!row) return;
+      const item = invoiceDraft[Number(row.dataset.invoiceRow)];
+      const field = event.target.dataset.field;
+      if (!item || !field) return;
+      item[field] = field === 'selected' ? event.target.checked : event.target.value;
+      const confirm = container.querySelector('#confirm-invoice-draft');
+      if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
+    });
+    container.querySelector('#confirm-invoice-draft')?.addEventListener('click', async () => {
+      const button = container.querySelector('#confirm-invoice-draft');
+      const status = container.querySelector('#invoice-ocr-status');
+      const selected = invoiceDraft.filter(x => x.selected);
+      if (!activePurchaseId || !selected.length) return;
+      if (selected.some(x => !x.name.trim() || !Number.isFinite(Number(x.quantity)) || Number(x.quantity)<=0 || !Number.isFinite(Number(x.price)) || Number(x.price)<0)) {
+        status.textContent = 'Corrige los nombres, cantidades y precios antes de agregar los artículos.'; return;
+      }
+      button.disabled = true;
+      status.textContent = 'Agregando artículos revisados…';
+      for (const item of selected) {
+        const { error } = await supabase.from('purchase_items').insert({
+          purchase_id: activePurchaseId, user_id: user.id, product_id: item.productId || null,
+          item_name: item.name.trim(), package_description: item.package.trim() || null,
+          quantity: Number(item.quantity), unit: item.unit.trim() || 'unidad', unit_price: Number(item.price)
+        });
+        if (error) {
+          status.textContent = 'Se detuvo el registro por un error. Los artículos anteriores podrían haberse guardado; revisa la compra antes de volver a intentarlo.';
+          button.disabled = false;
+          await refresh();
+          return;
+        }
+      }
+      invoiceDraft = [];
+      status.textContent = 'Artículos revisados agregados a la compra.';
+      await refresh();
     });
 
     container.querySelector('#upload-purchase-receipt')?.addEventListener('click', async () => {
