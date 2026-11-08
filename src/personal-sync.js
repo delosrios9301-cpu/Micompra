@@ -167,6 +167,10 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
   let local;
   try { local = readLocalWorkspace(storage); }
   catch (error) { return { ok: false, message: error.message }; }
+  // Snapshot the exact local values before any network await. If the user edits
+  // data while the cloud request is in flight, never apply the stale snapshot.
+  const storageKeys = COLLECTIONS.map(collection => PERSONAL_WORKSPACE_KEYS[collection]).concat(PERSONAL_WORKSPACE_KEYS.settings);
+  const storageSnapshot = storageKeys.map(key => storage.getItem(key));
   let baseline;
   try { baseline = readBaseline(storage); }
   catch { baseline = {}; }
@@ -193,6 +197,14 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
     if (writeError) return { ok: false, message: 'No se pudo guardar la sincronización: ' + writeError.message };
+  }
+  const localChangedDuringSync = storageKeys.some((key, index) => storage.getItem(key) !== storageSnapshot[index]);
+  if (localChangedDuringSync) {
+    return {
+      ok: false,
+      retry: true,
+      message: 'Se detectaron cambios nuevos en este dispositivo durante la sincronización. Se conservaron y se volverán a sincronizar; no se aplicaron datos antiguos.'
+    };
   }
   try {
     writeLocalWorkspace(storage, merged);
