@@ -124,7 +124,7 @@ function saveGuestPantry(items) {
   window.dispatchEvent(new CustomEvent('micompra:local-data-changed', { detail: { collection: 'pantry' } }));
 }
 
-function renderGuestPantry(container) {
+function renderGuestPantry(container, syncEnabled = false) {
   container.querySelector('.personal-pantry')?.remove();
   const section = document.createElement('section');
   section.className = 'personal-pantry';
@@ -144,7 +144,7 @@ function renderGuestPantry(container) {
     </form>
     <div class="pantry-list-heading"><h4>Existencias en casa</h4><select data-pantry-filter aria-label="Filtrar inventario"><option value="all">Todos</option><option value="low">Por reponer</option><option value="empty">Agotados</option></select></div>
     <div class="pantry-list" data-pantry-list></div>
-    <p class="pantry-footnote">El inventario se guarda en este dispositivo y se incluye en las copias de seguridad. Registrar una compra no modifica tus existencias automáticamente.</p>`;
+    <p class="pantry-footnote">${syncEnabled ? 'El inventario se sincroniza con tu cuenta y se incluye en las copias de seguridad.' : 'El inventario se guarda en este dispositivo y se incluye en las copias de seguridad.'} Registrar una compra no modifica tus existencias automáticamente.</p>`;
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
   let items = readGuestPantry();
@@ -217,7 +217,7 @@ function renderGuestPantry(container) {
 
 export async function renderPersonalPantry({ container, supabase, user }) {
   if (!container) return;
-  if (!supabase || !user) { renderGuestPantry(container); return; }
+  if (!supabase || !user) { renderGuestPantry(container, Boolean(user)); return; }
   container.querySelector('.personal-pantry')?.remove();
   const section = document.createElement('section');
   section.className = 'personal-pantry';
