@@ -72,6 +72,10 @@ function shell() {
     const button=document.createElement('button');button.type='button';button.className='app-nav-item'+(view.id==='inicio'?' active':'');button.dataset.openView=view.id;button.innerHTML='<span aria-hidden="true">'+view.icon+'</span><small>'+view.label+'</small>';nav.appendChild(button);
   });
   panels.cuenta.appendChild(authPanel);
+  const shortcuts=document.createElement('section');
+  shortcuts.className='home-shortcuts';
+  shortcuts.innerHTML='<div class="home-shortcuts-heading"><p class="eyebrow">ACCESOS RÁPIDOS</p><h2>¿Qué quieres hacer hoy?</h2></div><div class="home-shortcuts-grid"><button type="button" data-home-view="comprar"><span class="home-shortcut-icon">＋</span><span><strong>Mi compra</strong><small>Agrega productos y consulta tu total</small></span><b>›</b></button><button type="button" data-home-view="comparar"><span class="home-shortcut-icon">⇄</span><span><strong>Comparar precios</strong><small>Revisa precios disponibles por tienda</small></span><b>›</b></button><button type="button" data-home-view="tiendas"><span class="home-shortcut-icon">▦</span><span><strong>Supermercados</strong><small>Consulta las tiendas disponibles</small></span><b>›</b></button><button type="button" data-home-view="cuenta"><span class="home-shortcut-icon">◉</span><span><strong>Mi espacio</strong><small>Accede a tus compras y despensa</small></span><b>›</b></button></div>';
+  panels.inicio.appendChild(shortcuts);
   main.prepend(nav);main.appendChild(viewHost);
   const openView=id=>{
     Object.entries(panels).forEach(([key,panel])=>{panel.hidden=key!==id;});
@@ -79,6 +83,7 @@ function shell() {
     window.scrollTo({top:0,behavior:'smooth'});
   };
   nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button)openView(button.dataset.openView);});
+  shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-view]');if(button)openView(button.dataset.homeView);});
   window.addEventListener('hashchange',()=>{});
   document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); if (user) loadList(); });
   document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); document.querySelector('#branch-filter').closest('.branch-filter').hidden=document.querySelector('#store-filter').value!=='Super 99'; });
