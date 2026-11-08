@@ -1,0 +1,8 @@
+{
+  "appId": "com.micompra.panama",
+  "appName": "Mi Compra",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}
