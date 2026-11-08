@@ -526,7 +526,7 @@ async function loadList() {
 
 async function start() {
   shell();
-  if (!supabase) { await renderAuth(); return; }
+  if (!supabase) { await renderAuth(); await loadList(); message('Modo temporal disponible. La consulta del catálogo requiere conexión.'); return; }
   passwordRecovery = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
   const { data } = await supabase.auth.getUser();
   user = data.user;
