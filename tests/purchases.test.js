@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode } from '../src/purchases.js';
+import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode, isValidBarcodeChecksum } from '../src/purchases.js';
 
 test('CSV includes UTF-8 BOM and Spanish headers', () => {
   const csv = buildPurchasesCsv([]);
@@ -87,4 +87,24 @@ test('barcode lookup resolves alternate codes to the linked catalog product', ()
   assert.equal(findProductByBarcode(products, '0987654321', mappings)?.id, 'rice');
   assert.equal(findProductByBarcode(products, '7501234567890', mappings)?.id, 'milk');
   assert.equal(findProductByBarcode(products, '098765432', mappings), null);
+});
+
+test('barcode check digits validate EAN-13, EAN-8 and UPC-A', () => {
+  assert.equal(isValidBarcodeChecksum('4006381333931', 'ean_13'), true);
+  assert.equal(isValidBarcodeChecksum('4006381333932', 'ean_13'), false);
+  assert.equal(isValidBarcodeChecksum('96385074', 'ean_8'), true);
+  assert.equal(isValidBarcodeChecksum('96385075', 'ean_8'), false);
+  assert.equal(isValidBarcodeChecksum('036000291452', 'upc_a'), true);
+  assert.equal(isValidBarcodeChecksum('036000291453', 'upc_a'), false);
+});
+
+test('UPC-E check digit validates against its expanded UPC-A value', () => {
+  assert.equal(isValidBarcodeChecksum('04252614', 'upc_e'), true);
+  assert.equal(isValidBarcodeChecksum('04252615', 'upc_e'), false);
+  assert.equal(isValidBarcodeChecksum('14252614', 'upc_e'), false);
+});
+
+test('non-numeric barcode formats are not forced through UPC/EAN checksum rules', () => {
+  assert.equal(isValidBarcodeChecksum('ABC123XYZ', 'code_128'), true);
+  assert.equal(isValidBarcodeChecksum('AB-CD 123', 'code_39'), true);
 });
