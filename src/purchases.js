@@ -409,7 +409,14 @@ export async function renderPurchases({ container, supabase, user }) {
       const field = event.target.dataset.field;
       if (!item || !field) return;
       item[field] = field === 'selected' ? event.target.checked : event.target.value;
-      if (field === 'quantity' || field === 'price' || field === 'priceMode') drawInvoiceDraft();
+      if (field === 'quantity' || field === 'price') {
+        const quantity = Math.max(Number(item.quantity) || 0, 0.001);
+        const amount = Math.max(Number(item.price) || 0, 0);
+        const unitPrice = item.priceMode === 'line' ? amount / quantity : amount;
+        const lineTotal = item.priceMode === 'line' ? amount : amount * quantity;
+        const preview = row.querySelector('.invoice-line-calculation');
+        if (preview) preview.innerHTML = 'Precio unitario calculado: <b>' + money(unitPrice) + '</b> · Total línea: <b>' + money(lineTotal) + '</b>';
+      }
       const confirm = container.querySelector('#confirm-invoice-draft');
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
     });
