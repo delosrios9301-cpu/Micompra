@@ -2,13 +2,13 @@ export function buildPurchasesCsv(purchases = []) {
   const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
   const cell = value => {
     let v = String(value ?? '');
-    if (/^[=+@\t\r-]/.test(v)) v = "'" + v;
+    if (/^[\\s\\u0000-\\u001f]*[=+\\-@]/.test(v)) v = "'" + v;
     return '"' + v.replace(/"/g, '""') + '"';
   };
   const rows = [headers, ...purchases.flatMap(p => {
     const items = p.purchase_items || [];
     const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
-    if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
+    if (!items.length) return [[...base,'','','','','','',p.notes].map(cell)];
     return items.map(i => [...base,i.item_name,i.package_description,i.quantity,i.unit,i.unit_price,i.line_total,p.notes].map(cell));
   })];
   return '\uFEFF' + rows.map(row => row.join(',')).join('\r\n');
