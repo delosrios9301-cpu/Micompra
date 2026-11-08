@@ -7,6 +7,7 @@ import { parseCatalogCsv, analyzeCatalogImportRows } from './catalog-import.js';
 import { findCatalogNameMatches, findDuplicateListItem } from './catalog-duplicates.js';
 import { renderSpendingDashboard } from './spending.js';
 import { renderPersonalPantry } from './pantry.js';
+import { renderWeeklyPlan } from './weekly-plan.js';
 
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
@@ -38,7 +39,7 @@ function shell() {
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
       <div id="auth" class="auth"></div>
-      <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section>
+      <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section><div id="weekly-plan-module"></div>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
       <section class="grid">${stores.map(s => `<article class="store"><b class="icon">${safe(s.name[0])}</b><div><strong>${safe(s.name)}</strong><small>${s.url ? 'Tienda en línea disponible' : 'Integración pendiente'}</small></div>${s.url ? `<a href="${s.url}" target="_blank" rel="noreferrer">Visitar ↗</a>` : '<em>En preparación</em>'}</article>`).join('')}</section>
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
@@ -417,9 +418,10 @@ async function loadList() {
     const {error}=await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:product?.id||null,item_name:product?.canonical_name||customName,quantity,unit});
     if(!error)await loadList();else alert('No se pudo agregar el artículo.');
   });
-  cart.querySelectorAll('[data-check]').forEach(c=>c.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({checked:c.checked}).eq('id',c.dataset.check);if(error)loadList();}));
+  cart.querySelectorAll('[data-check]').forEach(c=>c.addEventListener('change',async()=>{const {error}=await supabase.from('shopping_list_items').update({checked:c.checked}).eq('id',c.dataset.check);await loadList();if(error)alert('No se pudo actualizar el artículo.');}));
   cart.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',async()=>{const {error}=await supabase.from('shopping_list_items').delete().eq('id',b.dataset.remove);if(!error)loadList();}));
   await renderListComparison(items);
+  await renderWeeklyPlan({ container: document.querySelector('#weekly-plan-module'), supabase, user, items, selectedBranchId });
 }
 
 async function start() {
