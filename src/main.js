@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import './style.css';
 import { importPriceCsv } from './price-import.js';
+import { renderStoreProductMappingManager } from './store-mapping.js';
 import { renderPurchases, normalizeProductBarcode, isValidBarcodeChecksum } from './purchases.js';
 import { getProductRegistrationCheck, validateProductRegistrationDraft } from './catalog-admin.js';
 import { parseCatalogCsv, analyzeCatalogImportRows } from './catalog-import.js';
@@ -328,6 +329,7 @@ async function renderPriceReview() {
   panel.innerHTML='<strong>Revisión de precios pendientes</strong><p>Solo se aprobarán precios con fuente HTTPS y observación dentro de las últimas 24 horas.</p><div class="review-items"><small>Cargando precios pendientes...</small></div>';
   box.appendChild(panel);
   await renderProductAdmin(panel);
+  await renderStoreProductMappingManager({ container: panel, supabase });
   const list=panel.querySelector('.review-items');
   const {data,error}=await supabase.from('price_observations')
     .select('id,price,currency,regular_price,promotion_label,availability,source_url,observed_at,review_status,store_products(source_product_name,package_description,supermarkets(name),supermarket_branches(name))')
