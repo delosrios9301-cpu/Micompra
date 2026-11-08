@@ -150,10 +150,10 @@ async function renderListComparison(items) {
   if(error){panel.innerHTML='<p class="empty">No se pudo calcular la lista.</p>';return;}
   const stores=new Map();
   for(const listing of data||[]){
-    const name=listing.supermarkets?.name;if(!name||(name==='Super 99'&&selectedBranchId&&listing.branch_id!==selectedBranchId))continue;
+    const name=listing.supermarkets?.name,branchName=listing.supermarket_branches?.name,storeKey=branchName?name+' · '+branchName:name;if(!name||(name==='Super 99'&&selectedBranchId&&listing.branch_id!==selectedBranchId))continue;
     const valid=(listing.price_observations||[]).filter(p=>p.is_verified&&p.review_status==='approved'&&p.currency==='USD'&&Number(p.price)>0&&new Date(p.observed_at).getTime()>=Date.now()-86400000);
     if(!valid.length)continue;const price=valid.reduce((x,y)=>Number(x.price)<Number(y.price)?x:y);
-    if(!stores.has(name))stores.set(name,new Map());const map=stores.get(name),old=map.get(listing.product_id);
+    if(!stores.has(storeKey))stores.set(storeKey,new Map());const map=stores.get(storeKey),old=map.get(listing.product_id);
     if(!old||Number(price.price)<old.price)map.set(listing.product_id,{price:Number(price.price)});
   }
   const totals=[];for(const [name,prices] of stores){let total=0,covered=0;for(const item of linked){const p=prices.get(item.product_id);if(p){total+=Number(item.quantity)*p.price;covered++;}}totals.push({name,total,covered,complete:covered===linked.length});}
