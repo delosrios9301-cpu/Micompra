@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { localDateKey, getMondayDateKey, summarizeSpending, summarizeMonthlySpending } from '../src/spending.js';
+import { localDateKey, getMondayDateKey, summarizeSpending, summarizeMonthlySpending, getBudgetThresholdsReached } from '../src/spending.js';
 
 test('local date key uses local calendar date', () => {
   assert.equal(localDateKey(new Date(2026, 10, 7)), '2026-11-07');
@@ -56,4 +56,12 @@ test('monthly history is zero-filled and supports a bounded custom range', () =>
   const history = summarizeMonthlySpending([], new Date(2026, 10, 7), 30);
   assert.equal(history.length, 24);
   assert.ok(history.every(month => month.amount === 0 && month.purchases === 0));
+});
+
+test('budget threshold alerts activate only when each level is reached', () => {
+  assert.deepEqual(getBudgetThresholdsReached(74.99, 100), []);
+  assert.deepEqual(getBudgetThresholdsReached(75, 100), [75]);
+  assert.deepEqual(getBudgetThresholdsReached(92, 100), [75, 90]);
+  assert.deepEqual(getBudgetThresholdsReached(120, 100), [75, 90, 100]);
+  assert.deepEqual(getBudgetThresholdsReached(500, 0), []);
 });
