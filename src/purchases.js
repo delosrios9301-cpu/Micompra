@@ -87,8 +87,18 @@ const parseInvoiceDraft = (text, products) => {
       const rawUnit = quantityMatch[2].toLowerCase();
       unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'kg' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';
       if (/^(?:g|gr|gram)/.test(rawUnit)) quantity = quantity / 1000;
-      name = name.slice(0, quantityMatch.index + (quantityMatch[0].startsWith(' ') ? 0 : 0)).trim();
+      name = name.slice(0, quantityMatch.index).trim();
     } else {
+      quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|kilo(?:s)?|g|gr|gramos?|lb|lbs|libras?|oz|onzas?)\s+(.+)$/i);
+      if (quantityMatch) {
+        quantity = parseAmount(quantityMatch[1]);
+        const rawUnit = quantityMatch[2].toLowerCase();
+        unit = /^(?:kg|kilo|g|gr|gram)/.test(rawUnit) ? 'kg' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';
+        if (/^(?:g|gr|gram)/.test(rawUnit)) quantity = quantity / 1000;
+        name = quantityMatch[3].trim();
+      }
+    }
+    if (!quantityMatch) {
       quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
       if (quantityMatch) {
         quantity = parseAmount(quantityMatch[1]);
@@ -249,6 +259,7 @@ export async function renderPurchases({ container, supabase, user }) {
               <small id="invoice-meta-status" class="purchase-message" aria-live="polite"></small>
             </div>
             <button type="button" class="secondary" id="prepare-invoice-draft">Preparar artículos desde el texto</button>
+            <small class="invoice-ocr-note">Se omiten líneas de impuestos, totales, descuentos y promociones para evitar registrarlas como productos. Los artículos por peso se convierten a lb, kg u oz; revisa siempre cantidad e importe antes de confirmar.</small>
             <div id="invoice-draft-list"></div>
             <button type="button" id="confirm-invoice-draft" disabled>Agregar artículos revisados a esta compra</button>
           </section>
