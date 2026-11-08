@@ -161,7 +161,7 @@ export async function renderPurchases({ container, supabase, user }) {
         if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
         return items.map(i => [...base,i.item_name,i.package_description,i.quantity,i.unit,i.unit_price,i.line_total,p.notes].map(cell));
       })];
-      const csv = '\\uFEFF' + rows.map(row => row.join(',')).join('\\r\\n');
+      const csv = '\uFEFF' + rows.map(row => row.join(',')).join('\r\n');
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
