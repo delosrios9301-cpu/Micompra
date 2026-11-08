@@ -5,47 +5,68 @@ export function normalizePantryName(value) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+const normalizeUnit = value => {
+  const unit = String(value || 'unidades').trim().toLowerCase();
+  return ({ unidad: 'unidades', unidades: 'unidades', l: 'litro', litros: 'litro', ml: 'ml', kilogramo: 'kg', kilogramos: 'kg', gramos: 'g', libra: 'lb', libras: 'lb', onza: 'oz', onzas: 'oz' })[unit] || unit;
+};
+
 export function findPantryListDuplicate(listItems = [], pantryItem) {
   const name = normalizePantryName(pantryItem?.item_name);
-  const unit = String(pantryItem?.unit || 'unidades').trim().toLowerCase();
+  const unit = normalizeUnit(pantryItem?.unit);
   if (!name) return null;
   return (listItems || []).find(row =>
     normalizePantryName(row.item_name) === name &&
-    String(row.unit || 'unidades').trim().toLowerCase() === unit
+    normalizeUnit(row.unit) === unit
   ) || null;
 }
 
-export function buildPantryRestockPlan(pantryItems = [], listItems = []) {
+// Solo vincula cuando nombre, unidad y tamaño de presentación coinciden sin ambigüedad.
+export function findPantryCatalogMatch(pantryItem, products = []) {
+  const name = normalizePantryName(pantryItem?.item_name);
+  const unit = normalizeUnit(pantryItem?.unit);
+  if (!name) return { product: null, reason: 'no_match' };
+  const matches = (products || []).filter(product => {
+    if (product.active === false || normalizePantryName(product.canonical_name) !== name) return false;
+    if (normalizeUnit(product.normalized_unit_name) !== unit) return false;
+    const packageQuantity = product.normalized_quantity == null ? null : Number(product.normalized_quantity);
+    return packageQuantity == null || packageQuantity === 1;
+  });
+  return matches.length === 1
+    ? { product: matches[0], reason: 'matched' }
+    : { product: null, reason: matches.length ? 'ambiguous' : 'no_match' };
+}
+
+export function buildPantryRestockPlan(pantryItems = [], listItems = [], products = []) {
   const plannedList = (listItems || []).map(item => ({ ...item }));
   const updates = [];
   const inserts = [];
   const lowItems = (pantryItems || []).filter(isPantryLowStock);
+  let linked = 0, unlinked = 0;
   for (const pantryItem of lowItems) {
+    const match = findPantryCatalogMatch(pantryItem, products);
+    const productId = match.product?.id || null;
+    if (productId) linked++; else unlinked++;
     const duplicate = findPantryListDuplicate(plannedList, pantryItem);
     if (duplicate) {
       const nextQuantity = (Number(duplicate.quantity) || 0) + 1;
       duplicate.quantity = nextQuantity;
       duplicate.checked = false;
-      updates.push({ id: duplicate.id, quantity: nextQuantity, checked: false });
+      if (!duplicate.product_id && productId) duplicate.product_id = productId;
+      updates.push({ id: duplicate.id, quantity: nextQuantity, checked: false, ...(duplicate.product_id ? { product_id: duplicate.product_id } : {}) });
     } else {
       const newItem = {
-        id: null,
-        item_name: pantryItem.item_name,
-        quantity: 1,
-        unit: pantryItem.unit || 'unidades',
-        checked: false
+        id: null, product_id: productId,
+        item_name: match.product?.canonical_name || pantryItem.item_name,
+        quantity: 1, unit: pantryItem.unit || 'unidades', checked: false
       };
       inserts.push({
-        list_id: null,
-        product_id: null,
-        item_name: newItem.item_name,
-        quantity: newItem.quantity,
-        unit: newItem.unit
+        list_id: null, product_id: productId,
+        item_name: newItem.item_name, quantity: newItem.quantity, unit: newItem.unit
       });
       plannedList.push(newItem);
     }
   }
-  return { updates, inserts, total: lowItems.length };
+  return { updates, inserts, total: lowItems.length, linked, unlinked };
 }
 
 export function isPantryLowStock(item) {
@@ -134,19 +155,31 @@ export async function renderPersonalPantry({ container, supabase, user }) {
             if (created.error) throw created.error;
             activeList = created.data;
           }
-          const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id', activeList.id);
+          const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked,product_id').eq('list_id', activeList.id);
           if (itemsError) throw itemsError;
           const pantryItem = items.find(x => x.id === id);
           if (!pantryItem) throw new Error('Artículo no encontrado');
+          const { data: products, error: catalogError } = await supabase.from('products')
+            .select('id,canonical_name,normalized_quantity,normalized_unit_name,active')
+            .eq('active', true).ilike('canonical_name', pantryItem.item_name).limit(30);
+          if (catalogError) throw catalogError;
+          const match = findPantryCatalogMatch(pantryItem, products || []);
           const duplicate = findPantryListDuplicate(listItems, pantryItem);
           if (duplicate) {
-            const { error } = await supabase.from('shopping_list_items').update({ quantity: Number(duplicate.quantity) + 1, checked: false }).eq('id', duplicate.id).eq('list_id', activeList.id);
+            const changes = { quantity: Number(duplicate.quantity) + 1, checked: false };
+            if (!duplicate.product_id && match.product) changes.product_id = match.product.id;
+            const { error } = await supabase.from('shopping_list_items').update(changes).eq('id', duplicate.id).eq('list_id', activeList.id);
             if (error) throw error;
           } else {
-            const { error } = await supabase.from('shopping_list_items').insert({ list_id: activeList.id, product_id: null, item_name: pantryItem.item_name, quantity: 1, unit: pantryItem.unit });
+            const { error } = await supabase.from('shopping_list_items').insert({
+              list_id: activeList.id, product_id: match.product?.id || null,
+              item_name: match.product?.canonical_name || pantryItem.item_name,
+              quantity: 1, unit: pantryItem.unit
+            });
             if (error) throw error;
           }
-          status('“' + pantryItem.item_name + '” se añadió a tu lista de compras' + (duplicate ? ' y se aumentó su cantidad.' : '.'));
+          status('“' + pantryItem.item_name + '” se añadió a tu lista' + (duplicate ? ' y se aumentó su cantidad.' : '.') +
+            (match.product ? ' Quedó vinculado al catálogo para comparar precios.' : ' Quedó como artículo libre; no se asignó un producto para evitar una presentación incorrecta.'));
           button.textContent = 'Añadido a la lista';
         } catch (error) {
           status('No se pudo añadir a la lista. Inténtalo de nuevo.', true);
@@ -210,9 +243,15 @@ export async function renderPersonalPantry({ container, supabase, user }) {
       }
       const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id', activeList.id);
       if (itemsError) throw itemsError;
-      const plan = buildPantryRestockPlan(lowItems, listItems || []);
+      const { data: products, error: catalogError } = await supabase.from('products')
+        .select('id,canonical_name,normalized_quantity,normalized_unit_name,active')
+        .eq('active', true).limit(1000);
+      if (catalogError) throw catalogError;
+      const plan = buildPantryRestockPlan(lowItems, listItems || [], products || []);
       for (const update of plan.updates) {
-        const { error } = await supabase.from('shopping_list_items').update({ quantity: update.quantity, checked: false }).eq('id', update.id).eq('list_id', activeList.id);
+        const changes = { quantity: update.quantity, checked: false };
+        if (update.product_id) changes.product_id = update.product_id;
+        const { error } = await supabase.from('shopping_list_items').update(changes).eq('id', update.id).eq('list_id', activeList.id);
         if (error) failed++; else completed++;
       }
       if (plan.inserts.length) {
@@ -224,7 +263,7 @@ export async function renderPersonalPantry({ container, supabase, user }) {
       }
       status(failed
         ? `Se añadieron ${completed} artículos; ${failed} no se pudieron añadir. Puedes reintentar.`
-        : `Se añadieron ${completed} artículos por reponer a tu lista de compras.`);
+        : `Se añadieron ${completed} artículos por reponer. Vinculados al catálogo: ${plan.linked}; pendientes de vincular: ${plan.unlinked}.`);
     } catch (error) {
       status('No se pudo completar la incorporación. Comprueba la conexión e inténtalo de nuevo.', true);
     }
