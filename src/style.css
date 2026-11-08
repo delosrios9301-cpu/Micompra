@@ -271,3 +271,32 @@
 .spending-alert{display:grid;gap:4px;padding:10px 11px;border:1px solid var(--line,#dce3e0);border-radius:9px;background:var(--soft,#f7faf8);min-width:0}
 .spending-alert b{font-size:12px}.spending-alert span{font-size:12px;line-height:1.45}.spending-alert small{font-size:10px;color:var(--muted,#65756e)}
 .spending-alert-75{border-left:4px solid #c58a35}.spending-alert-90{border-left:4px solid #d16b32}.spending-alert-100{border-left:4px solid #b43e35}
+
+/* Despensa personal del hogar */
+.personal-pantry{display:grid;gap:14px;margin:18px 0;padding:16px;border:1px solid var(--line,#dce3e0);border-radius:15px;background:var(--surface,#fff);min-width:0}
+.pantry-heading,.pantry-list-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pantry-heading .eyebrow{margin:0 0 4px}.pantry-heading h3{margin:0;font:700 22px Manrope,sans-serif}.pantry-heading small{display:block;margin-top:5px;color:var(--muted,#65756e);font-size:12px}
+.pantry-heading button,.pantry-form>button,.pantry-item-actions button{min-height:38px;padding:8px 12px;border:1px solid var(--line,#cbd7d1);border-radius:9px;background:#1d6950;color:#fff;font-size:12px;font-weight:700}
+.pantry-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.pantry-summary article{display:grid;gap:6px;padding:12px;border:1px solid var(--line,#e0e7e3);border-radius:11px;background:var(--soft,#f7faf8);min-width:0}
+.pantry-summary small{font-size:11px;color:var(--muted,#65756e)}.pantry-summary b{font:700 19px Manrope,sans-serif}
+.pantry-form{display:grid;gap:10px;padding:13px;border:1px solid var(--line,#dce3e0);border-radius:11px;min-width:0}
+.pantry-form>strong{font-size:14px}.pantry-form label,.pantry-item-form label{display:grid;gap:5px;font-size:12px;font-weight:650;min-width:0}
+.pantry-form input,.pantry-form select,.pantry-item-form input{width:100%;min-width:0;min-height:40px;padding:8px 10px;border:1px solid var(--line,#cbd7d1);border-radius:8px;background:var(--surface,#fff);color:inherit;font:inherit}
+.pantry-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.pantry-form>small{font-size:11px;color:var(--muted,#65756e)}.pantry-form>small.is-error{color:#b43e35}
+.pantry-list-section{display:grid;gap:10px;min-width:0}.pantry-list-heading h4{margin:0;font-size:14px}
+.pantry-list-heading select{max-width:160px;min-height:36px;padding:6px 8px;border:1px solid var(--line,#cbd7d1);border-radius:8px;background:var(--surface,#fff);color:inherit}
+.pantry-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}
+.pantry-item{display:grid;gap:10px;padding:12px;border:1px solid var(--line,#dce3e0);border-radius:11px;min-width:0}
+.pantry-item.is-low{border-left:4px solid #d18a35}.pantry-item.is-empty{border-left:4px solid #b43e35}
+.pantry-item-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0}
+.pantry-item-title>div{display:grid;gap:4px;min-width:0}.pantry-item-title strong,.pantry-item-title small{overflow-wrap:anywhere}.pantry-item-title small{font-size:11px;color:var(--muted,#65756e)}
+.pantry-state{flex:0 0 auto;padding:4px 7px;border-radius:99px;font-size:10px;font-weight:750;white-space:nowrap}
+.pantry-state.state-ok{background:#e8f5ed;color:#236b42}.pantry-state.state-low{background:#fff2df;color:#8b5b19}.pantry-state.state-empty{background:#fbe9e7;color:#a23831}
+.pantry-item-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}
+.pantry-item-form label{font-size:10px}.pantry-item-form input{min-height:36px;padding:6px 7px;font-size:12px}
+.pantry-item-actions{grid-column:1/-1;display:flex;gap:8px}.pantry-item-actions button{flex:1;min-height:35px}.pantry-item-actions .pantry-delete{background:transparent;color:#a23831;border-color:#e2c6c3}
+.pantry-empty,.pantry-footnote{margin:0;color:var(--muted,#65756e);font-size:11px;line-height:1.5}
+@media(max-width:620px){.personal-pantry{padding:12px}.pantry-list{grid-template-columns:1fr}.pantry-form-grid{grid-template-columns:1fr 1fr}.pantry-item-form{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:380px){.pantry-form-grid{grid-template-columns:1fr}.pantry-summary{gap:6px}.pantry-summary article{padding:9px}.pantry-summary small{font-size:10px}.pantry-summary b{font-size:16px}.pantry-heading{align-items:flex-start}.pantry-heading button{padding:7px 9px}}
