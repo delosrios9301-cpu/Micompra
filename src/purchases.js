@@ -84,7 +84,7 @@ const parseInvoiceDraft = (text, products) => {
     if (quantityMatch) {
       quantity = parseAmount(quantityMatch[1]);
       const rawUnit = quantityMatch[2].toLowerCase();
-      unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'g' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';
+      unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'kg' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';\n      if (/^(?:g|gr|gram)/.test(rawUnit)) quantity = quantity / 1000;
       name = name.slice(0, quantityMatch.index + (quantityMatch[0].startsWith(' ') ? 0 : 0)).trim();
     } else {
       quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
