@@ -31,7 +31,7 @@ function shell() {
       <input id="search" class="search" type="search" placeholder="Ej. arroz, leche, pollo..." autocomplete="off" /><small class="catalog-source-note">Catálogo ampliado con productos de referencia de la canasta básica de ACODECO. La referencia sirve para identificar productos y presentaciones; no representa precios actuales.</small>
       <div class="branch-filter"><label for="branch-filter">Sucursal para Super 99</label><select id="branch-filter"><option value="">Todas las sucursales</option></select><small>La sucursal elegida solo filtra los precios de Super 99; los demás supermercados siguen apareciendo.</small></div>
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
-      <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista de compras</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
+      <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista para comprar</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
       <div id="auth" class="auth"></div>
       <div id="cart" class="cart"><p class="empty">Tu lista aparecerá aquí.</p></div><section id="list-comparison" class="list-comparison"><p class="empty">El comparador aparecerá cuando agregues productos.</p></section>
       <section class="section-head stores-heading"><div><p class="eyebrow">RED DE TIENDAS</p><h2>Supermercados</h2></div><span class="muted">6 tiendas</span></section>
