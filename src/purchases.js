@@ -19,7 +19,7 @@ const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;'
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const parseInvoiceDraft = (text, products) => {
   const lines = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  const moneyPattern = /(?:B\/?\.?|USD|\$)?\s*(\d{1,4}(?:[.,]\d{3})*[.,]\d{2})\s*$/i;
+  const moneyPattern = /(?:B\/|USD|\$)?\s*(\d{1,4}(?:[.,]\d{3})*[.,]\d{2})\s*$/i;
   const drafts = [];
   for (const line of lines) {
     const match = line.match(moneyPattern);
@@ -27,9 +27,7 @@ const parseInvoiceDraft = (text, products) => {
     let rawPrice = match[1];
     if (rawPrice.includes('.') && rawPrice.includes(',')) {
       rawPrice = rawPrice.lastIndexOf('.') > rawPrice.lastIndexOf(',') ? rawPrice.replace(/,/g, '') : rawPrice.replace(/\./g, '').replace(',', '.');
-    } else if (rawPrice.includes(',')) {
-      rawPrice = rawPrice.replace(',', '.');
-    }
+    } else if (rawPrice.includes(',')) rawPrice = rawPrice.replace(',', '.');
     const price = Number(rawPrice);
     if (!Number.isFinite(price) || price <= 0 || price > 10000) continue;
     let name = line.slice(0, match.index).replace(/[|*•]+/g, ' ').trim();
@@ -38,7 +36,7 @@ const parseInvoiceDraft = (text, products) => {
     const qtyMatch = name.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?)\s+/i);
     const quantity = qtyMatch ? Number(qtyMatch[1].replace(',', '.')) : 1;
     if (qtyMatch) name = name.replace(qtyMatch[0], ' ').trim();
-    name = name.replace(/\\s+\\d+(?:[.,]\\d+)?\\s*(?:lb|lbs|kg|g|gr|oz|ml|l|lt)\\b.*$/i, '').trim();
+    name = name.replace(/\s+\d+(?:[.,]\d+)?\s*(?:lbs?|kg|gr?|oz|ml|lt?)\b.*$/i, '').trim();
     const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
     drafts.push({ productId: product?.id || '', name, package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '', quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit: 'unidad', price: price.toFixed(2), selected: true });
   }
