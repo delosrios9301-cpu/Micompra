@@ -5,6 +5,7 @@ import { renderPurchases, normalizeProductBarcode, isValidBarcodeChecksum } from
 import { getProductRegistrationCheck, validateProductRegistrationDraft } from './catalog-admin.js';
 import { parseCatalogCsv, analyzeCatalogImportRows } from './catalog-import.js';
 import { findCatalogNameMatches, findDuplicateListItem } from './catalog-duplicates.js';
+import { renderSpendingDashboard } from './spending.js';
 
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
@@ -110,7 +111,11 @@ async function renderAuth() {
     box.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
     box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });
   }
-  if(user) await renderPurchases({container:box.querySelector('#purchases-module'),supabase,user});
+  if(user) {
+    const purchasesContainer=box.querySelector('#purchases-module');
+    await renderPurchases({container:purchasesContainer,supabase,user});
+    await renderSpendingDashboard({container:purchasesContainer,supabase,user});
+  }
 }
 
 
