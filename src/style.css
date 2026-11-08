@@ -773,3 +773,34 @@ main{padding-top:22px}
 .smart-compare-card .price-up{color:#c34d4d}
 .smart-compare-card .price-down{color:#218653}
 .smart-compare-card>small{color:#849388;font-size:10px}
+
+
+/* Métricas y evolución histórica de precios */
+.smart-trend-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.smart-trend-summary article{display:grid;gap:6px;padding:13px;border:1px solid #e4ece5;border-radius:13px;background:#fff}
+.smart-trend-summary small{color:#77897d;font-size:10px}
+.smart-trend-summary b{font:800 20px Manrope;color:#294b38}
+.price-up{color:#c44e4e!important}
+.price-down{color:#218653!important}
+.price-stable{color:#66796c!important}
+.smart-trend-card{display:grid;gap:10px;padding:14px;border:1px solid #e1ebe3;border-radius:15px;background:#fff;box-shadow:0 4px 13px rgba(31,74,45,.035)}
+.smart-trend-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.smart-trend-top>div{display:grid;gap:4px;min-width:0}
+.smart-trend-top strong{color:#294b38;font:800 13px Manrope}
+.smart-trend-top small,.smart-trend-foot{color:#7c8e81;font-size:10px}
+.smart-trend-top>b{flex:none;font-size:11px}
+.smart-trend-values{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.smart-trend-values span{display:grid;gap:3px;color:#839187;font-size:9px}
+.smart-trend-values b{color:#294b38;font-size:12px}
+.smart-trend-values .price-up,.smart-trend-values .price-down,.smart-trend-values .price-stable{display:block;font-size:11px;font-weight:800}
+.smart-sparkline{width:100%;height:58px;overflow:visible;color:#279461;background:linear-gradient(180deg,#f5faf6,transparent);border-radius:8px}
+.smart-trend-foot{line-height:1.4}
+@media(max-width:420px){
+ .smart-trend-summary{gap:6px}
+ .smart-trend-summary article{padding:9px}
+ .smart-trend-summary small{font-size:9px}
+ .smart-trend-summary b{font-size:17px}
+ .smart-trend-top{gap:6px}
+ .smart-trend-top strong{font-size:12px}
+ .smart-trend-values{gap:6px}
+}
