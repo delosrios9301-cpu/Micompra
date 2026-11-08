@@ -5,7 +5,7 @@ export function buildPurchasesCsv(purchases = []) {
     if (/^[\s\u0000-\u001f]*[=+\-@]/.test(v)) v = "'" + v;
     return '"' + v.replace(/"/g, '""') + '"';
   };
-  const rows = [headers, ...purchases.flatMap(p => {
+  const rows = [headers.map(cell), ...purchases.flatMap(p => {
     const items = p.purchase_items || [];
     const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
     if (!items.length) return [[...base,'','','','','','',p.notes].map(cell)];
