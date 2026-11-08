@@ -102,7 +102,18 @@ async function searchProducts(term) {
       if (!button || !box.contains(button)) return;
       const item = listings.find(row => row.id === button.dataset.addListing);
       if (!item || button.disabled) return;
-      await addSearchItemFromButton(button, {name:item.source_product_name,store:storeName,productId:item.product_id,price:null});
+      const currentPrice = (item.price_observations || [])
+        .filter(p => p.is_verified && p.review_status === 'approved' && p.currency === 'USD' && Number(p.price) > 0 && Date.now() - new Date(p.observed_at).getTime() <= 7 * 86400000)
+        .sort((a,b) => new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime())[0] || null;
+      await addSearchItemFromButton(button, {
+        name:item.source_product_name,
+        store:storeName,
+        productId:item.product_id,
+        price:currentPrice ? Number(currentPrice.price) : null,
+        priceUnit:currentPrice?.availability === 'online_unit_price_per_kg' ? 'kg' : 'unidad',
+        priceSource:currentPrice?.source_url || item.source_product_url || null,
+        priceObservedAt:currentPrice?.observed_at || null
+      });
     };
     return;
   }
@@ -136,7 +147,7 @@ async function addSearchItemFromButton(button, item) {
   button.textContent = result.ok ? 'Agregado ✓' : 'Reintentar';
   if (feedback) feedback.textContent = result.message;
 }
-async function addSearchItem({name,store,productId=null,price=null}) {
+async function addSearchItem({name,store,productId=null,price=null,priceUnit='unidad',priceSource=null,priceObservedAt=null}) {
   if (!name) return {ok:false,message:'No se identificó el producto.'};
   try {
     if (user) {
@@ -147,18 +158,18 @@ async function addSearchItem({name,store,productId=null,price=null}) {
       await loadList();
       return {ok:true,message:'Producto guardado en tu lista.'};
     }
-    addGuestCartItem({name,store,qty:1,price});
+    addGuestCartItem({name,store,qty:1,price,priceUnit,priceSource,priceObservedAt});
     const saved = readGuestCart().some(row => row.name === name && row.store === store);
     return saved ? {ok:true,message:'Producto agregado a tu lista de este dispositivo.'} : {ok:false,message:'No se pudo guardar en este dispositivo.'};
   } catch (error) {
     return {ok:false,message:'No se pudo agregar: '+(error?.message || 'error inesperado')};
   }
 }
-function addGuestCartItem({name,store,qty=1,price=null}) {
+function addGuestCartItem({name,store,qty=1,price=null,priceUnit='unidad',priceSource=null,priceObservedAt=null}) {
   const current = readGuestCart();
   const duplicate = current.find(item => item.name.toLowerCase() === name.toLowerCase() && item.store === store);
-  if (duplicate) { duplicate.qty += qty; if (price !== null && Number.isFinite(Number(price))) duplicate.price = Number(price); }
-  else current.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,store,qty,price:price === null ? null : Number(price)});
+  if (duplicate) { duplicate.qty += qty; if (price !== null && Number.isFinite(Number(price))) { duplicate.price = Number(price); duplicate.priceUnit=priceUnit; duplicate.priceSource=priceSource; duplicate.priceObservedAt=priceObservedAt; } }
+  else current.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,store,qty,price:price === null ? null : Number(price),priceUnit,priceSource,priceObservedAt});
   saveGuestCart(current);
   renderGuestList();
 }
@@ -537,7 +548,7 @@ function saveGuestCart(items){localStorage.setItem(GUEST_CART_KEY,JSON.stringify
 function renderGuestList(){
   const label=document.querySelector('#list-label'),cart=document.querySelector('#cart'),panel=document.querySelector('#list-comparison');
   const items=readGuestCart();label.textContent='Lista temporal · guardada en este dispositivo';
-  cart.innerHTML='<p class="guest-cart-note">Puedes agregar productos desde los resultados aunque todavía no tengan precio verificado. El precio es opcional y podrás anotarlo cuando lo confirmes en la tienda. Esta lista temporal se guarda solo en este navegador/dispositivo.</p><form id="guest-add-item" class="guest-add-form"><label>Supermercado<select id="guest-store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Producto<input id="guest-name" required maxlength="100" placeholder="Ej. Pollo"></label><div class="guest-fields"><label>Cantidad<input id="guest-qty" type="number" min="0.01" step="0.01" value="1" required></label><label>Precio por unidad ($)<input id="guest-price" type="number" min="0" step="0.01" placeholder="Opcional"></label></div><button type="submit">Agregar a mi compra</button><small id="guest-feedback" role="status"></small></form>'+ (items.length?items.map(i=>'<article class="guest-cart-item"><div><strong>'+safe(i.name)+'</strong><small>'+safe(i.store)+' · '+safe(i.qty)+' × '+(i.price===null||i.price===undefined?'Precio pendiente':money(i.price))+'</small></div><b>'+(i.price===null||i.price===undefined?'Pendiente':money(i.qty*i.price))+'</b><button type="button" data-guest-remove="'+i.id+'" aria-label="Eliminar '+safe(i.name)+'">×</button></article>').join(''):'<p class="empty">Todavía no has agregado productos.</p>');
+  cart.innerHTML='<p class="guest-cart-note">Puedes agregar productos desde los resultados aunque todavía no tengan precio verificado. El precio es opcional y podrás anotarlo cuando lo confirmes en la tienda. Esta lista temporal se guarda solo en este navegador/dispositivo.</p><form id="guest-add-item" class="guest-add-form"><label>Supermercado<select id="guest-store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Producto<input id="guest-name" required maxlength="100" placeholder="Ej. Pollo"></label><div class="guest-fields"><label>Cantidad<input id="guest-qty" type="number" min="0.01" step="0.01" value="1" required></label><label>Precio por unidad ($)<input id="guest-price" type="number" min="0" step="0.01" placeholder="Opcional"></label></div><button type="submit">Agregar a mi compra</button><small id="guest-feedback" role="status"></small></form>'+ (items.length?items.map(i=>'<article class="guest-cart-item"><div><strong>'+safe(i.name)+'</strong><small>'+safe(i.store)+' · '+safe(i.qty)+' '+(i.priceUnit==='kg'?'kg':'unidad(es)')+' × '+(i.price===null||i.price===undefined?'Precio pendiente':money(i.price)+(i.priceUnit==='kg'?' / kg':''))+'</small>'+(i.priceObservedAt?'<small>Precio observado: '+safe(new Date(i.priceObservedAt).toLocaleDateString('es-PA'))+'</small>':'')+'</div><b>'+(i.price===null||i.price===undefined?'Pendiente':money(i.qty*i.price)+(i.priceUnit==='kg'?' estimado':''))+'</b><button type="button" data-guest-remove="'+i.id+'" aria-label="Eliminar '+safe(i.name)+'">×</button></article>').join(''):'<p class="empty">Todavía no has agregado productos.</p>');
   const totals=guestStores.map(store=>({store,total:items.filter(i=>i.store===store&&i.price!==null&&i.price!==undefined).reduce((sum,i)=>sum+i.qty*i.price,0),count:items.filter(i=>i.store===store).length,priced:items.filter(i=>i.store===store&&i.price!==null&&i.price!==undefined).length})).filter(x=>x.count);
   const grand=items.filter(i=>i.price!==null&&i.price!==undefined).reduce((sum,i)=>sum+i.qty*i.price,0);
   const pending=items.filter(i=>i.price===null||i.price===undefined).length;
