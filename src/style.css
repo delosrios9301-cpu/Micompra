@@ -1152,3 +1152,11 @@ header{width:100%;min-height:64px;height:auto;gap:14px;padding:12px max(var(--mc
  .app-view .app-nav-item small{font-size:8px}
  .app-view .review-actions{grid-template-columns:1fr}
 }
+
+/* Mi Compra · Configuración ampliada */
+.settings-data-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.settings-data-summary>div{display:grid;gap:4px;min-width:0;padding:12px 9px;border:1px solid var(--mc-border);border-radius:12px;background:var(--mc-surface-soft,#f7faf7);text-align:center}
+.settings-data-summary b{color:var(--mc-text);font:800 20px Manrope}
+.settings-data-summary small,.settings-storage-note{color:var(--mc-muted);font-size:10px;line-height:1.5}
+.settings-secondary-button{min-height:42px;padding:9px 13px;border:1px solid var(--mc-border)!important;border-radius:10px;background:transparent!important;color:var(--mc-text)!important;font:700 12px 'DM Sans'}
+@media(max-width:520px){.settings-data-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
