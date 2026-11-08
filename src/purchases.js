@@ -64,24 +64,51 @@ const parseInvoiceDraft = (text, products) => {
   const lines = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const moneyPattern = /(?:B\/|USD|\$)?\s*(\d{1,4}(?:[.,]\d{3})*[.,]\d{2})\s*$/i;
   const drafts = [];
+  const parseAmount = raw => {
+    if (raw.includes('.') && raw.includes(',')) return Number(raw.lastIndexOf('.') > raw.lastIndexOf(',') ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.'));
+    return Number(raw.replace(',', '.'));
+  };
   for (const line of lines) {
     const match = line.match(moneyPattern);
     if (!match) continue;
-    let rawPrice = match[1];
-    if (rawPrice.includes('.') && rawPrice.includes(',')) {
-      rawPrice = rawPrice.lastIndexOf('.') > rawPrice.lastIndexOf(',') ? rawPrice.replace(/,/g, '') : rawPrice.replace(/\./g, '').replace(',', '.');
-    } else if (rawPrice.includes(',')) rawPrice = rawPrice.replace(',', '.');
-    const price = Number(rawPrice);
-    if (!Number.isFinite(price) || price <= 0 || price > 10000) continue;
+    const amount = parseAmount(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) continue;
     let name = line.slice(0, match.index).replace(/[|*•]+/g, ' ').trim();
-    if (/\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento)\b/i.test(name)) continue;
+    if (/\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento|ahorro)\b/i.test(name)) continue;
     if (name.length < 3 || !/[a-záéíóúñ]/i.test(name)) continue;
-    const qtyMatch = name.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?)\s+/i);
-    const quantity = qtyMatch ? Number(qtyMatch[1].replace(',', '.')) : 1;
-    if (qtyMatch) name = name.replace(qtyMatch[0], ' ').trim();
+    let quantity = 1;
+    let quantityUnit = '';
+    let quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
+    if (quantityMatch) {
+      quantity = parseAmount(quantityMatch[1]);
+      name = name.slice(quantityMatch[0].length).trim();
+    } else {
+      quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*[x×]\s*/i);
+      if (quantityMatch) {
+        quantity = parseAmount(quantityMatch[1]);
+        name = name.slice(quantityMatch[0].length).trim();
+      } else {
+        quantityMatch = name.match(/\s+[x×]\s*(\d+(?:[.,]\d+)?)\s*$/i);
+        if (quantityMatch) {
+          quantity = parseAmount(quantityMatch[1]);
+          name = name.slice(0, quantityMatch.index).trim();
+        } else {
+          quantityMatch = name.match(/\s+(\d+(?:[.,]\d+)?)\s*(?:unid(?:ad(?:es)?)?|uds?|und|pzas?)\s*$/i);
+          if (quantityMatch) {
+            quantity = parseAmount(quantityMatch[1]);
+            name = name.slice(0, quantityMatch.index).trim();
+          }
+        }
+      }
+    }
     name = name.replace(/\s+\d+(?:[.,]\d+)?\s*(?:lbs?|kg|gr?|oz|ml|lt?)\b.*$/i, '').trim();
+    if (name.length < 3 || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1000) continue;
     const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
-    drafts.push({ productId: product?.id || '', name, package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '', quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit: 'unidad', price: price.toFixed(2), selected: true });
+    drafts.push({
+      productId: product?.id || '', name,
+      package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '',
+      quantity, unit: 'unidad', price: amount.toFixed(2), priceMode: 'line', selected: true
+    });
   }
   return drafts.slice(0, 100);
 };
@@ -316,7 +343,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const host = container.querySelector('#invoice-draft-list');
       const confirm = container.querySelector('#confirm-invoice-draft');
       if (!host) return;
-      host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>Precio unitario USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
+      host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>El importe leído es<select data-field="priceMode"><option value="line" '+(item.priceMode==='line'?'selected':'')+'>Total de la línea</option><option value="unit" '+(item.priceMode==='unit'?'selected':'')+'>Precio unitario</option></select></label><label>Importe leído USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label><small class="invoice-line-calculation">Precio unitario calculado: <b>'+money(item.priceMode==='line' ? Number(item.price)/Math.max(Number(item.quantity),0.001) : Number(item.price))+'</b> · Total línea: <b>'+money(item.priceMode==='line' ? Number(item.price) : Number(item.price)*Number(item.quantity))+'</b></small></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
     };
 
@@ -366,6 +393,15 @@ export async function renderPurchases({ container, supabase, user }) {
       const status = container.querySelector('#invoice-ocr-status');
       status.textContent = invoiceDraft.length ? 'Se prepararon '+invoiceDraft.length+' línea(s) preliminares. Revisa nombres, cantidades y precios; el OCR puede equivocarse.' : 'No se encontraron líneas con un precio reconocible. Puedes ingresar los artículos manualmente.';
     });
+    container.querySelector('#invoice-draft-list')?.addEventListener('change', event => {
+      const row = event.target.closest('[data-invoice-row]');
+      if (!row) return;
+      const item = invoiceDraft[Number(row.dataset.invoiceRow)];
+      const field = event.target.dataset.field;
+      if (!item || !field) return;
+      item[field] = field === 'selected' ? event.target.checked : event.target.value;
+      drawInvoiceDraft();
+    });
     container.querySelector('#invoice-draft-list')?.addEventListener('input', event => {
       const row = event.target.closest('[data-invoice-row]');
       if (!row) return;
@@ -373,6 +409,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const field = event.target.dataset.field;
       if (!item || !field) return;
       item[field] = field === 'selected' ? event.target.checked : event.target.value;
+      if (field === 'quantity' || field === 'price' || field === 'priceMode') drawInvoiceDraft();
       const confirm = container.querySelector('#confirm-invoice-draft');
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
     });
@@ -390,7 +427,7 @@ export async function renderPurchases({ container, supabase, user }) {
         const { error } = await supabase.from('purchase_items').insert({
           purchase_id: activePurchaseId, user_id: user.id, product_id: item.productId || null,
           item_name: item.name.trim(), package_description: item.package.trim() || null,
-          quantity: Number(item.quantity), unit: item.unit.trim() || 'unidad', unit_price: Number(item.price)
+          quantity: Number(item.quantity), unit: item.unit.trim() || 'unidad', unit_price: Number(item.priceMode === 'line' ? Number(item.price) / Number(item.quantity) : item.price)
         });
         if (error) {
           status.textContent = 'Se detuvo el registro por un error. Los artículos anteriores podrían haberse guardado; revisa la compra antes de volver a intentarlo.';
