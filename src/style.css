@@ -764,3 +764,12 @@ main{padding-top:22px}
 .account-actions button{min-height:42px;border:0;border-radius:10px;background:#e4f3e8;color:#21794a;font:700 11px 'DM Sans'}
 .account-local-note{max-width:480px;color:#85948a;font-size:10px;line-height:1.5}
 @media(max-width:760px){.account-overview{padding:21px 15px}.account-actions{grid-template-columns:1fr}.account-actions button{min-height:40px}}
+
+
+/* Edición y tendencias del precio */
+.personal-product-actions{display:flex;flex-wrap:wrap;gap:6px}
+.personal-product-actions button[data-edit-price]{border:1px solid #dcebe0;border-radius:9px;background:#f2f8f3;color:#277b4b;padding:7px 9px;font:700 10px 'DM Sans'}
+.personal-product-info>small{font-size:9px;color:#839387}
+.smart-compare-card .price-up{color:#c34d4d}
+.smart-compare-card .price-down{color:#218653}
+.smart-compare-card>small{color:#849388;font-size:10px}
