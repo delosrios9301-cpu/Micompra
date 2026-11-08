@@ -2,7 +2,7 @@ export function buildPurchasesCsv(purchases = []) {
   const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
   const cell = value => {
     let v = String(value ?? '');
-    if (/^[\\s\\u0000-\\u001f]*[=+\\-@]/.test(v)) v = "'" + v;
+    if (/^[\s\u0000-\u001f]*[=+\-@]/.test(v)) v = "'" + v;
     return '"' + v.replace(/"/g, '""') + '"';
   };
   const rows = [headers, ...purchases.flatMap(p => {
