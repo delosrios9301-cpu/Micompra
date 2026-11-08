@@ -200,3 +200,29 @@
 .catalog-csv-import>button{border:0;background:#1d6950;color:#fff}
 .catalog-csv-import>button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:520px){.catalog-csv-import{padding:11px}.catalog-csv-actions{align-items:stretch}.catalog-csv-actions button,.catalog-csv-file{width:100%}}
+
+
+/* Gestión del catálogo personal: edición y desactivación reversible */
+.catalog-personal-manager{display:grid;gap:12px;margin-top:18px;padding:15px;border:1px solid var(--line,#dce3e0);border-radius:13px;background:var(--surface,#fff);min-width:0}
+.catalog-manager-search{display:grid;gap:5px;font-size:13px;font-weight:650}
+.catalog-manager-search input{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--line,#cbd7d1);border-radius:9px;background:var(--surface,#fff);color:inherit}
+.catalog-manager-count{font-size:12px;color:var(--muted,#65756e)}
+.catalog-manager-list{display:grid;gap:8px;min-width:0}
+.catalog-manager-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:11px;border:1px solid var(--line,#e0e7e3);border-radius:10px;min-width:0}
+.catalog-manager-item-main{display:grid;gap:3px;min-width:0}
+.catalog-manager-item-main strong{font-size:14px;overflow-wrap:anywhere}
+.catalog-manager-item-main small{font-size:12px;color:var(--muted,#65756e);overflow-wrap:anywhere}
+.catalog-manager-state{font-size:11px;font-weight:700;padding:4px 7px;border-radius:999px;white-space:nowrap}
+.catalog-manager-state.is-active{background:#e8f5ed;color:#236b42}
+.catalog-manager-state.is-inactive{background:#f1f1f1;color:#646464}
+.catalog-manager-item-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.catalog-manager-item-actions button,.catalog-manager-edit-actions button{min-height:36px;padding:7px 11px;border:1px solid var(--line,#cbd7d1);border-radius:8px;background:transparent;color:inherit;font-size:12px;font-weight:700}
+.catalog-manager-item-actions button:first-child,.catalog-manager-edit-actions button[type=submit]{background:#1d6950;border-color:#1d6950;color:#fff}
+.catalog-manager-empty{font-size:13px;color:var(--muted,#65756e);padding:12px}
+.catalog-manager-editor{display:grid;gap:10px;padding:13px;border:1px solid var(--line,#dce3e0);border-radius:11px;background:var(--soft,#f6f9f7);min-width:0}
+.catalog-manager-editor[hidden]{display:none}
+.catalog-manager-editor>strong{font-size:14px;overflow-wrap:anywhere}
+.catalog-manager-edit-actions{display:flex;gap:8px;flex-wrap:wrap}
+.catalog-manager-edit-actions button{flex:1}
+.catalog-manager-edit-actions button:disabled{opacity:.5}
+@media(max-width:520px){.catalog-personal-manager{padding:11px}.catalog-manager-item{grid-template-columns:minmax(0,1fr) auto;padding:9px}.catalog-manager-item-actions button{flex:1}}
