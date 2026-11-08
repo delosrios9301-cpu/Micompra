@@ -6,13 +6,13 @@ Aplicación web personal para organizar compras del hogar y comparar precios pub
 
 - Supabase es la fuente central de datos en la nube.
 - El catálogo central tiene 61 productos activos en la última revisión.
-- Hay 15 asociaciones de productos con supermercados: Super 99, Xtra, Riba Smith y El Machetazo.
+- Hay 24 asociaciones de productos con supermercados: Super 99 (17), Xtra (4), Riba Smith (2) y El Machetazo (1).
 - Jumbo y El Rey siguen en investigación; no se crean asociaciones sin una ficha individual suficientemente identificable.
-- Las observaciones de precios deben conservar supermercado, sucursal cuando corresponda, URL de origen, moneda, fecha de observación y estado de verificación.
+- La base registra 22 observaciones de precios aprobadas y verificadas dentro de las últimas 24 horas al 8 de noviembre de 2026. Cada observación conserva supermercado, sucursal cuando corresponde, URL de origen, moneda, fecha de observación y estado de verificación.
 - Un precio solo se considera actual si está aprobado, verificado, es positivo y fue observado dentro de las últimas 24 horas.
 - Una comparación por tienda solo se considera completa cuando todos los artículos pendientes tienen precio válido de esa misma tienda. No se inventan ni se extrapolan precios.
 
-Las cifras anteriores son una fotografía de la revisión del 7 de noviembre de 2026 y pueden cambiar.
+Las cifras anteriores son una fotografía de la revisión del 8 de noviembre de 2026 y pueden cambiar.
 
 ## Desarrollo local
 
