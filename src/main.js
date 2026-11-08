@@ -400,8 +400,7 @@ async function renderProductAdmin(panel) {
   const csvFile=importSection.querySelector('#catalog-csv-file'),csvSummary=importSection.querySelector('#catalog-csv-summary'),csvPreview=importSection.querySelector('#catalog-csv-preview'),csvImport=importSection.querySelector('#catalog-csv-import'),csvStatus=importSection.querySelector('#catalog-csv-status'),csvVariantWrap=importSection.querySelector('#catalog-csv-variant-confirm-wrap'),csvVariantConfirm=importSection.querySelector('#catalog-csv-variant-confirm');
   let importAnalysis=null;
   importSection.querySelector('#catalog-csv-template').addEventListener('click',()=>{
-    const template='\uFEFFcanonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode\r
-';
+    const template='\uFEFFcanonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode\r\n';
     const blob=new Blob([template],{type:'text/csv;charset=utf-8;'});
     const url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download='plantilla_catalogo_mi_compra.csv';document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
