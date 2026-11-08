@@ -86,7 +86,7 @@ function shell() {
   main.prepend(nav);main.appendChild(viewHost);
   const openView=id=>{
     Object.entries(panels).forEach(([key,panel])=>{panel.hidden=key!==id;});
-    nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.openView===id;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
+    nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.openView===id||(button.dataset.openView==='mas'&&['tiendas','cuenta','configuracion'].includes(id));button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
     window.scrollTo({top:0,behavior:'smooth'});
   };
   nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button){openView(button.dataset.openView);if(button.dataset.openView==='comparar')renderManualComparisonDashboard();if(button.dataset.openView==='comprar'){searchProducts(document.querySelector('#search')?.value||'');renderGuestList();}}});
