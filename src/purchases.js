@@ -48,6 +48,41 @@ export function isValidBarcodeChecksum(value, format = '') {
   return true;
 }
 
+export function getBarcodePackageVariants(products = [], productId) {
+  const selected = products.find(product => product.id === productId);
+  if (!selected) return [];
+  const normalizeName = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const name = normalizeName(selected.canonical_name);
+  const packageKey = product => {
+    const quantity = Number(product.normalized_quantity);
+    const unit = String(product.normalized_unit_name || '').trim().toLowerCase();
+    return (Number.isFinite(quantity) ? quantity.toString() : String(product.normalized_quantity || '').trim()) + '|' + unit;
+  };
+  return products.filter(product =>
+    product.id !== selected.id &&
+    normalizeName(product.canonical_name) === name &&
+    packageKey(product) !== packageKey(selected)
+  );
+}
+
+export function getBarcodeAssociationStatus(products = [], mappings = [], productId, barcode) {
+  const code = normalizeProductBarcode(barcode);
+  if (!code) return { status: 'empty' };
+  const selected = products.find(product => product.id === productId);
+  if (!selected) return { status: 'product_not_found' };
+  const existingProduct = findProductByBarcode(products, code, mappings);
+  if (existingProduct) {
+    return {
+      status: existingProduct.id === productId ? 'already_on_selected_product' : 'assigned_to_other_product',
+      existingProduct
+    };
+  }
+  return {
+    status: 'available',
+    packageVariants: getBarcodePackageVariants(products, productId)
+  };
+}
+
 export function findProductByBarcode(products = [], barcode, mappings = []) {
   const code = normalizeProductBarcode(barcode);
   if (!code) return null;
@@ -263,7 +298,7 @@ export async function renderPurchases({ container, supabase, user }) {
     adjustments = adjustmentResult.data || [];
   };
 
-  const productOptions = products.map(p => '<option value="' + p.id + '">' + safe(p.canonical_name) + '</option>').join('');
+  const productOptions = products.map(p => '<option value="' + p.id + '">' + safe(p.canonical_name) + ' · ' + safe([p.normalized_quantity, p.normalized_unit_name].filter(Boolean).join(' ' ) || 'Presentación no definida') + '</option>').join('');
   const storeOptions = stores.map(s => '<option value="' + s.id + '">' + safe(s.name) + '</option>').join('');
   const branchOptions = branches.map(b => '<option value="' + b.id + '" data-store="' + b.supermarket_id + '">' + safe(b.name) + '</option>').join('');
 
@@ -305,7 +340,7 @@ export async function renderPurchases({ container, supabase, user }) {
       <section class="purchase-card barcode-admin-panel">
         <div class="purchase-card-head"><div><strong>Administrador de códigos de barras</strong><small>Asocia códigos reales a productos del catálogo. Puedes registrar varios empaques por producto; cada código sólo puede pertenecer a un producto.</small></div></div>
         <form id="barcode-admin-form" class="purchase-form barcode-admin-form">
-          <label>Producto del catálogo<select id="barcode-admin-product" required><option value="">Selecciona un producto</option>${productOptions}</select></label>
+          <label>Producto y presentación del catálogo<select id="barcode-admin-product" required><option value="">Selecciona el producto y el tamaño exacto</option>${productOptions}</select><small>El código de barras no revela por sí solo el tamaño. Compara la cantidad y unidad impresas en el empaque con la presentación del catálogo.</small></label><div id="barcode-admin-package-warning" class="purchase-message" hidden><small id="barcode-admin-package-warning-text"></small><label class="barcode-package-confirm"><input type="checkbox" id="barcode-admin-package-confirm"> Confirmo que el empaque físico coincide con la presentación seleccionada.</label></div>
           <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Escanea con la cámara, lector o escribe el código" required></label>
           <button type="submit">Asociar código</button>
         </form>
@@ -320,7 +355,7 @@ export async function renderPurchases({ container, supabase, user }) {
         <small id="barcode-admin-status" class="purchase-message" aria-live="polite"></small>
         <div class="barcode-admin-list">${barcodeMappings.length ? barcodeMappings.map(mapping => {
           const product = products.find(item => item.id === mapping.product_id);
-          return '<article class="barcode-admin-row"><div><strong>' + safe(product?.canonical_name || 'Producto no disponible') + '</strong><small>' + safe(mapping.barcode) + ' · Asociado ' + new Date(mapping.created_at).toLocaleString('es-PA') + '</small></div><button type="button" class="secondary" data-remove-barcode="' + mapping.id + '">Quitar</button></article>';
+          return '<article class="barcode-admin-row"><div><strong>' + safe(product?.canonical_name || 'Producto no disponible') + '</strong><small>' + safe([product?.normalized_quantity, product?.normalized_unit_name].filter(Boolean).join(' ') || 'Presentación no definida') + ' · ' + safe(mapping.barcode) + ' · Asociado ' + new Date(mapping.created_at).toLocaleString('es-PA') + '</small></div><button type="button" class="secondary" data-remove-barcode="' + mapping.id + '">Quitar</button></article>';
         }).join('') : '<small>Aún no hay códigos adicionales asociados.</small>'}</div>
       </section>` : '';
 
@@ -779,6 +814,21 @@ export async function renderPurchases({ container, supabase, user }) {
       if (product) { await applyScannedBarcode(code); return; }
       if (status) status.textContent = 'Código leído, pero no encontrado en los códigos registrados del catálogo. Selecciona el producto manualmente.';
     };
+    const updateBarcodePackageWarning = () => {
+      const productId = container.querySelector('#barcode-admin-product')?.value;
+      const warning = container.querySelector('#barcode-admin-package-warning');
+      const warningText = container.querySelector('#barcode-admin-package-warning-text');
+      const confirmation = container.querySelector('#barcode-admin-package-confirm');
+      const variants = getBarcodePackageVariants(products, productId);
+      if (!warning || !confirmation) return;
+      confirmation.checked = false;
+      confirmation.required = variants.length > 0;
+      warning.hidden = variants.length === 0;
+      if (warningText && variants.length) {
+        warningText.textContent = 'Este producto tiene otras presentaciones en el catálogo: ' + variants.map(item => item.canonical_name + ' (' + [item.normalized_quantity, item.normalized_unit_name].filter(Boolean).join(' ') + ')').join('; ') + '. Verifica físicamente el empaque antes de asociar el código.';
+      }
+    };
+    container.querySelector('#barcode-admin-product')?.addEventListener('change', updateBarcodePackageWarning);
     container.querySelector('#barcode-admin-form')?.addEventListener('submit', async event => {
       event.preventDefault();
       const productId = container.querySelector('#barcode-admin-product')?.value;
@@ -787,8 +837,19 @@ export async function renderPurchases({ container, supabase, user }) {
       if (!productId || !code) { if (status) status.textContent = 'Selecciona un producto e introduce un código válido.'; return; }
       if (!/^[A-Z0-9]{4,64}$/.test(code)) { if (status) status.textContent = 'El código debe tener entre 4 y 64 caracteres alfanuméricos.'; return; }
       if (!isValidBarcodeChecksum(code, barcodeAdminFormat)) { if (status) status.textContent = 'El dígito de control no coincide. Revisa el código antes de asociarlo.'; return; }
-      if (findProductByBarcode(products, code, barcodeMappings)) {
-        if (status) status.textContent = 'Este código ya está asociado a un producto del catálogo. No se creó un duplicado.';
+      const association = getBarcodeAssociationStatus(products, barcodeMappings, productId, code);
+      if (association.status === 'already_on_selected_product') {
+        if (status) status.textContent = 'Este código ya está asociado a la presentación seleccionada. No se creó un duplicado.';
+        return;
+      }
+      if (association.status === 'assigned_to_other_product') {
+        const other = association.existingProduct;
+        if (status) status.textContent = 'Código duplicado: ya pertenece a ' + other.canonical_name + ' (' + [other.normalized_quantity, other.normalized_unit_name].filter(Boolean).join(' ') + '). No se puede reasignar.';
+        return;
+      }
+      const packageConfirmation = container.querySelector('#barcode-admin-package-confirm');
+      if (getBarcodePackageVariants(products, productId).length && !packageConfirmation?.checked) {
+        if (status) status.textContent = 'Confirma que el tamaño y la unidad del empaque físico coinciden con la presentación elegida.';
         return;
       }
       const { error } = await supabase.from('product_barcodes').insert({ product_id: productId, barcode: code, created_by: user.id });
