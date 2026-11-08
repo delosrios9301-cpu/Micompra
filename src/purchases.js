@@ -1018,8 +1018,11 @@ export async function renderPurchases({ container, supabase, user }) {
 
   const refresh = async () => {
     stopBarcodeCamera();
-    try { await Promise.all([loadData(), reloadBarcodeMappings()]); await render(); }
-    catch (error) { container.innerHTML = '<section class="purchase-module"><p class="empty">' + safe(error.message) + '</p></section>'; }
+    try {
+      await Promise.all([loadData(), reloadBarcodeMappings()]);
+      await render();
+      window.dispatchEvent(new CustomEvent('micompra:purchase-updated'));
+    } catch (error) { container.innerHTML = '<section class="purchase-module"><p class="empty">' + safe(error.message) + '</p></section>'; }
   };
   await refresh();
 }
