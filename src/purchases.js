@@ -1,5 +1,6 @@
 const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const dateLabel = value => value ? new Date(value + (String(value).length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-PA') : '—';
 const norm = value => String(value ?? '').trim().toLocaleLowerCase('es').replace(/\s+/g, ' ');
 
@@ -42,7 +43,7 @@ export async function renderPurchases({ container, supabase, user }) {
   const branchOptions = branches.map(b => '<option value="' + b.id + '" data-store="' + b.supermarket_id + '">' + safe(b.name) + '</option>').join('');
 
   const render = async () => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentMonth = localDate().slice(0, 7);
     const allItems = purchases.flatMap(p => (p.purchase_items || []).map(i => ({ ...i, purchaseId: p.id, date: p.purchase_date, storeId: p.supermarket_id, store: p.supermarkets?.name || 'Supermercado', branch: p.supermarket_branches?.name || '', receipt: p.receipt_reference })));
     const totalMonth = allItems.filter(i => String(i.date).startsWith(currentMonth)).reduce((sum, i) => sum + Number(i.line_total ?? Number(i.quantity) * Number(i.unit_price)), 0);
     const totalAll = allItems.reduce((sum, i) => sum + Number(i.line_total ?? Number(i.quantity) * Number(i.unit_price)), 0);
