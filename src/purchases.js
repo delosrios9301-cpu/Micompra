@@ -288,7 +288,7 @@ export async function renderPurchases({ container, supabase, user }) {
 
     container.innerHTML = `
       <section class="purchase-module">
-        <div class="purchase-title">${''}<div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras. El historial y el CSV incluyen hasta las 300 compras más recientes.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
+        <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras. El historial y el CSV incluyen hasta las 300 compras más recientes.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
         ${barcodeAdminMarkup}
         <div class="purchase-kpis">
           <article><small>Gastado este mes</small><b>${money(totalMonth)}</b></article>
