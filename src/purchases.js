@@ -171,19 +171,6 @@ export async function renderPurchases({ container, supabase, user }) {
       link.href = url;
       link.download = 'mi-compra-gastos-' + localDate() + '.csv';
       document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-    });nst rows = [headers, ...purchases.flatMap(p => {
-        const items = p.purchase_items || [];
-        const base = [p.purchase_date,p.supermarkets?.name,p.supermarket_branches?.name,p.receipt_reference];
-        if (!items.length) return [[...base,'','','','','','','',p.notes].map(cell)];
-        return items.map(i => [...base,i.item_name,i.package_description,i.quantity,i.unit,i.unit_price,i.line_total,p.notes].map(cell));
-      })];
-      const csv = '\uFEFF' + rows.map(row => row.join(',')).join('\r\n');
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'mi-compra-gastos-' + localDate() + '.csv';
-      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     });
 
     container.querySelector('#upload-purchase-receipt')?.addEventListener('click', async () => {
