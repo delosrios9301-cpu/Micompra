@@ -16,7 +16,7 @@ export function buildPurchasesCsv(purchases = []) {
 
 
 export function normalizeProductBarcode(value) {
-  return String(value ?? '').trim().replace(/\s+/g, '').replace(/-/g, '');
+  return String(value ?? '').trim().replace(/\s+/g, '').replace(/-/g, '').toUpperCase();
 }
 
 export function findProductByBarcode(products = [], barcode, mappings = []) {
