@@ -61,8 +61,9 @@ export function getCatalogDuplicateGroups(products = []) {
     return unit;
   };
   const packageKey = product => {
-    const quantity = Number(product.normalized_quantity);
-    const normalizedQuantity = Number.isFinite(quantity) ? String(quantity) : String(product.normalized_quantity || '').trim().toLowerCase();
+    const rawQuantity = product.normalized_quantity;
+    const quantity = Number(rawQuantity);
+    const normalizedQuantity = rawQuantity !== null && rawQuantity !== undefined && rawQuantity !== '' && Number.isFinite(quantity) ? String(quantity) : String(rawQuantity || '').trim().toLowerCase();
     return normalizedQuantity + '|' + normalizeUnit(product.normalized_unit_name);
   };
   const groups = new Map();
