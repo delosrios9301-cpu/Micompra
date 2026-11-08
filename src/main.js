@@ -22,6 +22,7 @@ const stores = [
   { name: 'Jumbo', url: 'https://jumbo.com.pa/497-alimentos-frescos-y-congelados', sourceLabel: 'Catálogo web · fecha y sucursal por validar' }
 ];
 let user = null;
+let passwordRecovery = false;
 let activeList = null;
 let searchTimer;
 let selectedBranchId = '';
@@ -162,6 +163,25 @@ async function renderAuth() {
         }
       } catch(error) { feedback.textContent='No fue posible completar la solicitud. Inténtalo nuevamente.'; }
       finally { submit.disabled=false; }
+    });
+    return;
+  }
+  if (passwordRecovery) {
+    box.classList.add('auth-gate');
+    box.innerHTML = `<section class="login-card"><div class="login-mark">Mi<span>Compra</span></div><p class="eyebrow">RECUPERACIÓN SEGURA</p><h1>Crear nueva contraseña</h1><p class="login-intro">Elige una contraseña nueva para proteger tu cuenta.</p><form id="new-password-form" class="password-form"><label for="new-password">Nueva contraseña</label><input id="new-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Mínimo 8 caracteres"><label for="confirm-password">Confirmar contraseña</label><input id="confirm-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Repite la contraseña"><button type="submit">Guardar contraseña</button></form><p id="password-feedback" class="login-feedback" role="status" aria-live="polite"></p></section>`;
+    box.querySelector('#new-password-form').addEventListener('submit',async e=>{
+      e.preventDefault();
+      const password=box.querySelector('#new-password').value;
+      const confirmation=box.querySelector('#confirm-password').value;
+      const feedback=box.querySelector('#password-feedback');
+      if(password!==confirmation){feedback.textContent='Las contraseñas no coinciden.';return;}
+      const button=e.currentTarget.querySelector('button');button.disabled=true;feedback.textContent='Guardando...';
+      const {error}=await supabase.auth.updateUser({password});
+      button.disabled=false;
+      if(error){feedback.textContent='No se pudo actualizar la contraseña. Solicita un nuevo enlace e inténtalo otra vez.';return;}
+      passwordRecovery=false;
+      await renderAuth();
+      feedback.textContent='Contraseña actualizada.';
     });
     return;
   }
@@ -484,13 +504,15 @@ async function loadList() {
 async function start() {
   shell();
   if (!supabase) { await renderAuth(); return; }
+  passwordRecovery = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
   const { data } = await supabase.auth.getUser();
   user = data.user;
   message('Conexión con Supabase lista. Los precios se mostrarán únicamente si están verificados.');
   supabase.auth.onAuthStateChange((event, session) => {
     // INITIAL_SESSION ya queda cubierto por getUser() y el render inicial de start().
     // TOKEN_REFRESHED no debe reconstruir los módulos ni vaciar visualmente los datos.
-    if (!['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) return;
+    if (!['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) return;
+    if (event === 'PASSWORD_RECOVERY') passwordRecovery = true;
     const nextUser = session?.user || null;
     const previousUserId = user?.id || null;
     const nextUserId = nextUser?.id || null;
