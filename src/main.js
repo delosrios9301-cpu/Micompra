@@ -368,7 +368,7 @@ async function renderAuth() {
   const purchasesContainer=box.querySelector('#purchases-module');
   await renderPurchases({container:purchasesContainer,supabase,user});
   await renderSpendingDashboard({container:box.querySelector('#spending-module'),supabase,user});
-  await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase:null,user:null});
+  await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase:null,user});
 }
 
 
@@ -766,7 +766,7 @@ function refreshWorkspaceViews() {
   renderGuestList();
   renderHomeDashboard();
   const pantry = document.querySelector('#pantry-module');
-  if (pantry) renderPersonalPantry({ container: pantry, supabase: null, user: null });
+  if (pantry) renderPersonalPantry({ container: pantry, supabase: null, user });
   renderAppSettings();
 }
 
