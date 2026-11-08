@@ -1040,3 +1040,29 @@ main{padding-top:22px}
 /* Estado de sincronización personal */
 .workspace-sync-status{display:block;margin:8px 0 18px;padding:10px 13px;border:1px solid #dce9df;border-radius:11px;background:#f4f8f4;color:#376b4c;font-size:12px;line-height:1.45}
 @media(max-width:620px){.workspace-sync-status{font-size:11px;padding:9px 11px}}
+
+
+/* Organización por módulos: jerarquía, separación y lectura consistente */
+.more-page{gap:18px}
+.more-group{display:grid;gap:9px}
+.more-group>h3{margin:0;padding:0 2px;color:#345443;font:800 13px Manrope;letter-spacing:.1px}
+.more-group .more-links{gap:8px}
+.more-links button{min-height:72px;padding:12px 14px}
+.account-session-card{display:grid;gap:10px;padding:15px;border:1px solid var(--mc-border);border-radius:var(--mc-radius);background:#fff;box-shadow:var(--mc-shadow)}
+.account-session-card .signed{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#53695c;font-size:11px}
+.account-session-card .signed button{min-height:36px;padding:8px 12px}
+.account-session-card .workspace-sync-status{margin:0}
+.account-module-block{display:grid;gap:12px;min-width:0;padding:clamp(14px,2vw,19px);border:1px solid var(--mc-border);border-radius:var(--mc-radius);background:#fff;box-shadow:var(--mc-shadow)}
+.account-module-heading{display:grid;gap:4px;padding-bottom:10px;border-bottom:1px solid #edf1ed}
+.account-module-heading .eyebrow{margin:0}
+.account-module-heading h3{margin:0;color:var(--mc-text);font:800 17px Manrope}
+.account-module-heading>p:last-child{margin:0;color:var(--mc-muted);font-size:11px;line-height:1.5}
+.account-module-block>#purchases-module,.account-module-block>#spending-module,.account-module-block>#pantry-module{min-width:0}
+.account-tools{padding:12px 14px;border:1px solid var(--mc-border);border-radius:12px;background:#f9fbf9}
+.account-tools summary{color:#476451;font-size:12px;font-weight:800;cursor:pointer}
+.account-tools .import-panel{margin-top:12px;padding:13px;border:1px solid #e5ece6;border-radius:10px;background:#fff}
+@media(max-width:620px){
+ .account-module-block{padding:13px;gap:10px}
+ .account-module-heading h3{font-size:16px}
+ .account-session-card{padding:12px}
+}
