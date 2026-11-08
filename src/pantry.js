@@ -59,6 +59,7 @@ export async function renderPersonalPantry({ container, supabase, user }) {
           <label>Unidad<input name="unit" maxlength="40" value="${safe(item.unit)}" required></label>
           <label>Mínimo<input name="minimum_quantity" type="number" min="0" max="100000000" step="0.001" value="${safe(item.minimum_quantity)}" required></label>
           <div class="pantry-item-actions"><button type="submit">Actualizar</button><button type="button" class="pantry-delete">Eliminar</button></div>
+          <button type="button" class="pantry-add-to-list" data-add-list="${safe(item.id)}">Añadir a mi lista de compras</button>
         </form>
       </article>`;
     }).join('') : '<p class="pantry-empty">' + (filter === 'all' ? 'Todavía no has agregado artículos a tu despensa.' : 'No hay artículos en esta categoría.') + '</p>';
@@ -74,6 +75,39 @@ export async function renderPersonalPantry({ container, supabase, user }) {
         button.disabled = false;
         if (error || !data) { status('No se pudo actualizar el artículo. Inténtalo de nuevo.', true); return; }
         items = items.map(row => row.id === id ? data : row); renderList(); status('Cantidad actualizada.');
+      });
+      card.querySelector('[data-add-list]').addEventListener('click', async () => {
+        const button = card.querySelector('[data-add-list]');
+        button.disabled = true;
+        button.textContent = 'Añadiendo…';
+        try {
+          let { data: lists, error: listError } = await supabase.from('shopping_lists').select('id,name').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1);
+          if (listError) throw listError;
+          let activeList = lists?.[0];
+          if (!activeList) {
+            const created = await supabase.from('shopping_lists').insert({ user_id: user.id, name: 'Mi lista' }).select('id,name').single();
+            if (created.error) throw created.error;
+            activeList = created.data;
+          }
+          const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id', activeList.id);
+          if (itemsError) throw itemsError;
+          const duplicate = (listItems || []).find(row => normalizePantryName(row.item_name) === normalizePantryName(items.find(x => x.id === id)?.item_name) && String(row.unit || 'unidades').trim().toLowerCase() === String(items.find(x => x.id === id)?.unit || 'unidades').trim().toLowerCase());
+          const pantryItem = items.find(x => x.id === id);
+          if (!pantryItem) throw new Error('Artículo no encontrado');
+          if (duplicate) {
+            const { error } = await supabase.from('shopping_list_items').update({ quantity: Number(duplicate.quantity) + 1, checked: false }).eq('id', duplicate.id).eq('list_id', activeList.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('shopping_list_items').insert({ list_id: activeList.id, product_id: null, item_name: pantryItem.item_name, quantity: 1, unit: pantryItem.unit });
+            if (error) throw error;
+          }
+          status('“' + pantryItem.item_name + '” se añadió a tu lista de compras' + (duplicate ? ' y se aumentó su cantidad.' : '.'));
+          button.textContent = 'Añadido a la lista';
+        } catch (error) {
+          status('No se pudo añadir a la lista. Inténtalo de nuevo.', true);
+          button.textContent = 'Añadir a mi lista de compras';
+          button.disabled = false;
+        }
       });
       card.querySelector('.pantry-delete').addEventListener('click', async () => {
         if (!window.confirm('¿Eliminar este artículo de tu despensa?')) return;
