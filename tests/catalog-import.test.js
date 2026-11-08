@@ -8,9 +8,9 @@ test('parses comma CSV, quoted commas and accented Spanish names',()=>{
  const result=parseCatalogCsv('canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode\n"Arroz, premium",Marca,Granos,1,kg,');
  assert.equal(result.ok,true);assert.equal(result.rows[0].canonical_name,'Arroz, premium');
 });
-test('parses semicolon CSV and decimal comma',()=>{
+test('parses semicolon CSV, decimal comma and liters',()=>{
  const result=parseCatalogCsv('nombre;categoria;cantidad;unidad\nLeche;Lácteos;1,5;L');
- assert.equal(result.ok,true);assert.equal(result.rows[0].normalized_quantity,1.5);
+ assert.equal(result.ok,true);assert.equal(result.rows[0].normalized_quantity,1.5);\n const liters=parseCatalogCsv('nombre;categoria;cantidad;unidad\\nAgua;Bebidas;1;L');\n assert.equal(liters.rows[0].normalized_unit_name,'L');
 });
 test('rejects missing columns, malformed quotes and over 500 rows',()=>{
  assert.equal(parseCatalogCsv('nombre,categoria\nArroz,Granos').ok,false);
@@ -35,5 +35,5 @@ test('flags duplicate barcodes and warns on a different package variant',()=>{
  {line:5,canonical_name:'Otro 2',brand:null,category:'Otros',normalized_quantity:1,normalized_unit_name:'unidad',barcode:'12345670'}
  ];
  const result=analyzeCatalogImportRows(rows,catalog,[],()=>true);
- assert.equal(result.readyRows.length,1);assert.equal(result.variantCount,1);assert.equal(result.issues.length,3);
+ assert.equal(result.readyRows.length,2);assert.equal(result.variantCount,1);assert.equal(result.issues.length,2);
 });
