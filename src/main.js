@@ -54,6 +54,32 @@ function shell() {
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
+  const main=document.querySelector('main');
+  const authPanel=document.querySelector('#auth');
+  const views=[
+    {id:'inicio',label:'Inicio',icon:'⌂',nodes:['.hero','#connection']},
+    {id:'comprar',label:'Comprar',icon:'＋',nodes:['.section-head:not(.list-heading):not(.stores-heading)','#search','.store-filter','.catalog-source-note','.branch-filter','#results','.list-heading','#cart']},
+    {id:'comparar',label:'Comparar',icon:'⇄',nodes:['#list-comparison','#weekly-plan-module']},
+    {id:'tiendas',label:'Tiendas',icon:'▦',nodes:['.stores-heading','.grid','aside']},
+    {id:'cuenta',label:'Mi espacio',icon:'◉',nodes:[]}
+  ];
+  const nav=document.createElement('nav');nav.className='app-navigation';nav.setAttribute('aria-label','Navegación principal');
+  const viewHost=document.createElement('div');viewHost.className='app-views';
+  const panels={};
+  views.forEach(view=>{
+    const panel=document.createElement('section');panel.className='app-view';panel.dataset.view=view.id;panel.hidden=view.id!=='inicio';panels[view.id]=panel;viewHost.appendChild(panel);
+    view.nodes.forEach(selector=>{const node=main.querySelector(selector);if(node)panel.appendChild(node);});
+    const button=document.createElement('button');button.type='button';button.className='app-nav-item'+(view.id==='inicio'?' active':'');button.dataset.openView=view.id;button.innerHTML='<span aria-hidden="true">'+view.icon+'</span><small>'+view.label+'</small>';nav.appendChild(button);
+  });
+  panels.cuenta.appendChild(authPanel);
+  main.prepend(nav);main.appendChild(viewHost);
+  const openView=id=>{
+    Object.entries(panels).forEach(([key,panel])=>{panel.hidden=key!==id;});
+    nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.openView===id;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+  nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button)openView(button.dataset.openView);});
+  window.addEventListener('hashchange',()=>{});
   document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); if (user) loadList(); });
   document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); document.querySelector('#branch-filter').closest('.branch-filter').hidden=document.querySelector('#store-filter').value!=='Super 99'; });
   document.querySelector('#search').addEventListener('input', e => {
