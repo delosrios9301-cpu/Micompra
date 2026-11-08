@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getWeeklyRange, getCalendarWeek, groupShoppingItemsByDate, summarizeWeeklyPlan, compareWeeklyPlanPrices } from '../src/weekly-plan.js';
+import { getWeeklyRange, getCalendarWeek, groupShoppingItemsByDate, summarizeWeeklyPlan, compareWeeklyPlanPrices, getShoppingReminders } from '../src/weekly-plan.js';
 
 test('weekly range starts Monday and ends Sunday', () => {
   assert.deepEqual(getWeeklyRange(new Date(2026, 10, 7)), { start: '2026-11-02', end: '2026-11-08' });
@@ -61,4 +61,25 @@ test('calendar groups items by planned date and leaves unplanned items out of da
   assert.equal(groups[0].items[0].item_name, 'Arroz');
   assert.equal(groups[3].items[0].item_name, 'Leche');
   assert.equal(groups[6].items.length, 0);
+});
+
+test('shopping reminders group overdue, today, tomorrow and the next seven days, excluding completed items', () => {
+  const reminders = getShoppingReminders([
+    { item_name: 'Pan', planned_for: '2026-11-06', checked: false },
+    { item_name: 'Arroz', planned_for: '2026-11-07', checked: false },
+    { item_name: 'Leche', planned_for: '2026-11-08', checked: false },
+    { item_name: 'Pollo', planned_for: '2026-11-14', checked: false },
+    { item_name: 'Café', planned_for: '2026-11-07', checked: true },
+    { item_name: 'Azúcar', planned_for: '2026-11-15', checked: false },
+    { item_name: 'Sal', planned_for: null, checked: false }
+  ], new Date(2026, 10, 7), 7);
+  assert.deepEqual(reminders.overdue.map(item => item.item_name), ['Pan']);
+  assert.deepEqual(reminders.upcoming.map(group => group.label), ['Hoy', 'Mañana', 'sábado']);
+  assert.deepEqual(reminders.upcoming.map(group => group.items.map(item => item.item_name)), [['Arroz'], ['Leche'], ['Pollo']]);
+  assert.equal(reminders.total, 4);
+});
+
+test('shopping reminders return empty groups when no pending dated items exist', () => {
+  const result = getShoppingReminders([{ planned_for: '2026-11-07', checked: true }], new Date(2026, 10, 7));
+  assert.deepEqual(result, { overdue: [], upcoming: [], total: 0 });
 });
