@@ -17,15 +17,15 @@ export function buildPurchasesCsv(purchases = []) {
 
 export function parseInvoiceMetadata(text, stores = [], branches = []) {
   const source = String(text || '');
-  const normalized = source.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
-  const compact = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalized = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const compact = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const aliases = [
-    { match: /\\bsuper\\s*99\\b|\\bsupermercados?\\s*99\\b/, names: ['super 99'] },
-    { match: /\\bsuper\\s*xtra\\b|\\bsupermercados?\\s*xtra\\b/, names: ['xtra','super xtra'] },
-    { match: /\\b(?:supermercados?\\s+)?el\\s+rey\\b|\\bsm rey\\b/, names: ['el rey','rey'] },
-    { match: /\\briba\\s*smith\\b/, names: ['riba smith'] },
-    { match: /\\bel\\s*machetazo\\b/, names: ['el machetazo','machetazo'] },
-    { match: /\\bjumbo\\b/, names: ['jumbo'] }
+    { match: /\bsuper\s*99\b|\bsupermercados?\s*99\b/, names: ['super 99'] },
+    { match: /\bsuper\s*xtra\b|\bsupermercados?\s*xtra\b/, names: ['xtra','super xtra'] },
+    { match: /\b(?:supermercados?\s+)?el\s+rey\b|\bsm rey\b/, names: ['el rey','rey'] },
+    { match: /\briba\s*smith\b/, names: ['riba smith'] },
+    { match: /\bel\s*machetazo\b/, names: ['el machetazo','machetazo'] },
+    { match: /\bjumbo\b/, names: ['jumbo'] }
   ];
   let store = null;
   for (const alias of aliases) {
@@ -35,8 +35,8 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
   }
   let date = '';
   const datePatterns = [
-    /\\b(20\\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\\d|3[01])\\b/,
-    /\\b(0?[1-9]|[12]\\d|3[01])[-/](0?[1-9]|1[0-2])[-/](20\\d{2})\\b/
+    /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b/,
+    /\b(0?[1-9]|[12]\d|3[01])[-/](0?[1-9]|1[0-2])[-/](20\d{2})\b/
   ];
   for (let i=0;i<datePatterns.length && !date;i++) {
     const m = source.match(datePatterns[i]);
@@ -46,7 +46,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
     if (d.getUTCFullYear()===parts[0] && d.getUTCMonth()===parts[1]-1 && d.getUTCDate()===parts[2]) date = parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
   }
   let reference = '';
-  const refMatch = source.match(/(?:factura(?:\\s+fiscal)?|comprobante|recibo|ticket)\\s*(?:n(?:[uú]mero|[º°.]?)|#|:|-)?\\s*[:#-]?\\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
+  const refMatch = source.match(/(?:factura(?:\s+fiscal)?|comprobante|recibo|ticket)\s*(?:n(?:[uú]mero|[º°.]?)|#|:|-)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
   if (refMatch) reference = refMatch[1].slice(0,120);
   let branch = null;
   if (store) {
@@ -56,7 +56,8 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
   }
   return { supermarketId: store?.id || '', branchId: branch?.id || '', purchaseDate: date, receiptReference: reference };
 }
-\nconst money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+
+const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const parseInvoiceDraft = (text, products) => {
