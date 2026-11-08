@@ -45,7 +45,7 @@ function shell() {
       <aside><strong>Precios transparentes</strong><p>Solo compararemos productos equivalentes con precio, presentación, fuente y fecha de consulta. Si no hay precio verificado, lo indicaremos.</p><a class="template-link" href="/plantilla-precios.csv" download>Descargar plantilla para registrar precios ↗</a><small class="template-note">La plantilla es para captura y revisión manual; no publica precios automáticamente.</small></aside>
       <footer>Mi Compra · Panamá</footer>
     </main>`;
-  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; if (lastComparedProductId) compareProduct(lastComparedProductId); });
+  document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; if (lastComparedProductId) compareProduct(lastComparedProductId); if (user) loadList(); });
   document.querySelector('#search').addEventListener('input', e => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchProducts(e.target.value.trim()), 300);
@@ -376,9 +376,9 @@ async function renderListComparison(items) {
 }
 async function loadList() {
   const label=document.querySelector('#list-label'),cart=document.querySelector('#cart');
-  if(!user){label.textContent='Inicia sesión para guardar';cart.innerHTML='<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>';document.querySelector('#list-comparison').innerHTML='<p class="empty">Inicia sesión para comparar tu lista.</p>';return;}
+  if(!user){label.textContent='Inicia sesión para guardar';cart.innerHTML='<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>';document.querySelector('#list-comparison').innerHTML='<p class="empty">Inicia sesión para comparar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
   let {data:lists,error}=await supabase.from('shopping_lists').select('id,name').eq('user_id',user.id).order('created_at',{ascending:false}).limit(1);
-  if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';return;}
+  if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
   if(!lists?.length){const created=await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();if(created.error){cart.innerHTML='<p class="empty">No se pudo crear la lista.</p>';return;}activeList=created.data;}else activeList=lists[0];
   label.textContent=activeList.name;
   const [result,catalog]=await Promise.all([supabase.from('shopping_list_items').select('id,product_id,item_name,quantity,unit,checked').eq('list_id',activeList.id).order('created_at'),loadProductCatalog()]);
