@@ -34,6 +34,8 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_XG2gIm5VPBQwPlKIVZ4UPA_B7InUKQ_
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
