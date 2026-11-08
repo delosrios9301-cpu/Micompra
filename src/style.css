@@ -817,3 +817,38 @@ main{padding-top:22px}
 .settings-restore-control{display:grid;gap:8px;padding:13px;border:1px dashed #b9d7c2;border-radius:11px;background:#f8fcf8;color:#28774a;font:700 11px 'DM Sans'}
 .settings-restore-control input{max-width:100%;color:#617569;font:11px 'DM Sans'}
 .settings-restore-control input::file-selector-button{margin-right:10px;padding:8px 11px;border:0;border-radius:8px;background:#e3f2e7;color:#21764a;font:700 10px 'DM Sans'}
+
+
+/* Inventario personal en el modo local */
+.personal-pantry{display:grid;gap:14px;margin-top:18px;min-width:0}
+.personal-pantry .pantry-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.personal-pantry .pantry-heading h3{font:700 21px Manrope;margin:0 0 5px;color:#173d32}
+.personal-pantry .pantry-heading small{display:block;color:#718078;font-size:11px;line-height:1.5}
+.personal-pantry .pantry-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.personal-pantry .pantry-summary article{min-width:0;padding:12px;border:1px solid #e1eae2;border-radius:11px;background:#f2f7f2}
+.personal-pantry .pantry-summary small{display:block;color:#6e7f74;font-size:10px}
+.personal-pantry .pantry-summary b{display:block;margin-top:5px;color:#245b45;font:800 22px Manrope}
+.personal-pantry .pantry-form{display:grid;gap:10px;padding:14px;background:#fff;border:1px solid #e2eae3;border-radius:13px}
+.personal-pantry .pantry-form>strong{font:700 14px Manrope;color:#244b39}
+.personal-pantry .pantry-form label,.personal-pantry .pantry-item-form label,.personal-pantry .pantry-consume-form label{display:grid;gap:5px;min-width:0;color:#52695b;font-size:10px;font-weight:700}
+.personal-pantry .pantry-form input,.personal-pantry .pantry-form select,.personal-pantry .pantry-item-form input,.personal-pantry .pantry-item-form select,.personal-pantry .pantry-consume-form input,.personal-pantry .pantry-list-heading select{width:100%;min-width:0;padding:10px;border:1px solid #dce5de;border-radius:8px;background:#fff;color:#18332d;font:12px 'DM Sans'}
+.personal-pantry .pantry-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.personal-pantry button{min-height:38px;padding:9px 12px;border:0;border-radius:8px;background:#245b45;color:#fff;font:600 11px 'DM Sans'}
+.personal-pantry button:disabled{opacity:.45}
+.personal-pantry .pantry-status{font-size:11px;color:#477d5c}.personal-pantry .pantry-status.is-error{color:#b04a3c}
+.personal-pantry .pantry-list-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.personal-pantry .pantry-list-heading h4{margin:0;color:#244b39;font:700 15px Manrope}
+.personal-pantry .pantry-list-heading select{max-width:140px}
+.personal-pantry .pantry-list{display:grid;gap:9px;min-width:0}
+.personal-pantry .pantry-item{display:grid;gap:11px;min-width:0;padding:13px;background:#fff;border:1px solid #e3eae4;border-radius:12px}
+.personal-pantry .pantry-item.is-low{border-color:#e8d8ad}.personal-pantry .pantry-item.is-empty{border-color:#e6c1bd}
+.personal-pantry .pantry-item-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.personal-pantry .pantry-item-title strong,.personal-pantry .pantry-item-title small{display:block;overflow-wrap:anywhere}.personal-pantry .pantry-item-title strong{font-size:13px}.personal-pantry .pantry-item-title small{margin-top:4px;color:#829087;font-size:10px}
+.personal-pantry .pantry-state{flex:none;padding:5px 8px;border-radius:20px;background:#eaf4ec;color:#34724b;font-size:9px;font-weight:700}.personal-pantry .state-low{background:#fbf3df;color:#946c22}.personal-pantry .state-empty{background:#fae9e7;color:#a34239}
+.personal-pantry .pantry-item-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}
+.personal-pantry .pantry-item-actions{grid-column:1/-1;display:flex;gap:8px}.personal-pantry .pantry-item-actions button{flex:1}.personal-pantry .pantry-item-actions .pantry-delete{background:#f7eeee;color:#9d4941;border:1px solid #ecd8d6}
+.personal-pantry .pantry-consume-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;padding-top:10px;border-top:1px solid #edf1ed}
+.personal-pantry .pantry-consume-form button{min-width:100px}
+.personal-pantry .pantry-empty{padding:14px;border:1px dashed #dce5de;border-radius:10px;color:#77857d;font-size:11px}
+.personal-pantry .pantry-footnote{margin:0;color:#8a775d;font-size:10px;line-height:1.5}
+@media(max-width:420px){.personal-pantry .pantry-summary{gap:6px}.personal-pantry .pantry-summary article{padding:9px}.personal-pantry .pantry-summary small{font-size:9px}.personal-pantry .pantry-summary b{font-size:19px}.personal-pantry .pantry-item-form{grid-template-columns:repeat(2,minmax(0,1fr))}.personal-pantry .pantry-form-grid{grid-template-columns:1fr}}
