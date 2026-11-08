@@ -1,5 +1,10 @@
 name: Sync Super 99 prices
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/sync-super99-prices/**'
+      - '.github/workflows/sync-super99-prices.yml'
   schedule:
     - cron: '17 */6 * * *'
   workflow_dispatch:
