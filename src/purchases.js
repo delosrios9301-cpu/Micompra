@@ -342,9 +342,11 @@ export async function renderPurchases({ container, supabase, user }) {
         status.textContent = 'La sucursal seleccionada no corresponde al supermercado. Corrige la selección.';
         return;
       }
+      const existingPurchase = purchases.find(p => p.id === activePurchaseId);
+      const effectiveStoreId = supermarketId || existingPurchase?.supermarket_id || '';
       const payload = {
-        supermarket_id: supermarketId || purchases.find(p => p.id === activePurchaseId)?.supermarket_id,
-        branch_id: branchId || null
+        supermarket_id: effectiveStoreId,
+        branch_id: branchId || (effectiveStoreId === existingPurchase?.supermarket_id ? existingPurchase?.branch_id || null : null)
       };
       const dateValue = container.querySelector('#invoice-meta-date')?.value || '';
       const referenceValue = container.querySelector('#invoice-meta-reference')?.value.trim() || '';
