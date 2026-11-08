@@ -30,7 +30,7 @@ export async function renderPurchases({ container, supabase, user }) {
         .select('id,user_id,supermarket_id,branch_id,purchase_date,receipt_reference,notes,supermarkets(name),supermarket_branches(name),purchase_items(id,product_id,item_name,package_description,quantity,unit,unit_price,line_total)')
         .eq('user_id', user.id).order('purchase_date', { ascending: false }).limit(300),
       supabase.from('inventory_adjustments')
-        .select('id,product_id,item_name,quantity_delta,reason,notes,occurred_at')
+        .select('id,product_id,item_name,package_description,unit,quantity_delta,reason,notes,occurred_at')
         .eq('user_id', user.id).order('occurred_at', { ascending: false }).limit(500)
     ]);
     if (purchaseResult.error || adjustmentResult.error) throw new Error('No se pudo consultar el historial de compras o inventario.');
@@ -54,7 +54,7 @@ export async function renderPurchases({ container, supabase, user }) {
     const comparedItems = allItems.filter(i => !cutoff || i.date >= cutoff);
     const productGroups = new Map();
     for (const item of comparedItems) {
-      const key = item.product_id || 'name:' + norm(item.item_name) + '|' + norm(item.package_description);
+      const key = (item.product_id || 'name:' + norm(item.item_name)) + '|' + norm(item.package_description);
       if (!productGroups.has(key)) productGroups.set(key, { name: item.item_name, package: item.package_description || '', productId: item.product_id, stores: new Map() });
       const group = productGroups.get(key);
       const current = group.stores.get(item.store);
@@ -64,14 +64,14 @@ export async function renderPurchases({ container, supabase, user }) {
 
     const stockMap = new Map();
     for (const item of allItems) {
-      const key = item.product_id || 'name:' + norm(item.item_name);
-      const previous = stockMap.get(key) || { name: item.item_name, unit: item.unit || 'unidad', quantity: 0 };
+      const key = (item.product_id || 'name:' + norm(item.item_name)) + '|' + norm(item.package_description) + '|' + norm(item.unit);
+      const previous = stockMap.get(key) || { name: item.item_name, package: item.package_description || '', unit: item.unit || 'unidad', quantity: 0 };
       previous.quantity += Number(item.quantity);
       stockMap.set(key, previous);
     }
     for (const move of adjustments) {
-      const key = move.product_id || 'name:' + norm(move.item_name);
-      const previous = stockMap.get(key) || { name: move.item_name, unit: 'unidad', quantity: 0 };
+      const key = (move.product_id || 'name:' + norm(move.item_name)) + '|' + norm(move.package_description) + '|' + norm(move.unit);
+      const previous = stockMap.get(key) || { name: move.item_name, package: move.package_description || '', unit: move.unit || 'unidad', quantity: 0 };
       previous.quantity += Number(move.quantity_delta);
       stockMap.set(key, previous);
     }
@@ -124,10 +124,12 @@ export async function renderPurchases({ container, supabase, user }) {
         <section class="purchase-card">
           <strong>Inventario estimado de lo comprado</strong>
           <small>Se suman las cantidades compradas y se restan consumos, mermas o correcciones que registres.</small>
-          ${stockRows.length ? stockRows.map(s=>'<div class="store-spend"><span>'+safe(s.name)+' <small>'+safe(s.unit)+'</small></span><b class="'+(s.quantity<0?'negative-stock':'')+'">'+s.quantity.toLocaleString('es-PA',{maximumFractionDigits:3})+'</b></div>').join('') : '<small>El inventario aparecerá cuando registres compras.</small>'}
+          ${stockRows.length ? stockRows.map(s=>'<div class="store-spend"><span>'+safe(s.name)+' <small>'+safe(s.package)+' · '+safe(s.unit)+'</small></span><b class="'+(s.quantity<0?'negative-stock':'')+'">'+s.quantity.toLocaleString('es-PA',{maximumFractionDigits:3})+'</b></div>').join('') : '<small>El inventario aparecerá cuando registres compras.</small>'}
           <form id="inventory-adjust" class="purchase-form inventory-form">
             <label>Producto<select id="adjust-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label>Nombre<input id="adjust-name" maxlength="180" placeholder="Producto"></label>
+            <label>Presentación<input id="adjust-package" maxlength="180" placeholder="Ej. bolsa de 5 lb"></label>
+            <label>Unidad<input id="adjust-unit" maxlength="40" value="unidad"></label>
             <label>Tipo<select id="adjust-reason"><option value="consumption">Consumo</option><option value="spoilage">Merma / vencido</option><option value="correction">Corrección de inventario</option></select></label>
             <label>Cantidad<input id="adjust-quantity" type="number" step="0.001" min="0.001" required placeholder="Cantidad"></label>
             <button type="submit">Registrar movimiento</button>
@@ -198,7 +200,7 @@ export async function renderPurchases({ container, supabase, user }) {
     container.querySelector('#purchase-range')?.addEventListener('change', event => { rangeDays = event.target.value; render(); });
     container.querySelector('#adjust-product')?.addEventListener('change', event => {
       const p = products.find(x => x.id === event.target.value);
-      if (p) container.querySelector('#adjust-name').value = p.canonical_name;
+      if (p) { container.querySelector('#adjust-name').value = p.canonical_name; container.querySelector('#adjust-package').value = p.normalized_quantity && p.normalized_unit_name ? p.normalized_quantity + ' ' + p.normalized_unit_name : ''; }
     });
     container.querySelector('#inventory-adjust')?.addEventListener('submit', async event => {
       event.preventDefault();
@@ -209,7 +211,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const reason = container.querySelector('#adjust-reason').value;
       if (!itemName || !Number.isFinite(amount) || amount <= 0) return;
       const delta = reason === 'correction' ? amount : -amount;
-      const { error } = await supabase.from('inventory_adjustments').insert({ user_id: user.id, product_id: productId, item_name: itemName, quantity_delta: delta, reason });
+      const { error } = await supabase.from('inventory_adjustments').insert({ user_id: user.id, product_id: productId, item_name: itemName, package_description: container.querySelector('#adjust-package').value.trim() || null, unit: container.querySelector('#adjust-unit').value.trim() || 'unidad', quantity_delta: delta, reason });
       const message = container.querySelector('#adjust-message');
       if (error) { message.textContent = 'No se pudo guardar el movimiento de inventario.'; return; }
       message.textContent = 'Movimiento registrado.';
