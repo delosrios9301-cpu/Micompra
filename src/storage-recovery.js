@@ -66,6 +66,11 @@ export function collectLocalRecoveryCopies(storage = globalThis.localStorage) {
       if (raw !== null) copies[key] = JSON.parse(raw);
     } catch {}
   }
+  if (Object.keys(copies).length) {
+    const status = globalThis.document?.querySelector('#workspace-sync-status')
+      || globalThis.document?.querySelector('#connection small');
+    if (status) status.textContent = 'Hay copias de recuperación de datos anteriores. Descarga un respaldo desde Configuración para conservarlas.';
+  }
   return copies;
 }
 
