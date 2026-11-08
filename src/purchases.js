@@ -826,7 +826,7 @@ export async function renderPurchases({ container, supabase, user }) {
         panelId: '#barcode-admin-camera-panel',
         statusId: '#barcode-admin-status',
         stopButtonId: '#stop-admin-barcode',
-        onDetected: rawValue => {
+        onDetected: (rawValue, format = '') => {\n          barcodeAdminFormat = format || '';
           const code = normalizeProductBarcode(rawValue);
           const field = container.querySelector('#barcode-admin-value');
           const status = container.querySelector('#barcode-admin-status');
