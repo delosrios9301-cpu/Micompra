@@ -748,6 +748,11 @@ export async function renderPurchases({ container, supabase, user }) {
       const field = container.querySelector('#purchase-barcode');
       const status = container.querySelector('#barcode-scan-status');
       if (!code) return;
+      if (!isValidBarcodeChecksum(code, format)) {
+        if (status) status.textContent = 'El dígito de control del código ' + code + ' no es válido. Limpia el código y vuelve a escanearlo.';
+        stopBarcodeCamera();
+        return;
+      }
       if (field) field.value = code;
       const product = findProductByBarcode(products, code, barcodeMappings);
       if (product) {
@@ -768,6 +773,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const code = normalizeProductBarcode(container.querySelector('#purchase-barcode')?.value);
       if (!code) return;
       const status = container.querySelector('#barcode-scan-status');
+      if (!isValidBarcodeChecksum(code)) { if (status) status.textContent = 'El dígito de control del código numérico no es válido. Corrígelo o vuelve a escanearlo.'; return; }
       const product = findProductByBarcode(products, code, barcodeMappings);
       if (product) { await applyScannedBarcode(code); return; }
       if (status) status.textContent = 'Código leído, pero no encontrado en los códigos registrados del catálogo. Selecciona el producto manualmente.';
