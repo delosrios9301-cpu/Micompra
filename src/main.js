@@ -27,7 +27,7 @@ function shell() {
       <section class="hero"><p class="eyebrow">COMPRA CON INFORMACIÓN</p><h1>Tu compra, más inteligente.</h1><p>Organiza tu lista y compara precios publicados por supermercados.</p></section>
       <section id="connection" class="status"><i></i><div><strong>${configured ? 'Conectando con Mi Compra' : 'Configuración pendiente'}</strong><small>${configured ? 'Consultando catálogo y precios disponibles.' : 'Faltan las variables de conexión de Supabase.'}</small></div></section>
       <section class="section-head"><div><p class="eyebrow">COMPARADOR</p><h2>Busca un producto</h2></div></section>
-      <input id="search" class="search" type="search" placeholder="Ej. arroz, leche, pollo..." autocomplete="off" />
+      <input id="search" class="search" type="search" placeholder="Ej. arroz, leche, pollo..." autocomplete="off" /><small class="catalog-source-note">Catálogo ampliado con productos de referencia de la canasta básica de ACODECO. La referencia sirve para identificar productos y presentaciones; no representa precios actuales.</small>
       <div class="branch-filter"><label for="branch-filter">Sucursal para Super 99</label><select id="branch-filter"><option value="">Todas las sucursales</option></select><small>La sucursal elegida solo filtra los precios de Super 99; los demás supermercados siguen apareciendo.</small></div>
       <div id="results" class="results"><p class="empty">Escribe el nombre de un producto para consultar el catálogo.</p></div>
       <section class="section-head list-heading"><div><p class="eyebrow">TU CARRITO</p><h2>Lista de compras</h2></div><span id="list-label" class="muted">Inicia sesión para guardar</span></section>
@@ -79,13 +79,13 @@ async function compareProduct(id) {
   box.innerHTML = '<p class="empty">Consultando precios observados...</p>';
   const freshnessCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase.from('store_products')
-    .select('id,branch_id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified)')
+    .select('id,branch_id,source_product_name,package_description,source_product_url,supermarkets(name),supermarket_branches(name),price_observations(price,currency,regular_price,promotion_label,source_url,observed_at,is_verified,review_status)')
     .eq('product_id', id)
     .gte('price_observations.observed_at', freshnessCutoff)
     .limit(40);
   if (error) { box.innerHTML = '<p class="empty">No fue posible consultar los precios.</p>'; return; }
   const rows = (data || []).flatMap(item => (item.price_observations || []).map(price => ({...price, store:item.supermarkets?.name, branch:item.supermarket_branches?.name, branchId:item.branch_id, product:item.source_product_name, pack:item.package_description, productUrl:item.source_product_url})))
-    .filter(p => p.is_verified && (p.store !== 'Super 99' || !selectedBranchId || p.branchId === selectedBranchId)).sort((a,b) => Number(a.price)-Number(b.price));
+    .filter(p => p.is_verified && p.review_status === 'approved' && p.currency === 'USD' && Number(p.price) > 0 && new Date(p.observed_at).getTime() >= Date.now() - 86400000 && (p.store !== 'Super 99' || !selectedBranchId || p.branchId === selectedBranchId)).sort((a,b) => Number(a.price)-Number(b.price));
   if (!rows.length) { box.innerHTML = '<p class="empty">Este producto no tiene precios verificados de las últimas 24 horas. No mostraremos precios antiguos como si fueran actuales.</p>'; return; }
   box.innerHTML = rows.map((p,i) => `<article class="price-row"><div><strong>${safe(p.store || 'Tienda')}</strong><small>${safe(p.product)} · ${safe(p.pack || 'Presentación no especificada')}</small>${p.branch ? `<small>Sucursal: ${safe(p.branch)}</small>` : '<small>Sucursal no especificada</small>'}<small>Consultado: ${new Date(p.observed_at).toLocaleString('es-PA')}</small>${p.store === 'Super 99' ? '<small>Precio exclusivo de compra en línea; sin ITBMS. Los productos por kg pueden mostrar importes aproximados.</small>' : ''}</div><div class="price-value"><b>${money(p.price)}</b>${p.regular_price && Number(p.regular_price)>Number(p.price) ? `<del>${money(p.regular_price)}</del><em>${safe(p.promotion_label || "En oferta")}</em>` : ""}${i===0?'<em>Menor precio verificado</em>':''}<a href="${safe(p.source_url || p.productUrl || '#')}" target="_blank" rel="noreferrer">Ver fuente ↗</a></div></article>`).join('');
 }
