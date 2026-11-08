@@ -48,6 +48,48 @@ export function isValidBarcodeChecksum(value, format = '') {
   return true;
 }
 
+
+export function getCatalogDuplicateGroups(products = []) {
+  const normalizeName = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalizeUnit = value => {
+    const unit = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    if (/^(g|gr|gramo|gramos)$/.test(unit)) return 'g';
+    if (/^(kg|kilo|kilos|kilogramo|kilogramos)$/.test(unit)) return 'kg';
+    if (/^(lb|lbs|libra|libras)$/.test(unit)) return 'lb';
+    if (/^(l|lt|litro|litros)$/.test(unit)) return 'l';
+    if (/^(ml|mililitro|mililitros)$/.test(unit)) return 'ml';
+    return unit;
+  };
+  const packageKey = product => {
+    const quantity = Number(product.normalized_quantity);
+    const normalizedQuantity = Number.isFinite(quantity) ? String(quantity) : String(product.normalized_quantity || '').trim().toLowerCase();
+    return normalizedQuantity + '|' + normalizeUnit(product.normalized_unit_name);
+  };
+  const groups = new Map();
+  for (const product of products) {
+    const name = normalizeName(product.canonical_name);
+    if (!name) continue;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(product);
+  }
+  const exactDuplicates = [];
+  const presentationVariants = [];
+  for (const [name, matches] of groups) {
+    if (matches.length < 2) continue;
+    const byPackage = new Map();
+    for (const product of matches) {
+      const key = packageKey(product);
+      if (!byPackage.has(key)) byPackage.set(key, []);
+      byPackage.get(key).push(product);
+    }
+    for (const [key, entries] of byPackage) {
+      if (entries.length > 1) exactDuplicates.push({ name, packageKey: key, products: entries });
+    }
+    if (byPackage.size > 1) presentationVariants.push({ name, products: matches, packageGroups: [...byPackage.values()] });
+  }
+  return { exactDuplicates, presentationVariants };
+}
+
 export function getBarcodePackageVariants(products = [], productId) {
   const selected = products.find(product => product.id === productId);
   if (!selected) return [];
@@ -359,10 +401,23 @@ export async function renderPurchases({ container, supabase, user }) {
         }).join('') : '<small>Aún no hay códigos adicionales asociados.</small>'}</div>
       </section>` : '';
 
+
+    const catalogAudit = getCatalogDuplicateGroups(products);
+    const catalogAuditMarkup = canManageBarcodes
+      ? '<section class="purchase-card catalog-audit-panel"><div class="purchase-card-head"><div><strong>Revisión de duplicados del catálogo</strong><small>Se analizan ' + products.length + ' productos activos. Los tamaños distintos se conservan como presentaciones válidas.</small></div></div>' +
+        (catalogAudit.exactDuplicates.length
+          ? '<div class="catalog-audit-alert"><strong>Requieren revisión: ' + catalogAudit.exactDuplicates.length + ' grupo(s) con mismo nombre y presentación</strong>' + catalogAudit.exactDuplicates.map(group => '<div><b>' + safe(group.products[0].canonical_name) + '</b><small>' + group.products.map(item => safe([item.normalized_quantity, item.normalized_unit_name].filter(Boolean).join(' ') || 'Presentación no definida')).join(' · ') + '</small></div>').join('') + '</div>'
+          : '<p class="catalog-audit-ok">No se detectaron registros duplicados exactos por nombre y presentación.</p>') +
+        (catalogAudit.presentationVariants.length
+          ? '<div class="catalog-audit-variants"><strong>Productos con varias presentaciones (no son duplicados)</strong>' + catalogAudit.presentationVariants.map(group => '<div><b>' + safe(group.products[0].canonical_name) + '</b><small>' + [...new Set(group.products.map(item => [item.normalized_quantity, item.normalized_unit_name].filter(Boolean).join(' ') || 'Presentación no definida'))].map(safe).join(' · ') + '</small></div>').join('') + '</div>'
+          : '') +
+        '<small class="catalog-audit-footnote">La revisión es preventiva: no modifica, elimina ni combina registros. Antes de incorporar un producto nuevo, comprueba nombre, marca y presentación.</small></section>'
+      : '';
+
     container.innerHTML = `
       <section class="purchase-module">
         <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras. El historial y el CSV incluyen hasta las 300 compras más recientes.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
-        ${barcodeAdminMarkup}
+        ${barcodeAdminMarkup}${catalogAuditMarkup}
         <div class="purchase-kpis">
           <article><small>Gastado este mes</small><b>${money(totalMonth)}</b></article>
           <article><small>Gasto acumulado</small><b>${money(totalAll)}</b></article>
