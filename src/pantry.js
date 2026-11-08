@@ -90,6 +90,35 @@ export function readGuestPantry() {
   } catch { return []; }
 }
 
+export function addPurchasedItemsToGuestPantry(purchasedItems = []) {
+  const items = readGuestPantry();
+  let added = 0, updated = 0, skipped = 0;
+  for (const purchased of purchasedItems || []) {
+    const name = String(purchased?.name || purchased?.item_name || '').trim();
+    const quantity = Number(purchased?.qty ?? purchased?.quantity);
+    const unit = String(purchased?.priceUnit || purchased?.unit || 'unidad').trim();
+    if (!name || !Number.isFinite(quantity) || quantity <= 0 || !unit) { skipped++; continue; }
+    const existing = items.find(row =>
+      normalizePantryName(row.item_name) === normalizePantryName(name) &&
+      normalizeUnit(row.unit) === normalizeUnit(unit)
+    );
+    if (existing) {
+      existing.quantity = Number(existing.quantity || 0) + quantity;
+      existing.updated_at = new Date().toISOString();
+      updated++;
+    } else {
+      items.push({
+        id: globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2),
+        item_name: name, quantity, unit, minimum_quantity: 1, location: '',
+        created_at: new Date().toISOString()
+      });
+      added++;
+    }
+  }
+  saveGuestPantry(items);
+  return { added, updated, skipped };
+}
+
 function saveGuestPantry(items) {
   localStorage.setItem(GUEST_PANTRY_KEY, JSON.stringify(items));
 }
