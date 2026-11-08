@@ -121,6 +121,7 @@ export function addPurchasedItemsToGuestPantry(purchasedItems = []) {
 
 function saveGuestPantry(items) {
   localStorage.setItem(GUEST_PANTRY_KEY, JSON.stringify(items));
+  window.dispatchEvent(new CustomEvent('micompra:local-data-changed', { detail: { collection: 'pantry' } }));
 }
 
 function renderGuestPantry(container) {
