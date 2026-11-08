@@ -94,7 +94,8 @@ export async function renderPersonalPantry({ container, supabase, user }) {
   };
   $('#pantry-add-form').addEventListener('submit', async event => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const itemName = String(form.get('item_name') || '').trim(), unit = String(form.get('unit') || 'unidad').trim();
     const quantity = Number(form.get('quantity')), minimum = Number(form.get('minimum_quantity'));
     if (!itemName || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(minimum) || minimum < 0) { status('Revisa el nombre y las cantidades.', true); return; }
@@ -108,7 +109,7 @@ export async function renderPersonalPantry({ container, supabase, user }) {
     button.disabled = false;
     if (error || !data) { status('No se pudo guardar el artículo. Comprueba los datos e inténtalo de nuevo.', true); return; }
     items = [...items, data].sort((a,b) => a.item_name.localeCompare(b.item_name, 'es'));
-    event.currentTarget.reset(); event.currentTarget.elements.quantity.value = '1'; event.currentTarget.elements.minimum_quantity.value = '1';
+    formElement.reset(); formElement.elements.quantity.value = '1'; formElement.elements.minimum_quantity.value = '1';
     renderList(); status('Artículo guardado en tu despensa.');
   });
   $('#pantry-filter').addEventListener('change', renderList);
