@@ -1160,3 +1160,19 @@ header{width:100%;min-height:64px;height:auto;gap:14px;padding:12px max(var(--mc
 .settings-data-summary small,.settings-storage-note{color:var(--mc-muted);font-size:10px;line-height:1.5}
 .settings-secondary-button{min-height:42px;padding:9px 13px;border:1px solid var(--mc-border)!important;border-radius:10px;background:transparent!important;color:var(--mc-text)!important;font:700 12px 'DM Sans'}
 @media(max-width:520px){.settings-data-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Configuración: supermercados personalizados y tema oscuro */
+.settings-add-store{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;margin-top:14px;padding-top:14px;border-top:1px solid #e5ebe6}
+.settings-add-store label{display:grid;gap:7px;font-size:12px;font-weight:600;color:#52645a}
+.settings-add-store input{width:100%;min-width:0;padding:12px;border:1px solid #dce5de;border-radius:10px;font:inherit;background:#fff;color:#18332d}
+.settings-add-store button{min-height:42px;border:0;border-radius:10px;background:#245b45;color:#fff;padding:10px 14px;font-weight:700}
+.settings-add-store small{grid-column:1/-1;color:#39764e;font-size:11px}
+[data-theme="dark"]{color-scheme:dark;background:#111b18;color:#e6eee9}
+[data-theme="dark"] body{background:#111b18;color:#e6eee9}
+[data-theme="dark"] header,[data-theme="dark"] .status,[data-theme="dark"] .store,[data-theme="dark"] .product,[data-theme="dark"] .price-row,[data-theme="dark"] .cart-item,[data-theme="dark"] .settings-card,[data-theme="dark"] .more-group,[data-theme="dark"] .personal-product-card,[data-theme="dark"] .smart-kpis article,[data-theme="dark"] .smart-trend-card,[data-theme="dark"] .smart-compare-card,[data-theme="dark"] .store-total,[data-theme="dark"] .guest-grand-total{background:#1b2924;border-color:#34473d;color:#e6eee9}
+[data-theme="dark"] h1,[data-theme="dark"] h2,[data-theme="dark"] h3,[data-theme="dark"] strong,[data-theme="dark"] b{color:#e6eee9}
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background:#15211c;color:#e6eee9;border-color:#405449}
+[data-theme="dark"] .empty{background:#1b2924;border-color:#34473d;color:#b3c2b8}
+[data-theme="dark"] .settings-storage-note,[data-theme="dark"] .settings-card-title small,[data-theme="dark"] .settings-version{color:#b3c2b8}
+@media(prefers-color-scheme:dark){[data-theme="system"]{color-scheme:dark;background:#111b18;color:#e6eee9}[data-theme="system"] body{background:#111b18;color:#e6eee9}[data-theme="system"] header,[data-theme="system"] .status,[data-theme="system"] .store,[data-theme="system"] .product,[data-theme="system"] .price-row,[data-theme="system"] .cart-item,[data-theme="system"] .settings-card,[data-theme="system"] .more-group,[data-theme="system"] .personal-product-card,[data-theme="system"] .smart-kpis article,[data-theme="system"] .smart-trend-card,[data-theme="system"] .smart-compare-card,[data-theme="system"] .store-total,[data-theme="system"] .guest-grand-total{background:#1b2924;border-color:#34473d;color:#e6eee9}[data-theme="system"] h1,[data-theme="system"] h2,[data-theme="system"] h3,[data-theme="system"] strong,[data-theme="system"] b{color:#e6eee9}[data-theme="system"] input,[data-theme="system"] select,[data-theme="system"] textarea{background:#15211c;color:#e6eee9;border-color:#405449}[data-theme="system"] .empty{background:#1b2924;border-color:#34473d;color:#b3c2b8}}
+@media(max-width:520px){.settings-add-store{grid-template-columns:1fr}.settings-add-store button{width:100%}}
