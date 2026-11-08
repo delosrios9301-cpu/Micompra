@@ -9,7 +9,8 @@ const PERSONAL_KEYS = [
 
 export function readStoredArraySafely(key, storage = globalThis.localStorage) {
   if (!storage) return [];
-  const raw = storage.getItem(key);
+  let raw;
+  try { raw = storage.getItem(key); } catch { return []; }
   if (raw === null) return [];
   try {
     const value = JSON.parse(raw);
