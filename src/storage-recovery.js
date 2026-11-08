@@ -34,6 +34,29 @@ export function readStoredArraySafely(key, storage = globalThis.localStorage) {
   }
 }
 
+export function readStoredObjectSafely(key, fallback = {}, storage = globalThis.localStorage) {
+  if (!storage) return fallback;
+  let raw;
+  try { raw = storage.getItem(key); } catch { return fallback; }
+  if (raw === null) return fallback;
+  try {
+    const value = JSON.parse(raw);
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    throw new Error('El contenido no es un objeto.');
+  } catch {
+    try {
+      const recoveryKey = RECOVERY_PREFIX + key;
+      if (storage.getItem(recoveryKey) === null) {
+        storage.setItem(recoveryKey, JSON.stringify({ key, raw, savedAt: new Date().toISOString() }));
+      }
+    } catch {}
+    const status = globalThis.document?.querySelector('#workspace-sync-status')
+      || globalThis.document?.querySelector('#connection small');
+    if (status) status.textContent = 'Se detectó una preferencia local dañada. Se guardó una copia de recuperación; descarga un respaldo desde Configuración antes de continuar.';
+    return fallback;
+  }
+}
+
 export function collectLocalRecoveryCopies(storage = globalThis.localStorage) {
   if (!storage) return {};
   const copies = {};
