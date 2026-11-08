@@ -804,3 +804,10 @@ main{padding-top:22px}
  .smart-trend-top strong{font-size:12px}
  .smart-trend-values{gap:6px}
 }
+
+
+.smart-period-filter{display:grid;gap:6px;max-width:300px;color:#536b5b;font-size:11px;font-weight:700}
+.smart-period-filter select{min-height:40px;padding:8px 11px;border:1px solid #dfe9e1;border-radius:10px;background:#fff;color:#263b2e;font:12px 'DM Sans'}
+.smart-store-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.smart-store-trends .smart-trend-card{min-width:0}
+@media(max-width:600px){.smart-store-trends{grid-template-columns:1fr}.smart-period-filter{max-width:none}}
