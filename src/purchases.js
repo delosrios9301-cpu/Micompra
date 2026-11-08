@@ -14,7 +14,49 @@ export function buildPurchasesCsv(purchases = []) {
   return '\uFEFF' + rows.map(row => row.join(',')).join('\r\n');
 }
 
-const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+
+export function parseInvoiceMetadata(text, stores = [], branches = []) {
+  const source = String(text || '');
+  const normalized = source.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+  const compact = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const aliases = [
+    { match: /\\bsuper\\s*99\\b|\\bsupermercados?\\s*99\\b/, names: ['super 99'] },
+    { match: /\\bsuper\\s*xtra\\b|\\bsupermercados?\\s*xtra\\b/, names: ['xtra','super xtra'] },
+    { match: /\\b(?:supermercados?\\s+)?el\\s+rey\\b|\\bsm rey\\b/, names: ['el rey','rey'] },
+    { match: /\\briba\\s*smith\\b/, names: ['riba smith'] },
+    { match: /\\bel\\s*machetazo\\b/, names: ['el machetazo','machetazo'] },
+    { match: /\\bjumbo\\b/, names: ['jumbo'] }
+  ];
+  let store = null;
+  for (const alias of aliases) {
+    if (!alias.match.test(normalized)) continue;
+    store = stores.find(s => alias.names.some(n => compact(s.name).includes(n) || n.includes(compact(s.name))));
+    if (store) break;
+  }
+  let date = '';
+  const datePatterns = [
+    /\\b(20\\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\\d|3[01])\\b/,
+    /\\b(0?[1-9]|[12]\\d|3[01])[-/](0?[1-9]|1[0-2])[-/](20\\d{2})\\b/
+  ];
+  for (let i=0;i<datePatterns.length && !date;i++) {
+    const m = source.match(datePatterns[i]);
+    if (!m) continue;
+    const parts = i===0 ? [Number(m[1]),Number(m[2]),Number(m[3])] : [Number(m[3]),Number(m[2]),Number(m[1])];
+    const d = new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
+    if (d.getUTCFullYear()===parts[0] && d.getUTCMonth()===parts[1]-1 && d.getUTCDate()===parts[2]) date = parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
+  }
+  let reference = '';
+  const refMatch = source.match(/(?:factura(?:\\s+fiscal)?|comprobante|recibo|ticket)\\s*(?:n(?:[uú]mero|[º°.]?)|#|:|-)?\\s*[:#-]?\\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
+  if (refMatch) reference = refMatch[1].slice(0,120);
+  let branch = null;
+  if (store) {
+    const candidates = branches.filter(b => b.supermarket_id === store.id);
+    const byName = candidates.find(b => compact(normalized).includes(compact(b.name)));
+    if (byName) branch = byName;
+  }
+  return { supermarketId: store?.id || '', branchId: branch?.id || '', purchaseDate: date, receiptReference: reference };
+}
+\nconst money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const parseInvoiceDraft = (text, products) => {
@@ -156,6 +198,16 @@ export async function renderPurchases({ container, supabase, user }) {
             <small id="invoice-ocr-status" class="purchase-message" aria-live="polite"></small>
             <label for="invoice-ocr-text">Texto reconocido (editable)</label>
             <textarea id="invoice-ocr-text" rows="7" maxlength="12000" placeholder="El texto reconocido aparecerá aquí para que puedas revisarlo."></textarea>
+            <div class="invoice-metadata">
+              <strong>Datos detectados de la factura</strong>
+              <small>Son sugerencias. Comprueba cada dato y aplícalos sólo si coinciden con tu comprobante.</small>
+              <label>Supermercado<select id="invoice-meta-store"><option value="">No detectado</option>${storeOptions}</select></label>
+              <label>Sucursal<select id="invoice-meta-branch"><option value="">No especificada</option>${branchOptions}</select></label>
+              <label>Fecha de compra<input id="invoice-meta-date" type="date"></label>
+              <label>Número o referencia<input id="invoice-meta-reference" maxlength="120" placeholder="No detectado"></label>
+              <button type="button" class="secondary" id="apply-invoice-metadata">Aplicar datos a esta compra</button>
+              <small id="invoice-meta-status" class="purchase-message" aria-live="polite"></small>
+            </div>
             <button type="button" class="secondary" id="prepare-invoice-draft">Preparar artículos desde el texto</button>
             <div id="invoice-draft-list"></div>
             <button type="button" id="confirm-invoice-draft" disabled>Agregar artículos revisados a esta compra</button>
@@ -240,7 +292,19 @@ export async function renderPurchases({ container, supabase, user }) {
         });
         const recognized = String(result?.data?.text || '').trim();
         if (!recognized) { status.textContent = 'No se detectó texto legible. Prueba con una foto más nítida, bien iluminada y tomada de frente.'; return; }
+        
         output.value = recognized.slice(0, 12000);
+        const suggestions = parseInvoiceMetadata(recognized, stores, branches);
+        const metaStore = container.querySelector('#invoice-meta-store');
+        const metaBranch = container.querySelector('#invoice-meta-branch');
+        const metaDate = container.querySelector('#invoice-meta-date');
+        const metaRef = container.querySelector('#invoice-meta-reference');
+        if (metaStore) metaStore.value = suggestions.supermarketId;
+        if (metaBranch) metaBranch.value = suggestions.branchId;
+        if (metaDate) metaDate.value = suggestions.purchaseDate;
+        if (metaRef) metaRef.value = suggestions.receiptReference;
+        if (metaBranch) [...metaBranch.options].forEach(o => { if (o.value) o.hidden = !!metaStore?.value && o.dataset.store !== metaStore.value; });
+
         status.textContent = 'Lectura terminada. Revisa el texto y corrige errores antes de usarlo. No se ha guardado ningún artículo automáticamente.';
       } catch (error) {
         status.textContent = error?.message || 'No se pudo leer la factura. Puedes guardar el comprobante y registrar la compra manualmente.';
@@ -254,6 +318,45 @@ export async function renderPurchases({ container, supabase, user }) {
       host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>Precio unitario USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
     };
+
+    const metaStore = container.querySelector('#invoice-meta-store');
+    const metaBranch = container.querySelector('#invoice-meta-branch');
+    const filterMetaBranches = () => {
+      const selected = metaStore?.value || '';
+      [...(metaBranch?.options || [])].forEach(option => {
+        if (!option.value) return;
+        option.hidden = !!selected && option.dataset.store !== selected;
+        if (option.hidden && option.selected) metaBranch.value = '';
+      });
+    };
+    metaStore?.addEventListener('change', filterMetaBranches);
+    filterMetaBranches();
+    container.querySelector('#apply-invoice-metadata')?.addEventListener('click', async () => {
+      const status = container.querySelector('#invoice-meta-status');
+      const supermarketId = metaStore?.value || '';
+      const branchId = metaBranch?.value || '';
+      const selectedBranch = branches.find(b => b.id === branchId);
+      if (!activePurchaseId) return;
+      if (selectedBranch && selectedBranch.supermarket_id !== supermarketId) {
+        status.textContent = 'La sucursal seleccionada no corresponde al supermercado. Corrige la selección.';
+        return;
+      }
+      const payload = {
+        supermarket_id: supermarketId || purchases.find(p => p.id === activePurchaseId)?.supermarket_id,
+        branch_id: branchId || null
+      };
+      const dateValue = container.querySelector('#invoice-meta-date')?.value || '';
+      const referenceValue = container.querySelector('#invoice-meta-reference')?.value.trim() || '';
+      if (dateValue) payload.purchase_date = dateValue;
+      payload.receipt_reference = referenceValue || null;
+      if (!payload.supermarket_id) { status.textContent = 'Selecciona un supermercado antes de aplicar los datos.'; return; }
+      status.textContent = 'Aplicando datos confirmados…';
+      const { error } = await supabase.from('purchase_records').update(payload).eq('id', activePurchaseId).eq('user_id', user.id);
+      if (error) { status.textContent = 'No se pudieron aplicar los datos. Revisa los permisos e inténtalo de nuevo.'; return; }
+      status.textContent = 'Datos de factura aplicados a esta compra.';
+      await refresh();
+    });
+
     container.querySelector('#prepare-invoice-draft')?.addEventListener('click', () => {
       invoiceDraft = parseInvoiceDraft(container.querySelector('#invoice-ocr-text')?.value || '', products);
       drawInvoiceDraft();
