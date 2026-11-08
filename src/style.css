@@ -501,3 +501,53 @@ main{max-width:1120px;padding:28px 24px 54px}.hero{padding:24px 26px;margin:14px
 .guest-cart-live-total>span{font-size:12px;font-weight:700;color:#496457}
 .guest-cart-live-total>small:last-child{flex-basis:100%;font-size:10px;color:#728277}
 @media(max-width:520px){.guest-cart-live-total{padding:13px;gap:7px}.guest-cart-live-total strong{font-size:25px}.guest-cart-live-total>span{font-size:11px}}
+
+
+/* Rediseño de estructura inspirado en la referencia visual de Mi Compra */
+:root{--mc-bg:#f4f7f3;--mc-card:#fff;--mc-green:#238653;--mc-green-dark:#176b43;--mc-ink:#193329;--mc-muted:#75847b;--mc-line:#e4ece5}
+body{background:#f4f7f3}
+header{padding-inline:max(3vw,24px)}
+.brand{font-size:23px}
+main{max-width:1440px;display:grid;grid-template-columns:224px minmax(0,1fr);column-gap:28px;align-items:start;padding:25px 30px 48px}
+.app-navigation{grid-column:1;grid-row:1;position:sticky;top:84px;display:flex;flex-direction:column;gap:7px;padding:12px;margin:0;border:1px solid #e4ece5;border-radius:20px;background:#fff;box-shadow:0 8px 28px rgba(28,67,43,.055)}
+.app-nav-item{display:grid;grid-template-columns:36px minmax(0,1fr);grid-template-rows:1fr;justify-items:start;align-items:center;gap:10px;min-height:54px;padding:8px 12px;border-radius:13px;text-align:left;color:#68796e}
+.app-nav-item>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:#f0f5f1;color:#4d765b;font-size:20px}
+.app-nav-item small{font-size:13px;font-weight:700}
+.app-nav-item.active{background:#eaf5ed;border-color:#d9ecdf;color:#176b43}
+.app-nav-item.active>span{background:#d9eddf;color:#176b43}
+.app-views{grid-column:2;grid-row:1;min-width:0}
+.app-view{min-height:0}
+.app-view[data-view="inicio"] .hero{padding:30px 32px;margin:0 0 18px;border-radius:24px}
+.app-view[data-view="inicio"] .hero h1{font-size:clamp(30px,3.5vw,44px)}
+.home-shortcuts{margin-top:22px}
+.home-shortcuts-heading{margin-bottom:13px}
+.home-shortcuts-heading h2{margin:0;font:800 21px Manrope;color:var(--mc-ink);letter-spacing:-.5px}
+.home-shortcuts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.home-shortcuts-grid button{display:grid;grid-template-columns:44px minmax(0,1fr) 16px;align-items:center;gap:12px;min-width:0;min-height:82px;padding:14px;border:1px solid var(--mc-line);border-radius:16px;background:#fff;text-align:left;color:var(--mc-ink);box-shadow:0 4px 15px rgba(26,61,39,.035);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.home-shortcuts-grid button:active{transform:scale(.99)}
+.home-shortcut-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#eaf5ed;color:#23764a;font-size:23px;font-weight:700}
+.home-shortcuts-grid button>span:nth-child(2){display:grid;gap:4px;min-width:0}
+.home-shortcuts-grid strong{font:700 14px Manrope}
+.home-shortcuts-grid small{font-size:11px;line-height:1.4;color:var(--mc-muted)}
+.home-shortcuts-grid button>b{font-size:22px;color:#9aaba0}
+.app-view[data-view="comprar"] .guest-cart-live-total{position:relative}
+.app-view[data-view="comprar"] .section-head h2{font-size:22px}
+.app-view[data-view="comparar"] .list-comparison{margin-top:0}
+@media(min-width:1000px){.home-shortcuts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.app-view[data-view="inicio"] .status{max-width:100%}}
+@media(max-width:760px){
+ main{display:block;max-width:680px;padding:14px 14px 106px}
+ .app-navigation{position:fixed;top:auto;bottom:0;left:0;right:0;z-index:100;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;margin:0;padding:8px max(8px,env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));border:0;border-top:1px solid #e4ece5;border-radius:18px 18px 0 0;background:rgba(255,255,255,.97);box-shadow:0 -7px 24px rgba(27,60,39,.09);backdrop-filter:blur(18px)
+ }
+ .app-nav-item{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;min-height:51px;padding:5px 2px;border-radius:12px}
+ .app-nav-item>span{width:auto;height:auto;background:transparent;font-size:20px}
+ .app-nav-item.active>span{background:transparent}
+ .app-nav-item small{font-size:9px;line-height:1.2}
+ .app-views{min-width:0}
+ .app-view[data-view="inicio"] .hero{padding:21px 19px;margin:0 0 14px;border-radius:19px}
+ .home-shortcuts{margin-top:18px}
+ .home-shortcuts-grid{grid-template-columns:1fr;gap:9px}
+ .home-shortcuts-grid button{min-height:72px;padding:11px 12px;border-radius:14px}
+ .home-shortcut-icon{width:40px;height:40px;border-radius:12px}
+}
+@media(max-width:360px){.app-nav-item small{font-size:8px}.app-navigation{padding-inline:5px}.home-shortcuts-grid button{grid-template-columns:38px minmax(0,1fr) 12px;gap:9px}}
+@media(prefers-reduced-motion:reduce){.home-shortcuts-grid button{transition:none}}
