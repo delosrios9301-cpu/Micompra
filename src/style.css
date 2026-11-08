@@ -424,3 +424,19 @@
 .auth-entry:not(.auth-gate)>.signed{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border:1px solid #e0e9e2;border-radius:14px;background:#fff}
 .auth-entry:not(.auth-gate)>.import-panel{margin-top:12px}
 @media(max-width:520px){.auth-entry:not(.auth-gate){padding:0 16px}}
+
+
+/* Carrito temporal por supermercado, con precios introducidos por el usuario */
+.guest-cart-note{margin:8px 0 12px;color:#68796f;font-size:12px;line-height:1.5}
+.guest-add-form{display:grid;gap:10px;padding:14px;border:1px solid #dce5de;border-radius:12px;background:#f8fbf8}
+.guest-add-form label{display:grid;gap:5px;font-size:11px;font-weight:700;color:#496457;min-width:0}
+.guest-add-form input,.guest-add-form select{width:100%;min-width:0;padding:11px;border:1px solid #dce5de;border-radius:8px;background:#fff;color:#18332d;font:13px 'DM Sans'}
+.guest-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.guest-add-form>button{min-height:44px;border:0;border-radius:9px;background:#245b45;color:#fff;font:700 13px 'DM Sans'}
+.guest-add-form>small{font-size:10px;color:#617669}
+.guest-cart-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px 12px;margin:8px 0;border:1px solid #e3eae5;border-radius:10px;background:#fff}
+.guest-cart-item>div{display:grid;gap:4px;min-width:0}.guest-cart-item strong{font-size:13px;overflow-wrap:anywhere}.guest-cart-item small{font-size:10px;color:#78877f}.guest-cart-item>b{font:700 13px Manrope;white-space:nowrap}.guest-cart-item button{border:1px solid #dce5de;border-radius:7px;background:#fff;color:#8c514a;padding:4px 9px;font-size:17px}
+.guest-grand-total{display:grid;gap:5px;padding:14px;margin:12px 0;border-radius:11px;background:#edf5ef}
+.guest-grand-total small,.guest-grand-total span{font-size:11px;color:#5d7666}.guest-grand-total b{font:800 27px Manrope;color:#245b45}
+#guest-clear-cart{margin-top:10px}
+@media(max-width:520px){.guest-fields{grid-template-columns:1fr 1fr}.guest-add-form{padding:11px}.guest-cart-item{grid-template-columns:minmax(0,1fr) auto auto;gap:7px;padding:10px}.guest-cart-item>b{font-size:12px}}
