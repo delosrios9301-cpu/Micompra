@@ -438,8 +438,16 @@ async function start() {
   const { data } = await supabase.auth.getUser();
   user = data.user;
   message('Conexión con Supabase lista. Los precios se mostrarán únicamente si están verificados.');
-  supabase.auth.onAuthStateChange((_event, session) => {
-    user = session?.user || null;
+  supabase.auth.onAuthStateChange((event, session) => {
+    // INITIAL_SESSION ya queda cubierto por getUser() y el render inicial de start().
+    // TOKEN_REFRESHED no debe reconstruir los módulos ni vaciar visualmente los datos.
+    if (!['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) return;
+    const nextUser = session?.user || null;
+    const previousUserId = user?.id || null;
+    const nextUserId = nextUser?.id || null;
+    if (event === 'SIGNED_IN' && previousUserId === nextUserId) return;
+    if (event === 'SIGNED_OUT' && previousUserId === null) return;
+    user = nextUser;
     queueMicrotask(async () => {
       await renderAuth();
       await loadList();
