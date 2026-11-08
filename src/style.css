@@ -26,3 +26,5 @@
 .combo-total{padding:14px;border-top:1px solid #e6ece7}.combo-total>b{display:block;font:800 22px Manrope;color:#245b45;margin:5px 0}.combo-total>small{display:block;font-size:11px;color:#64766e;margin:4px 0}
 .combo-total ul{list-style:none;padding:0;margin:10px 0 0}.combo-total li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #edf1ed;font-size:11px}.combo-total li span:last-child{text-align:right;color:#526b5c}.comparison-footnote{margin-top:12px}
 @media(max-width:520px){.add-row{flex-wrap:wrap}.add-row select{flex-basis:100%;width:100%}.add-row input[type=number]{flex:1;max-width:none}.list-comparison{padding:12px}.combo-total li{align-items:flex-start}}
+
+.catalog-source-note{display:block;margin:-8px 0 14px;color:#74837a;font-size:11px;line-height:1.5}
