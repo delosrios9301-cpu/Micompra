@@ -122,6 +122,14 @@ export async function renderPurchases({ container, supabase, user }) {
             <small id="receipt-message" class="purchase-message" aria-live="polite"></small>
             ${p.receipt_path ? '<button type="button" class="secondary" data-receipt-path="' + safe(p.receipt_path) + '">Ver comprobante guardado</button>' : ''}
           </div>
+          <section class="invoice-ocr">
+            <strong>Lectura preliminar de factura</strong>
+            <small>Procesamiento local de imágenes en este navegador. La foto no se envía a un servicio de OCR. Revisa y corrige el texto detectado; todavía no se registran artículos automáticamente.</small>
+            <button type="button" class="secondary" id="read-purchase-invoice">Leer factura desde foto</button>
+            <small id="invoice-ocr-status" class="purchase-message" aria-live="polite"></small>
+            <label for="invoice-ocr-text">Texto reconocido (editable)</label>
+            <textarea id="invoice-ocr-text" rows="7" maxlength="12000" placeholder="El texto reconocido aparecerá aquí para que puedas revisarlo."></textarea>
+          </section>
           <form id="purchase-add-item" class="purchase-form item-form">
             <label>Producto del catálogo<select id="purchase-product"><option value="">Artículo libre</option>${productOptions}</select></label>
             <label>Nombre del artículo<input id="purchase-item-name" maxlength="180" placeholder="Ej. arroz blanco"></label>
@@ -171,6 +179,42 @@ export async function renderPurchases({ container, supabase, user }) {
       link.href = url;
       link.download = 'mi-compra-gastos-' + localDate() + '.csv';
       document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    });
+
+    container.querySelector('#read-purchase-invoice')?.addEventListener('click', async () => {
+      const file = container.querySelector('#purchase-receipt-file')?.files?.[0];
+      const status = container.querySelector('#invoice-ocr-status');
+      const output = container.querySelector('#invoice-ocr-text');
+      if (!file || !['image/jpeg','image/png','image/webp'].includes(file.type)) {
+        status.textContent = 'Selecciona una foto JPG, PNG o WebP. Los PDF se pueden guardar, pero esta lectura preliminar acepta imágenes.';
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) { status.textContent = 'La imagen supera el límite de 8 MB.'; return; }
+      status.textContent = 'Preparando el motor de lectura en este dispositivo…';
+      try {
+        if (!window.Tesseract) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+            script.async = true;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('No se pudo cargar el motor OCR. Comprueba tu conexión e inténtalo de nuevo.'));
+            document.head.appendChild(script);
+          });
+        }
+        status.textContent = 'Leyendo la factura. En teléfonos puede tardar un poco…';
+        const result = await window.Tesseract.recognize(file, 'spa+eng', {
+          logger: progress => {
+            if (progress.status === 'recognizing text' && Number.isFinite(progress.progress)) status.textContent = 'Reconociendo texto: ' + Math.round(progress.progress * 100) + '%';
+          }
+        });
+        const recognized = String(result?.data?.text || '').trim();
+        if (!recognized) { status.textContent = 'No se detectó texto legible. Prueba con una foto más nítida, bien iluminada y tomada de frente.'; return; }
+        output.value = recognized.slice(0, 12000);
+        status.textContent = 'Lectura terminada. Revisa el texto y corrige errores antes de usarlo. No se ha guardado ningún artículo automáticamente.';
+      } catch (error) {
+        status.textContent = error?.message || 'No se pudo leer la factura. Puedes guardar el comprobante y registrar la compra manualmente.';
+      }
     });
 
     container.querySelector('#upload-purchase-receipt')?.addEventListener('click', async () => {
