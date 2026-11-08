@@ -21,6 +21,9 @@ const stores = [
   { name: 'Machetazo', url: 'https://www.elmachetazo.com/supermercado', sourceLabel: 'Catálogo público · precios aún no validados' },
   { name: 'Jumbo', url: 'https://jumbo.com.pa/497-alimentos-frescos-y-congelados', sourceLabel: 'Catálogo web · fecha y sucursal por validar' }
 ];
+// Acceso temporal de consulta mientras se termina de configurar el correo de autenticación.
+// Mantiene RLS intacto: no abre datos personales ni crea usuarios anónimos.
+const TEMPORARY_GUEST_MODE = true;
 let user = null;
 let passwordRecovery = false;
 let activeList = null;
@@ -105,6 +108,11 @@ async function compareProduct(id) {
 
 async function renderAuth() {
   const box = document.querySelector('#auth');
+  if (TEMPORARY_GUEST_MODE && !user) {
+    box.classList.remove('auth-gate');
+    box.innerHTML = '<section class="guest-access"><strong>Acceso temporal de consulta</strong><p>El comparador y el catálogo están disponibles sin iniciar sesión mientras terminamos la configuración.</p><small>Por seguridad, las listas personales, compras, gastos y despensa permanecerán protegidos y no estarán disponibles en este modo. Tus datos existentes no se eliminan.</small></section>';
+    return;
+  }
   if (!supabase) {
     box.classList.add('auth-gate');
     box.innerHTML = '<section class="login-card"><div class="login-mark">Mi<span>Compra</span></div><p class="eyebrow">ACCESO SEGURO</p><h1>Bienvenido</h1><p class="login-intro">Inicia sesión para entrar a tus listas, compras y despensa.</p><p class="login-message">La conexión segura todavía no está configurada. Inténtalo más tarde.</p></section>';
@@ -451,7 +459,7 @@ async function renderListComparison(items) {
 }
 async function loadList() {
   const label=document.querySelector('#list-label'),cart=document.querySelector('#cart');
-  if(!user){label.textContent='Inicia sesión para guardar';cart.innerHTML='<p class="empty">Inicia sesión para crear y sincronizar tu lista.</p>';document.querySelector('#list-comparison').innerHTML='<p class="empty">Inicia sesión para comparar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
+  if(!user){label.textContent='Guardado personal temporalmente pausado';cart.innerHTML='<p class="empty">El acceso temporal permite consultar el catálogo y comparar precios. Para guardar listas y sincronizarlas entre dispositivos, reactivaremos el acceso privado cuando terminemos la configuración.</p>';document.querySelector('#list-comparison').innerHTML='<p class="empty">La comparación de listas guardadas estará disponible al reactivar el acceso privado.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
   let {data:lists,error}=await supabase.from('shopping_lists').select('id,name').eq('user_id',user.id).order('created_at',{ascending:false}).limit(1);
   if(error){cart.innerHTML='<p class="empty">No se pudo cargar tu lista.</p>';document.querySelector('#weekly-plan-module').innerHTML='';return;}
   if(!lists?.length){const created=await supabase.from('shopping_lists').insert({user_id:user.id,name:'Mi lista'}).select('id,name').single();if(created.error){cart.innerHTML='<p class="empty">No se pudo crear la lista.</p>';return;}activeList=created.data;}else activeList=lists[0];
