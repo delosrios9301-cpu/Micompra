@@ -94,12 +94,12 @@ function shell() {
     nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.openView===id;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
     window.scrollTo({top:0,behavior:'smooth'});
   };
-  nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button)openView(button.dataset.openView);});
+  nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button){openView(button.dataset.openView);if(button.dataset.openView==='comparar')renderManualComparisonDashboard();if(button.dataset.openView==='comprar'){searchProducts(document.querySelector('#search')?.value||'');renderGuestList();}}});
   shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-view]');if(button)openView(button.dataset.homeView);});
   shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-category]');if(!button)return;const term=button.dataset.homeCategory;openView('comprar');const search=document.querySelector('#search');if(search){search.value=term;searchProducts(term);}});
   window.addEventListener('hashchange',()=>{});
   document.querySelector('#branch-filter').addEventListener('change', e => { selectedBranchId = e.target.value; const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); if (user) loadList(); });
-  document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); if(term) searchProducts(term); document.querySelector('#branch-filter').closest('.branch-filter').hidden=document.querySelector('#store-filter').value!=='Super 99'; });
+  document.querySelector('#store-filter').addEventListener('change', () => { const term=document.querySelector('#search')?.value.trim(); searchProducts(term||''); const manualStore=document.querySelector('#guest-store');if(manualStore)manualStore.value=document.querySelector('#store-filter').value||guestStores[0];renderGuestList(); });
   document.querySelector('#search').addEventListener('input', e => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchProducts(e.target.value.trim()), 300);
@@ -745,6 +745,18 @@ function searchProducts(term){
   const form=document.querySelector('#personal-product-form');if(form)form.querySelector('[name="store"]').value=storeName;
  });
 }
+
+function renderManualComparisonDashboard(){
+ const panel=document.querySelector('#list-comparison');if(!panel)return;
+ const products=readPersonalCatalog(),groups=new Map();
+ products.forEach(p=>{const k=(p.name||'').trim().toLocaleLowerCase('es');if(!groups.has(k))groups.set(k,[]);groups.get(k).push(p);});
+ const comparable=[...groups.values()].filter(g=>g.length>1&&g.filter(p=>p.price!==null&&p.price!==undefined&&Number(p.price)>0).length>1);
+ const cheapest=comparable.reduce((sum,g)=>sum+Math.min(...g.filter(p=>Number(p.price)>0).map(p=>Number(p.price))),0);
+ const storeTotals=guestStores.map(store=>({store,items:products.filter(p=>p.store===store),total:products.filter(p=>p.store===store&&p.price!==null&&Number(p.price)>0).reduce((n,p)=>n+Number(p.price),0)})).filter(x=>x.items.length);
+ panel.innerHTML='<section class="smart-dashboard"><div class="smart-dashboard-heading"><p class="eyebrow">ANÁLISIS DE TUS PRECIOS</p><h2>Comparador inteligente</h2><p>Resultados basados exclusivamente en los productos y precios que tú registraste.</p></div><div class="smart-kpis"><article><small>Productos registrados</small><b>'+products.length+'</b></article><article><small>Comparaciones posibles</small><b>'+comparable.length+'</b></article><article><small>Referencia de menor costo*</small><b>'+money(cheapest)+'</b></article></div><h3>Resumen por supermercado</h3>'+(storeTotals.length?storeTotals.map(s=>'<article class="smart-store-row"><div><strong>'+safe(s.store)+'</strong><small>'+s.items.length+' producto(s) registrados · '+s.items.filter(p=>p.price!==null&&Number(p.price)>0).length+' con precio</small></div><b>'+money(s.total)+'</b></article>').join(''):'<p class="empty">Agrega productos a tu catálogo para crear el dashboard.</p>')+'<h3>Productos con comparación entre tiendas</h3>'+(comparable.length?comparable.map(g=>{const sorted=g.filter(p=>p.price!==null&&Number(p.price)>0).sort((a,b)=>Number(a.price)-Number(b.price));return '<article class="smart-compare-card"><strong>'+safe(g[0].name)+'</strong>'+sorted.map((p,i)=>'<div><span>'+safe(p.store)+(i===0?' · más económico':'')+'</span><b>'+money(p.price)+'</b></div>' ).join('')+'</article>';}).join(''):'<p class="empty">Para comparar, registra el mismo producto y presentación en al menos dos supermercados.</p>')+'<small class="smart-dashboard-note">* Suma referencial de los precios mínimos de cada grupo comparable; no representa una compra completa ni incluye productos sin precio.</small><button type="button" id="smart-dashboard-catalog">Administrar productos y precios</button></section>';
+ panel.querySelector('#smart-dashboard-catalog')?.addEventListener('click',()=>document.querySelector('[data-open-view="catalogo"]')?.click());
+}
+
 function compareProduct(){
  const box=document.querySelector('#results');if(!box)return;
  const all=readPersonalCatalog();
