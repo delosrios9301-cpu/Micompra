@@ -372,3 +372,11 @@
 .shopping-reminder-overdue>strong{font-size:11px;color:#9a542b}
 .shopping-reminders-empty{margin:0;font-size:11px;color:#78877f;line-height:1.5}
 @media(max-width:520px){.shopping-reminders{padding:10px}.shopping-reminder-groups{grid-template-columns:1fr}}
+
+
+/* Prioridad de artículos de la lista personal */
+.cart-priority{flex:0 0 104px;width:104px;min-width:0;min-height:32px;padding:5px 6px;border:1px solid #dce5de;border-radius:7px;background:#fff;color:#496457;font:11px 'DM Sans'}
+.cart-item.priority-urgent{border-left:4px solid #bd5147}.cart-item.priority-normal{border-left:4px solid #83a98c}.cart-item.priority-low{border-left:4px solid #aeb8b1}
+.cart-item.priority-urgent .cart-priority{border-color:#e3b6b1;color:#9d3d35;background:#fff8f7}
+@media(max-width:720px){.cart-item{flex-wrap:wrap}.cart-item label{flex:1 1 calc(100% - 35px)}.cart-priority{order:2;flex:1 1 105px;width:auto}.cart-plan-date{order:3;flex:1 1 125px;width:auto}.cart-item .remove{order:4}}
+@media(max-width:380px){.cart-priority{flex-basis:100%}.cart-plan-date{flex-basis:100%;width:100%}}
