@@ -79,6 +79,19 @@ export async function renderWeeklyPlan({ container, supabase, user, items = [], 
   section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="shopping-calendar"><div class="shopping-calendar-heading"><div><h4>Calendario de compras</h4><small>Asigna una fecha a cada artículo desde tu lista.</small></div><div class="shopping-calendar-nav"><button type="button" class="calendar-prev" aria-label="Semana anterior">‹</button><button type="button" class="calendar-next" aria-label="Semana siguiente">›</button></div></div><div class="shopping-calendar-grid" id="shopping-calendar-grid"></div><p class="shopping-calendar-unassigned" id="shopping-calendar-unassigned"></p></div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
+  let weekOffset = 0;
+  const renderCalendar = () => {
+    const days = getCalendarWeek(new Date(), weekOffset);
+    const grouped = groupShoppingItemsByDate(items, days);
+    $('#weekly-plan-range').textContent = `Semana del ${days[0].label} al ${days[6].label}`;
+    $('#shopping-calendar-grid').innerHTML = grouped.map(day => `<article class="shopping-calendar-day"><div class="shopping-calendar-day-title"><strong>${safe(day.day)}</strong><small>${safe(day.label)}</small></div>${day.items.length ? '<ul>' + day.items.map(item => `<li class="${item.checked ? 'is-done' : ''}">${safe(item.item_name)} <small>× ${safe(item.quantity)} ${safe(item.unit || 'unidades')}</small></li>`).join('') + '</ul>' : '<p>Sin compras</p>'}</article>`).join('');
+    const visibleDates = new Set(days.map(day => day.date));
+    const unassigned = items.filter(item => !item.planned_for || !visibleDates.has(item.planned_for));
+    $('#shopping-calendar-unassigned').textContent = unassigned.length ? `${unassigned.length} artículo(s) sin fecha asignada o programados fuera de esta semana. Usa el selector de fecha junto a cada producto en tu lista.` : 'Todos los artículos de la lista están programados para esta semana.';
+  };
+  $('.calendar-prev').addEventListener('click', () => { weekOffset -= 1; renderCalendar(); });
+  $('.calendar-next').addEventListener('click', () => { weekOffset += 1; renderCalendar(); });
+  renderCalendar();
   const refresh = async () => {
     $('.weekly-plan-refresh').disabled = true;
     const [pantryResult, priceResult, budgetResult, purchaseResult] = await Promise.all([
