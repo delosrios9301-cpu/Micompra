@@ -181,8 +181,9 @@ function renderGuestPantry(container) {
   render();
 }
 
-export async function renderPersonalPantry({ container, supabase, user }) {\n  if (!container) return;\n  if (!supabase || !user) { renderGuestPantry(container); return; }
-  if (!container || !supabase || !user) return;
+export async function renderPersonalPantry({ container, supabase, user }) {
+  if (!container) return;
+  if (!supabase || !user) { renderGuestPantry(container); return; }
   container.querySelector('.personal-pantry')?.remove();
   const section = document.createElement('section');
   section.className = 'personal-pantry';
