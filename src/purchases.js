@@ -46,7 +46,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
     if (d.getUTCFullYear()===parts[0] && d.getUTCMonth()===parts[1]-1 && d.getUTCDate()===parts[2]) date = parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
   }
   let reference = '';
-  const refMatch = source.match(/(?:factura(?:\s+fiscal)?|comprobante|recibo|ticket)\s*(?:n(?:[uú]mero|[º°.]?)|#|:|-)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
+  const refMatch = source.match(/(?:factura(?:\s+fiscal)?|comprobante|recibo|ticket)\s*(?:n(?:o|[uú]m(?:ero)?|[º°.]?)|#|:|-)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{3,})/i);
   if (refMatch) reference = refMatch[1].slice(0,120);
   let branch = null;
   if (store) {
