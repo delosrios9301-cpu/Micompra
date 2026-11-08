@@ -161,7 +161,7 @@ export async function renderPersonalPantry({ container, supabase, user }) {
           if (!pantryItem) throw new Error('Artículo no encontrado');
           const { data: products, error: catalogError } = await supabase.from('products')
             .select('id,canonical_name,normalized_quantity,normalized_unit_name,active')
-            .eq('active', true).ilike('canonical_name', pantryItem.item_name).limit(30);
+            .eq('active', true).limit(1000);
           if (catalogError) throw catalogError;
           const match = findPantryCatalogMatch(pantryItem, products || []);
           const duplicate = findPantryListDuplicate(listItems, pantryItem);
