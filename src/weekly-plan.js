@@ -2,6 +2,30 @@ const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', curre
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+
+function localDateKey(date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
+
+export function getShoppingReminders(items = [], today = new Date(), daysAhead = 7) {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayKey = localDateKey(start);
+  const end = new Date(start);
+  end.setDate(end.getDate() + Math.max(0, Math.min(31, Number(daysAhead) || 0)));
+  const endKey = localDateKey(end);
+  const pending = (items || []).filter(item => !item.checked && item.planned_for);
+  const overdue = pending.filter(item => item.planned_for < todayKey);
+  const dates = [...new Set(pending.filter(item => item.planned_for >= todayKey && item.planned_for <= endKey).map(item => item.planned_for))].sort();
+  const upcoming = dates.map(date => {
+    const [year, month, day] = date.split('-').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    const offset = Math.round((parsed - start) / 86400000);
+    const label = offset === 0 ? 'Hoy' : offset === 1 ? 'Mañana' : new Intl.DateTimeFormat('es-PA', { weekday: 'long' }).format(parsed);
+    return { date, label, dateLabel: new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(parsed), items: pending.filter(item => item.planned_for === date) };
+  });
+  return { overdue, upcoming, total: overdue.length + upcoming.reduce((sum, group) => sum + group.items.length, 0) };
+}
+
 export function getWeeklyRange(today = new Date()) {
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
@@ -76,10 +100,21 @@ export async function renderWeeklyPlan({ container, supabase, user, items = [], 
   container.querySelector('.weekly-plan')?.remove();
   const section = document.createElement('section');
   section.className = 'weekly-plan';
-  section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="shopping-calendar"><div class="shopping-calendar-heading"><div><h4>Calendario de compras</h4><small>Asigna una fecha a cada artículo desde tu lista.</small></div><div class="shopping-calendar-nav"><button type="button" class="calendar-prev" aria-label="Semana anterior">‹</button><button type="button" class="calendar-next" aria-label="Semana siguiente">›</button></div></div><div class="shopping-calendar-grid" id="shopping-calendar-grid"></div><p class="shopping-calendar-unassigned" id="shopping-calendar-unassigned"></p></div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
+  section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="shopping-reminders" id="shopping-reminders" aria-live="polite"></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="shopping-calendar"><div class="shopping-calendar-heading"><div><h4>Calendario de compras</h4><small>Asigna una fecha a cada artículo desde tu lista.</small></div><div class="shopping-calendar-nav"><button type="button" class="calendar-prev" aria-label="Semana anterior">‹</button><button type="button" class="calendar-next" aria-label="Semana siguiente">›</button></div></div><div class="shopping-calendar-grid" id="shopping-calendar-grid"></div><p class="shopping-calendar-unassigned" id="shopping-calendar-unassigned"></p></div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
   let weekOffset = 0;
+  const renderReminders = () => {
+    const reminders = getShoppingReminders(items, new Date(), 7);
+    const overdue = reminders.overdue.length
+      ? '<div class="shopping-reminder-overdue"><strong>Compras pendientes con fecha anterior</strong><ul>' + reminders.overdue.map(item => '<li>' + safe(item.item_name) + ' <small>· ' + safe(item.planned_for) + '</small></li>').join('') + '</ul></div>'
+      : '';
+    const upcoming = reminders.upcoming.length
+      ? '<div class="shopping-reminder-groups">' + reminders.upcoming.map(group => '<article class="shopping-reminder-group"><div><strong>' + safe(group.label) + '</strong><small>' + safe(group.dateLabel) + '</small></div><ul>' + group.items.map(item => '<li>' + safe(item.item_name) + ' <small>× ' + safe(item.quantity) + ' ' + safe(item.unit || 'unidades') + '</small></li>').join('') + '</ul></article>').join('') + '</div>'
+      : '';
+    $('#shopping-reminders').innerHTML = '<div class="shopping-reminders-heading"><div><h4>Recordatorios de compras</h4><small>Artículos pendientes programados para hoy y los próximos 7 días.</small></div><span>' + reminders.total + '</span></div>' + (overdue || upcoming ? overdue + upcoming : '<p class="shopping-reminders-empty">No tienes compras pendientes programadas para los próximos 7 días.</p>');
+  };
+  renderReminders();
   const renderCalendar = () => {
     const days = getCalendarWeek(new Date(), weekOffset);
     const grouped = groupShoppingItemsByDate(items, days);
