@@ -63,7 +63,7 @@ export async function renderPurchases({ container, supabase, user }) {
 
     const stockMap = new Map();
     for (const item of allItems) {
-      const key = item.product_id || 'name:' + norm(item.item_name) + '|' + norm(item.unit);
+      const key = item.product_id || 'name:' + norm(item.item_name);
       const previous = stockMap.get(key) || { name: item.item_name, unit: item.unit || 'unidad', quantity: 0 };
       previous.quantity += Number(item.quantity);
       stockMap.set(key, previous);
