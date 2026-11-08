@@ -276,7 +276,7 @@ export async function renderPurchases({ container, supabase, user }) {
         <div class="purchase-card-head"><div><strong>Administrador de códigos de barras</strong><small>Asocia códigos reales a productos del catálogo. Puedes registrar varios empaques por producto; cada código sólo puede pertenecer a un producto.</small></div></div>
         <form id="barcode-admin-form" class="purchase-form barcode-admin-form">
           <label>Producto del catálogo<select id="barcode-admin-product" required><option value="">Selecciona un producto</option>${productOptions}</select></label>
-          <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Escanea o escribe el código" required></label>
+          <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Usa un lector o escribe el código" required></label>
           <button type="submit">Asociar código</button>
         </form>
         <small id="barcode-admin-status" class="purchase-message" aria-live="polite"></small>
