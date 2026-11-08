@@ -440,3 +440,18 @@
 .guest-grand-total small,.guest-grand-total span{font-size:11px;color:#5d7666}.guest-grand-total b{font:800 27px Manrope;color:#245b45}
 #guest-clear-cart{margin-top:10px}
 @media(max-width:520px){.guest-fields{grid-template-columns:1fr 1fr}.guest-add-form{padding:11px}.guest-cart-item{grid-template-columns:minmax(0,1fr) auto auto;gap:7px;padding:10px}.guest-cart-item>b{font-size:12px}}
+
+
+/* Búsqueda por supermercado y acciones directas para agregar publicaciones */
+.store-filter{display:grid;gap:6px;margin:10px 0 12px;padding:13px;background:#fff;border:1px solid #e5ebe6;border-radius:12px}
+.store-filter label{font-size:12px;font-weight:700;color:#405b4d}
+.store-filter select{width:100%;min-height:42px;padding:10px;border:1px solid #dce5de;border-radius:9px;background:#fff;color:#18332d;font:inherit}
+.branch-filter[hidden]{display:none}
+.store-product-result>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.store-product-result>a,.store-product-result>div>a{display:inline-block;margin-top:7px;color:#477d5c;font-size:11px;text-decoration:none}
+.store-product-result button{flex:0 0 auto}
+.price-pending{color:#8a622d!important;font-weight:650}
+.price-current{color:#27734e!important;font-weight:700}
+.catalog-empty-store{padding:13px;margin:8px 0;background:#fff8eb;border:1px solid #efe0c4;border-radius:10px;color:#765a2c;font-size:12px;line-height:1.5}
+.store-product-result button:disabled{opacity:.55}
+@media(max-width:520px){.store-product-result{align-items:flex-start;flex-direction:column}.store-product-result button{width:100%}.store-filter,.branch-filter{padding:11px}}
