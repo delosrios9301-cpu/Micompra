@@ -44,3 +44,18 @@ export function collectLocalRecoveryCopies(storage = globalThis.localStorage) {
   }
   return copies;
 }
+
+export function restoreLocalRecoveryCopies(copies, storage = globalThis.localStorage) {
+  if (!storage || !copies || typeof copies !== 'object' || Array.isArray(copies)) return;
+  for (const key of PERSONAL_KEYS) {
+    const record = copies[key];
+    if (!record || typeof record !== 'object' || typeof record.raw !== 'string') continue;
+    try {
+      storage.setItem(RECOVERY_PREFIX + key, JSON.stringify({
+        key,
+        raw: record.raw,
+        savedAt: record.savedAt || new Date().toISOString()
+      }));
+    } catch {}
+  }
+}
