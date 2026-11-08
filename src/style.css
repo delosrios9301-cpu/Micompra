@@ -330,3 +330,26 @@
 .weekly-plan-budget small{display:block;color:#78877f;font-size:10px}
 .weekly-plan-note{margin:0;color:#829087;font-size:10px;line-height:1.5}
 @media(max-width:520px){.weekly-plan{padding:12px}.weekly-plan-heading{flex-direction:column}.weekly-plan-heading button{width:100%}.weekly-plan-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.weekly-plan-kpis article{padding:9px 7px}.weekly-plan-kpis small{font-size:9px}.weekly-plan-kpis b{font-size:18px}}
+
+
+.shopping-calendar{display:grid;gap:10px;min-width:0}
+.shopping-calendar-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.shopping-calendar-heading h4{margin:0 0 3px;font-size:14px;color:#244b39}
+.shopping-calendar-heading small{font-size:10px;color:#74837a}
+.shopping-calendar-nav{display:flex;gap:6px}
+.shopping-calendar-nav button{width:34px;height:34px;padding:0;font-size:20px;line-height:1}
+.shopping-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;min-width:0}
+.shopping-calendar-day{min-width:0;min-height:108px;padding:9px 7px;border:1px solid #e3eae5;border-radius:9px;background:#fbfdfb}
+.shopping-calendar-day-title{display:flex;justify-content:space-between;align-items:center;gap:4px;padding-bottom:7px;border-bottom:1px solid #edf1ed}
+.shopping-calendar-day-title strong{font-size:10px;text-transform:capitalize;color:#365b46}
+.shopping-calendar-day-title small{font-size:9px;color:#7d8b82}
+.shopping-calendar-day p{margin:9px 0 0;font-size:9px;color:#a0aaa3}
+.shopping-calendar-day ul{list-style:none;padding:0;margin:7px 0 0;display:grid;gap:6px}
+.shopping-calendar-day li{font-size:10px;line-height:1.35;overflow-wrap:anywhere;color:#40594b}
+.shopping-calendar-day li small{display:block;color:#87938b;font-size:9px}
+.shopping-calendar-day li.is-done{text-decoration:line-through;color:#9aa49d}
+.shopping-calendar-unassigned{margin:0;font-size:10px;color:#7b897f;line-height:1.5}
+.cart-plan-date{display:block;width:min(100%,145px);min-height:30px;margin-top:7px;padding:4px 6px;border:1px solid #dce5de;border-radius:7px;background:#fff;color:#496457;font:11px 'DM Sans'}
+.cart-item label>span{min-width:0;flex:1}
+@media(max-width:720px){.shopping-calendar-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shopping-calendar-day{min-height:90px}}
+@media(max-width:380px){.shopping-calendar-grid{grid-template-columns:1fr}.shopping-calendar-heading{align-items:flex-start}.cart-plan-date{max-width:100%}}
