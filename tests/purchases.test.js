@@ -62,6 +62,7 @@ test('Empty purchase rows have the same number of columns as the header', () => 
 
 test('barcode normalization preserves leading zeros and removes spaces or hyphens', () => {
   assert.equal(normalizeProductBarcode(' 0 123-456 789 '), '0123456789');
+  assert.equal(normalizeProductBarcode(' ab-cd 123 '), 'ABCD123');
 });
 
 test('barcode lookup requires an exact normalized match', () => {
