@@ -3,6 +3,7 @@ import './style.css';
 import { importPriceCsv } from './price-import.js';
 import { renderPurchases, normalizeProductBarcode, isValidBarcodeChecksum } from './purchases.js';
 import { getProductRegistrationCheck, validateProductRegistrationDraft } from './catalog-admin.js';
+import { parseCatalogCsv, analyzeCatalogImportRows } from './catalog-import.js';
 import { findCatalogNameMatches, findDuplicateListItem } from './catalog-duplicates.js';
 
 const env = import.meta.env;
@@ -177,6 +178,66 @@ async function renderProductAdmin(panel) {
     save.disabled=false;
     products.push(created);
   });
+
+  const importSection=document.createElement('section');
+  importSection.className='catalog-csv-import';
+  importSection.innerHTML='<div class="catalog-admin-heading"><div><strong>Importar varios productos (CSV)</strong><small>Plantilla compatible con Excel y hojas de cálculo. Máximo 500 filas por archivo y 1 MB.</small></div></div><div class="catalog-csv-actions"><button type="button" id="catalog-csv-template" class="catalog-csv-secondary">Descargar plantilla CSV</button><label class="catalog-csv-file">Seleccionar archivo CSV<input id="catalog-csv-file" type="file" accept=".csv,text/csv"></label></div><small>Columnas obligatorias: canonical_name, category, normalized_quantity y normalized_unit_name. Marca y barcode son opcionales. Puedes usar encabezados en español.</small><div id="catalog-csv-summary" class="catalog-csv-summary" hidden aria-live="polite"></div><div id="catalog-csv-preview" class="catalog-csv-preview" hidden></div><label id="catalog-csv-variant-confirm-wrap" class="catalog-variant-confirm" hidden><input id="catalog-csv-variant-confirm" type="checkbox"> Confirmo que revisé las presentaciones similares y que son productos o tamaños distintos</label><button type="button" id="catalog-csv-import" hidden disabled>Importar productos válidos</button><small id="catalog-csv-status" aria-live="polite"></small>';
+  section.appendChild(importSection);
+  const csvFile=importSection.querySelector('#catalog-csv-file'),csvSummary=importSection.querySelector('#catalog-csv-summary'),csvPreview=importSection.querySelector('#catalog-csv-preview'),csvImport=importSection.querySelector('#catalog-csv-import'),csvStatus=importSection.querySelector('#catalog-csv-status'),csvVariantWrap=importSection.querySelector('#catalog-csv-variant-confirm-wrap'),csvVariantConfirm=importSection.querySelector('#catalog-csv-variant-confirm');
+  let importAnalysis=null;
+  importSection.querySelector('#catalog-csv-template').addEventListener('click',()=>{
+    const template='\uFEFFcanonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode\r\n';
+    const blob=new Blob([template],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download='plantilla_catalogo_mi_compra.csv';document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+  });
+  const updateCsvImportButton=()=>{
+    csvImport.disabled=!importAnalysis?.readyRows.length||(importAnalysis.variantCount>0&&!csvVariantConfirm.checked);
+  };
+  csvVariantConfirm.addEventListener('change',updateCsvImportButton);
+  csvFile.addEventListener('change',async()=>{
+    importAnalysis=null;csvImport.hidden=true;csvVariantWrap.hidden=true;csvSummary.hidden=true;csvPreview.hidden=true;csvStatus.textContent='';
+    const file=csvFile.files?.[0];if(!file)return;
+    if(file.size>1024*1024){csvStatus.textContent='El archivo supera 1 MB. Reduce su tamaño y vuelve a intentarlo.';csvFile.value='';return;}
+    try{
+      const parsed=parseCatalogCsv(await file.text());
+      if(!parsed.ok){csvStatus.textContent=parsed.error;return;}
+      if(!parsed.rows.length){csvStatus.textContent='El archivo no contiene productos para importar.';return;}
+      importAnalysis=analyzeCatalogImportRows(parsed.rows,products||[],mappings||[],code=>isValidBarcodeChecksum(code,'ean_8')||isValidBarcodeChecksum(code,'upc_e')||isValidBarcodeChecksum(code,'upc_a')||isValidBarcodeChecksum(code,'ean_13'));
+      const ready=importAnalysis.readyRows,issues=importAnalysis.issues;
+      csvSummary.hidden=false;
+      csvSummary.innerHTML='<strong>Resultado de la revisión</strong><div>'+ready.length+' productos listos para importar</div><div>'+issues.length+' filas omitidas por errores o duplicados</div><div>'+importAnalysis.variantCount+' posibles variantes de presentación requieren confirmación</div>';
+      const previewRows=ready.slice(0,12).map(row=>'<tr><td>'+row.line+'</td><td>'+safe(row.canonical_name)+'</td><td>'+safe(row.brand||'—')+'</td><td>'+safe(row.normalized_quantity+' '+row.normalized_unit_name)+'</td><td>'+safe(row.category)+'</td></tr>');
+      const issueRows=issues.slice(0,8).map(row=>'<tr><td>'+row.line+'</td><td>'+safe(row.canonical_name||'—')+'</td><td>'+safe(row.reason)+'</td></tr>');
+      csvPreview.hidden=false;
+      csvPreview.innerHTML=(previewRows.length?'<strong>Vista previa de productos válidos</strong><div class="catalog-csv-table-wrap"><table><thead><tr><th>Fila</th><th>Producto</th><th>Marca</th><th>Presentación</th><th>Categoría</th></tr></thead><tbody>'+previewRows.join('')+'</tbody></table></div>':'')+
+        (issues.length?'<strong>Filas que no se importarán</strong><div class="catalog-csv-table-wrap"><table><thead><tr><th>Fila</th><th>Producto</th><th>Motivo</th></tr></thead><tbody>'+issueRows.join('')+'</tbody></table></div>':'')+
+        (ready.length>12?'<small>Se muestran las primeras 12 filas válidas; se importarán todas las filas válidas.</small>':'')+
+        (issues.length>8?'<small>Se muestran los primeros 8 errores; hay '+issues.length+' filas omitidas en total.</small>':'');
+      csvVariantWrap.hidden=importAnalysis.variantCount===0;csvVariantConfirm.checked=false;
+      csvImport.hidden=ready.length===0;csvImport.textContent='Importar '+ready.length+' productos válidos';updateCsvImportButton();
+    }catch(error){csvStatus.textContent='No se pudo leer el archivo. Comprueba que sea un CSV válido.';}
+  });
+  csvImport.addEventListener('click',async()=>{
+    if(!importAnalysis?.readyRows.length)return;
+    if(importAnalysis.variantCount&&!csvVariantConfirm.checked){csvStatus.textContent='Confirma primero que revisaste las presentaciones similares.';return;}
+    csvImport.disabled=true;csvStatus.textContent='Guardando productos en el catálogo...';
+    const payload=importAnalysis.readyRows.map(row=>({
+      canonical_name:row.canonical_name.trim(),brand:row.brand?.trim()||null,category:row.category.trim(),
+      normalized_quantity:row.normalized_quantity,
+      normalized_unit:['kg','g','lb','oz'].includes(row.normalized_unit_name)?'weight':['L','ml'].includes(row.normalized_unit_name)?'volume':'unit',
+      normalized_unit_name:row.normalized_unit_name,barcode:row.barcode||null,active:true
+    }));
+    const {data:created,error}=await supabase.from('products').insert(payload).select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode');
+    if(error){
+      csvStatus.textContent=error.code==='23505'?'No se guardó la carga porque el catálogo detectó un duplicado. Revisa el archivo y vuelve a generar la vista previa.':'No se pudo guardar. Comprueba tu autorización de administrador y vuelve a intentarlo.';
+      csvImport.disabled=false;return;
+    }
+    products.push(...(created||[]));productCatalogCache=[];
+    csvStatus.textContent=(created?.length||0)+' productos agregados correctamente. Las filas omitidas no se modificaron.';
+    csvImport.hidden=true;csvFile.value='';importAnalysis=null;csvVariantWrap.hidden=true;csvSummary.hidden=true;csvPreview.hidden=true;
+  });
+
 }
 
 async function renderPriceReview() {
