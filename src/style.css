@@ -309,3 +309,24 @@
 .pantry-list-heading .pantry-add-all-to-list{min-height:36px;padding:7px 10px;border:1px solid #b9d4c7;border-radius:8px;background:#eaf3ef;color:#205b45;font-size:11px;font-weight:700}
 .pantry-list-heading .pantry-add-all-to-list:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:520px){.pantry-list-heading .pantry-add-all-to-list{order:3;width:100%}.pantry-list-heading select{max-width:none}}
+
+
+.weekly-plan{display:grid;gap:12px;margin:18px 0;padding:16px;background:#fff;border:1px solid #e2eae3;border-radius:14px;min-width:0}
+.weekly-plan-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.weekly-plan-heading h3{font:700 20px Manrope;margin:0 0 5px;color:#173d32}
+.weekly-plan-heading small{font-size:11px;color:#74837a;line-height:1.5}
+.weekly-plan button{border:1px solid #dce5de;background:#fff;border-radius:8px;padding:8px 11px;color:#496457;font:600 11px 'DM Sans';white-space:nowrap}
+.weekly-plan button:disabled{opacity:.55}
+.weekly-plan-range{font-size:12px;font-weight:700;color:#426451;padding:10px 12px;background:#f2f7f2;border-radius:9px}
+.weekly-plan-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.weekly-plan-kpis article{padding:12px;border:1px solid #e7ede8;border-radius:10px;min-width:0}
+.weekly-plan-kpis small,.weekly-plan-cost small{display:block;color:#74837a;font-size:10px}
+.weekly-plan-kpis b{display:block;margin-top:5px;font:700 20px Manrope;color:#244b39}
+.weekly-plan-cost{display:grid;gap:5px;padding:14px;border-radius:10px;background:#edf5ef}
+.weekly-plan-cost b{font:800 23px Manrope;color:#245b45;overflow-wrap:anywhere}
+.weekly-plan-cost span{font-size:11px;color:#5d7666;line-height:1.5}
+.weekly-plan-budget{font-size:12px;color:#496457;line-height:1.6}
+.weekly-plan-budget strong{font:700 15px Manrope;color:#245b45}
+.weekly-plan-budget small{display:block;color:#78877f;font-size:10px}
+.weekly-plan-note{margin:0;color:#829087;font-size:10px;line-height:1.5}
+@media(max-width:520px){.weekly-plan{padding:12px}.weekly-plan-heading{flex-direction:column}.weekly-plan-heading button{width:100%}.weekly-plan-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.weekly-plan-kpis article{padding:9px 7px}.weekly-plan-kpis small{font-size:9px}.weekly-plan-kpis b{font-size:18px}}
