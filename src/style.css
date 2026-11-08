@@ -811,3 +811,9 @@ main{padding-top:22px}
 .smart-store-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .smart-store-trends .smart-trend-card{min-width:0}
 @media(max-width:600px){.smart-store-trends{grid-template-columns:1fr}.smart-period-filter{max-width:none}}
+
+
+/* Restauración segura de copias personales */
+.settings-restore-control{display:grid;gap:8px;padding:13px;border:1px dashed #b9d7c2;border-radius:11px;background:#f8fcf8;color:#28774a;font:700 11px 'DM Sans'}
+.settings-restore-control input{max-width:100%;color:#617569;font:11px 'DM Sans'}
+.settings-restore-control input::file-selector-button{margin-right:10px;padding:8px 11px;border:0;border-radius:8px;background:#e3f2e7;color:#21764a;font:700 10px 'DM Sans'}
