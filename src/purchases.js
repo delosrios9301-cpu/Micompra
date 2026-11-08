@@ -834,6 +834,8 @@ export async function renderPurchases({ container, supabase, user }) {
           if (field) field.value = code;
           if (!/^[A-Z0-9]{4,64}$/.test(code)) {
             if (status) status.textContent = 'Código leído, pero su formato no es válido. Puedes corregirlo manualmente.';
+          } else if (!isValidBarcodeChecksum(code, barcodeAdminFormat)) {
+            if (status) status.textContent = 'El dígito de control no es válido. Vuelve a escanearlo; no se guardará.';
           } else if (findProductByBarcode(products, code, barcodeMappings)) {
             if (status) status.textContent = 'Código leído: ' + code + '. Ya está asociado a un producto; no se guardará un duplicado.';
           } else if (status) {
