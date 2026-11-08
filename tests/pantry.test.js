@@ -68,7 +68,7 @@ test('pantry catalog matching requires exact name, compatible unit and unambiguo
   assert.equal(findPantryCatalogMatch({ item_name: 'ARROZ', unit: 'kg' }, products).product?.id, 'rice-1kg');
   assert.equal(findPantryCatalogMatch({ item_name: 'Arroz', unit: 'lb' }, products).product, null);
   assert.equal(findPantryCatalogMatch({ item_name: 'Leche', unit: 'paquete' }, products).product, null);
-  assert.equal(findPantryCatalogMatch({ item_name: 'Arroz', unit: 'g' }, products).product?.id, 'rice-500g');
+  assert.equal(findPantryCatalogMatch({ item_name: 'Arroz', unit: 'g' }, products).product, null);
 });
 
 test('pantry catalog matching refuses ambiguous and multi-unit packages', () => {
