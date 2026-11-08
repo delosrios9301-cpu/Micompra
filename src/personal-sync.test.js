@@ -94,7 +94,7 @@ test('no aplica una copia antigua si el usuario edita el dispositivo durante la 
   assert.equal(result.retry, true);
   assert.match(result.message, /cambios nuevos/);
   assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.catalog)), newest);
-  assert.equal(cloudData.catalog[0].name, 'Arroz');
+  assert.equal(cloudData, null);
 });
 
 test('restaura desde la nube si el almacenamiento local está vacío pero existe una línea base previa', async () => {
