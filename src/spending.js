@@ -75,6 +75,8 @@ function bars(rows) {
   return rows.map(row => `<div class="spending-bar-row"><div><span>${safe(row.name)}</span><b>${money(row.amount)}</b></div><i><span style="width:${Math.max(2, row.amount / max * 100)}%"></span></i></div>`).join('');
 }
 
+let activePurchaseRefreshHandler = null;
+
 export async function renderSpendingDashboard({ container, supabase, user }) {
   if (!container || !supabase || !user) return;
   container.querySelector('.personal-spending')?.remove();
@@ -82,6 +84,9 @@ export async function renderSpendingDashboard({ container, supabase, user }) {
   section.className = 'personal-spending';
   section.innerHTML = '<div class="spending-heading"><div><p class="eyebrow">CONTROL DEL HOGAR</p><h3>Mis gastos</h3><small>Resumen de tus compras registradas en Mi Compra.</small></div><button type="button" class="spending-refresh">Actualizar</button></div><div class="spending-kpis"><article><small>Esta semana</small><strong id="spending-week">—</strong></article><article><small>Este mes</small><strong id="spending-month">—</strong></article><article><small>Presupuesto restante</small><strong id="spending-remaining">—</strong></article></div><section class="spending-budget"><form id="spending-budget-form"><label for="spending-budget-input">Mi presupuesto mensual (USD)</label><div><input id="spending-budget-input" type="number" min="0" max="10000000" step="0.01" placeholder="Ej. 350"><button type="submit">Guardar presupuesto</button></div><small id="spending-budget-status" aria-live="polite">Opcional. Puedes dejarlo en 0 si todavía no deseas definir un presupuesto.</small></form><div class="spending-progress"><div><span>Uso del presupuesto</span><b id="spending-progress-label">Sin presupuesto definido</b></div><i><span id="spending-progress-fill"></span></i></div></section><div class="spending-analysis"><section><h4>Productos con mayor gasto</h4><div id="spending-products"></div></section><section><h4>Gasto por categoría</h4><div id="spending-categories"></div></section></div><section class="spending-alerts" aria-live="polite"><h4>Avisos de presupuesto</h4><div id="spending-alert-list"><p class="spending-empty">Todavía no hay avisos este mes.</p></div></section><section class="spending-monthly"><div><h4>Historial de gastos</h4><small>Comparación de los últimos 6 meses</small></div><div id="spending-month-history" class="spending-month-history" role="img" aria-label="Gastos mensuales de los últimos seis meses"></div></section><p class="spending-footnote" id="spending-footnote">Los importes se calculan a partir de las compras guardadas. Registra tus compras para que el resumen refleje tus gastos.</p>';
   container.appendChild(section);
+  if (activePurchaseRefreshHandler) window.removeEventListener('micompra:purchase-updated', activePurchaseRefreshHandler);
+  activePurchaseRefreshHandler = () => { if (section.isConnected) refresh(); };
+  window.addEventListener('micompra:purchase-updated', activePurchaseRefreshHandler);
   const $ = selector => section.querySelector(selector);
   const refresh = async () => {
     $('.spending-refresh').disabled = true;
