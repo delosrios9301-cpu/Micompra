@@ -68,46 +68,56 @@ const parseInvoiceDraft = (text, products) => {
     if (raw.includes('.') && raw.includes(',')) return Number(raw.lastIndexOf('.') > raw.lastIndexOf(',') ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.'));
     return Number(raw.replace(',', '.'));
   };
+  const ignoredLine = name => /^(?:total|subtotal|itbms|i\.t\.b\.m\.s|impuesto|tax|descuento|descto|desc\.?|ahorro|promocion|promoción|promo|cupon|cup[oó]n|bonificacion|bonificación|cambio|efectivo|visa|mastercard|debito|débito|credito|crédito|vuelto)\b/i.test(name)
+    || /\b(?:total general|total a pagar|subtotal|itbms|impuesto|descuento|descto|ahorro|cup[oó]n|bonificacion|bonificación)\b/i.test(name);
+  const weightedPattern = /(?:^|\s)(\d+(?:[.,]\d+)?)\s*(kg|kilo(?:s)?|g|gr|gramos?|lb|lbs|libras?|oz|onzas?)\s*$/i;
   for (const line of lines) {
     const match = line.match(moneyPattern);
     if (!match) continue;
     const amount = parseAmount(match[1]);
     if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) continue;
     let name = line.slice(0, match.index).replace(/[|*•]+/g, ' ').trim();
-    if (/\b(?:total|subtotal|itbms|impuesto|cambio|efectivo|visa|mastercard|descuento|ahorro)\b/i.test(name)) continue;
-    if (name.length < 3 || !/[a-záéíóúñ]/i.test(name)) continue;
+    if (ignoredLine(name) || name.length < 3 || !/[a-záéíóúñ]/i.test(name)) continue;
     let quantity = 1;
-    let quantityUnit = '';
-    let quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
+    let unit = 'unidad';
+    let quantityMatch = name.match(weightedPattern);
     if (quantityMatch) {
       quantity = parseAmount(quantityMatch[1]);
-      name = name.slice(quantityMatch[0].length).trim();
+      const rawUnit = quantityMatch[2].toLowerCase();
+      unit = /^(?:kg|kilo)/.test(rawUnit) ? 'kg' : /^(?:g|gr|gram)/.test(rawUnit) ? 'g' : /^(?:oz|onza)/.test(rawUnit) ? 'oz' : 'lb';
+      name = name.slice(0, quantityMatch.index + (quantityMatch[0].startsWith(' ') ? 0 : 0)).trim();
     } else {
-      quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*[x×]\s*/i);
+      quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|unid(?:ad(?:es)?)?|uds?|und|pzas?)\s+/i);
       if (quantityMatch) {
         quantity = parseAmount(quantityMatch[1]);
         name = name.slice(quantityMatch[0].length).trim();
       } else {
-        quantityMatch = name.match(/\s+[x×]\s*(\d+(?:[.,]\d+)?)\s*$/i);
+        quantityMatch = name.match(/^\s*(\d+(?:[.,]\d+)?)\s*[x×]\s*/i);
         if (quantityMatch) {
           quantity = parseAmount(quantityMatch[1]);
-          name = name.slice(0, quantityMatch.index).trim();
+          name = name.slice(quantityMatch[0].length).trim();
         } else {
-          quantityMatch = name.match(/\s+(\d+(?:[.,]\d+)?)\s*(?:unid(?:ad(?:es)?)?|uds?|und|pzas?)\s*$/i);
+          quantityMatch = name.match(/\s+[x×]\s*(\d+(?:[.,]\d+)?)\s*$/i);
           if (quantityMatch) {
             quantity = parseAmount(quantityMatch[1]);
             name = name.slice(0, quantityMatch.index).trim();
+          } else {
+            quantityMatch = name.match(/\s+(\d+(?:[.,]\d+)?)\s*(?:unid(?:ad(?:es)?)?|uds?|und|pzas?)\s*$/i);
+            if (quantityMatch) {
+              quantity = parseAmount(quantityMatch[1]);
+              name = name.slice(0, quantityMatch.index).trim();
+            }
           }
         }
       }
     }
-    name = name.replace(/\s+\d+(?:[.,]\d+)?\s*(?:lbs?|kg|gr?|oz|ml|lt?)\b.*$/i, '').trim();
+    name = name.replace(/\s+(?:\d+(?:[.,]\d+)?\s*)?(?:lbs?|kg|gr?|oz|ml|lt?)\b.*$/i, '').trim();
     if (name.length < 3 || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1000) continue;
     const product = products.find(p => norm(name).includes(norm(p.canonical_name)) || norm(p.canonical_name).includes(norm(name)));
     drafts.push({
       productId: product?.id || '', name,
       package: product?.normalized_quantity && product?.normalized_unit_name ? product.normalized_quantity + ' ' + product.normalized_unit_name : '',
-      quantity, unit: 'unidad', price: amount.toFixed(2), priceMode: 'line', selected: true
+      quantity, unit, price: amount.toFixed(2), priceMode: 'line', selected: true
     });
   }
   return drafts.slice(0, 100);
