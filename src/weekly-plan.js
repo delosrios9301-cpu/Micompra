@@ -1,0 +1,113 @@
+const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value) || 0);
+const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+export function getWeeklyRange(today = new Date()) {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return { start: key(start), end: key(end) };
+}
+
+export function summarizeWeeklyPlan(items = [], pantryItems = [], today = new Date()) {
+  const pending = (items || []).filter(item => !item.checked);
+  const completed = (items || []).filter(item => item.checked);
+  const lowStock = (pantryItems || []).filter(item => {
+    const quantity = Number(item.quantity) || 0;
+    const minimum = Number(item.minimum_quantity) || 0;
+    return quantity <= minimum && (minimum > 0 || quantity === 0);
+  });
+  const linked = pending.filter(item => item.product_id);
+  const unlinked = pending.length - linked.length;
+  return { ...getWeeklyRange(today), pending, completed, linked, unlinked, lowStock };
+}
+
+export function compareWeeklyPlanPrices(items = [], listings = [], selectedBranchId = '') {
+  const linked = (items || []).filter(item => !item.checked && item.product_id);
+  if (!linked.length) return { total: null, store: null, complete: false, covered: 0, count: 0 };
+  const stores = new Map();
+  for (const listing of listings || []) {
+    const storeName = listing.supermarkets?.name;
+    const branchName = listing.supermarket_branches?.name;
+    if (!storeName || (storeName === 'Super 99' && selectedBranchId && listing.branch_id !== selectedBranchId)) continue;
+    const valid = (listing.price_observations || []).filter(price =>
+      price.is_verified && price.review_status === 'approved' && price.currency === 'USD' &&
+      Number(price.price) > 0 && Date.now() - new Date(price.observed_at).getTime() <= 86400000 &&
+      Date.now() >= new Date(price.observed_at).getTime()
+    );
+    if (!valid.length) continue;
+    const price = Math.min(...valid.map(row => Number(row.price)));
+    const key = branchName ? storeName + ' · ' + branchName : storeName;
+    if (!stores.has(key)) stores.set(key, new Map());
+    const prices = stores.get(key);
+    if (!prices.has(listing.product_id) || price < prices.get(listing.product_id)) prices.set(listing.product_id, price);
+  }
+  const totals = [...stores.entries()].map(([store, prices]) => {
+    let total = 0, covered = 0;
+    for (const item of linked) {
+      const price = prices.get(item.product_id);
+      if (price !== undefined) { total += Number(item.quantity) * price; covered += 1; }
+    }
+    return { store, total, covered, complete: covered === linked.length };
+  }).filter(row => row.complete).sort((a, b) => a.total - b.total);
+  const best = totals[0] || null;
+  return { total: best?.total ?? null, store: best?.store ?? null, complete: Boolean(best), covered: best?.covered ?? 0, count: linked.length };
+}
+
+export async function renderWeeklyPlan({ container, supabase, user, items = [], selectedBranchId = '' }) {
+  if (!container || !supabase || !user) return;
+  container.querySelector('.weekly-plan')?.remove();
+  const section = document.createElement('section');
+  section.className = 'weekly-plan';
+  section.innerHTML = '<div class="weekly-plan-heading"><div><p class="eyebrow">ORGANIZACIÓN DEL HOGAR</p><h3>Mi plan de compras semanal</h3><small>Plan orientativo de lunes a domingo, basado en tu lista y tu despensa.</small></div><button type="button" class="weekly-plan-refresh">Actualizar</button></div><div class="weekly-plan-range" id="weekly-plan-range">Calculando semana…</div><div class="weekly-plan-kpis"><article><small>Por comprar</small><b id="weekly-plan-pending">—</b></article><article><small>Ya marcados</small><b id="weekly-plan-done">—</b></article><article><small>Por reponer en casa</small><b id="weekly-plan-low">—</b></article></div><div class="weekly-plan-cost" id="weekly-plan-cost"><small>Presupuesto de la lista pendiente</small><b>Calculando precios actuales…</b></div><div class="weekly-plan-budget" id="weekly-plan-budget">Consultando presupuesto mensual…</div><p class="weekly-plan-note">Este plan no crea compras ni descuenta existencias. Los precios son estimaciones basadas únicamente en observaciones aprobadas de las últimas 24 horas.</p>';
+  container.appendChild(section);
+  const $ = selector => section.querySelector(selector);
+  const refresh = async () => {
+    $('.weekly-plan-refresh').disabled = true;
+    const [pantryResult, priceResult, budgetResult, purchaseResult] = await Promise.all([
+      supabase.from('personal_pantry_items').select('item_name,quantity,minimum_quantity,unit').eq('user_id', user.id).limit(1000),
+      (() => {
+        const ids = [...new Set(items.filter(item => !item.checked && item.product_id).map(item => item.product_id))];
+        if (!ids.length) return Promise.resolve({ data: [], error: null });
+        const cutoff = new Date(Date.now() - 86400000).toISOString();
+        return supabase.from('store_products').select('product_id,branch_id,supermarkets(name),supermarket_branches(name),price_observations(price,currency,observed_at,is_verified,review_status)').in('product_id', ids).gte('price_observations.observed_at', cutoff).limit(300);
+      })(),
+      supabase.from('personal_budget_settings').select('monthly_budget').eq('user_id', user.id).maybeSingle(),
+      supabase.from('purchase_records').select('purchase_date,purchase_items(line_total,quantity,unit_price)').eq('user_id', user.id).order('purchase_date', { ascending: false }).limit(1000)
+    ]);
+    const now = new Date();
+    const summary = summarizeWeeklyPlan(items, pantryResult.error ? [] : pantryResult.data || [], now);
+    const dateFormat = new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' });
+    const start = new Date(summary.start + 'T12:00:00');
+    const end = new Date(summary.end + 'T12:00:00');
+    $('#weekly-plan-range').textContent = `Semana del ${dateFormat.format(start)} al ${dateFormat.format(end)}`;
+    $('#weekly-plan-pending').textContent = summary.pending.length;
+    $('#weekly-plan-done').textContent = summary.completed.length;
+    $('#weekly-plan-low').textContent = summary.lowStock.length;
+    if (pantryResult.error) $('#weekly-plan-low').textContent = '—';
+    const comparison = compareWeeklyPlanPrices(summary.pending, priceResult.error ? [] : priceResult.data || [], selectedBranchId);
+    $('#weekly-plan-cost').innerHTML = comparison.complete
+      ? `<small>Menor total completo en una sola tienda</small><b>${money(comparison.total)}</b><span>${safe(comparison.store)} · ${comparison.covered} de ${comparison.count} productos vinculados</span>`
+      : `<small>Presupuesto de la lista pendiente</small><b>No disponible todavía</b><span>${summary.linked.length ? 'Solo hay precios parciales o no hay precios aprobados y vigentes para todos los productos vinculados.' : 'Vincula los artículos de tu lista con el catálogo para calcular un total.'}</span>`;
+    const budget = Number(budgetResult.data?.monthly_budget) || 0;
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const spent = (purchaseResult.data || []).filter(row => String(row.purchase_date || '').startsWith(monthKey)).reduce((sum, row) =>
+      sum + (row.purchase_items || []).reduce((subtotal, item) => {
+        const amount = Number(item.line_total ?? (Number(item.quantity) * Number(item.unit_price)));
+        return subtotal + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+      }, 0), 0);
+    if (budgetResult.error || purchaseResult.error) {
+      $('#weekly-plan-budget').textContent = 'No se pudo consultar el margen del presupuesto mensual.';
+    } else if (!budget) {
+      $('#weekly-plan-budget').textContent = 'Aún no has definido un presupuesto mensual. Puedes configurarlo en “Mis gastos”.';
+    } else {
+      const remaining = budget - spent;
+      $('#weekly-plan-budget').innerHTML = `Presupuesto mensual restante: <strong>${money(remaining)}</strong> <small>(${money(spent)} gastados de ${money(budget)} registrados este mes)</small>`;
+    }
+    $('.weekly-plan-refresh').disabled = false;
+  };
+  $('.weekly-plan-refresh').addEventListener('click', refresh);
+  await refresh();
+}
