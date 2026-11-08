@@ -646,6 +646,12 @@ async function compressProductPhoto(file){
 function renderAppSettings(){
  const key='micompra_settings_v1';const defaults={defaultStore:'Super 99',currency:'USD',theme:'light',enabledStores:guestStores.slice()};
  let settings={...defaults,...readStoredObjectSafely(key,{})};
+ if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
+ settings.enabledStores=settings.enabledStores.filter(name=>guestStores.includes(name));
+ if(!settings.enabledStores.length)settings.enabledStores=defaults.enabledStores.slice();
+ if(!guestStores.includes(settings.defaultStore))settings.defaultStore=defaults.defaultStore;
+ if(typeof settings.currency!=='string')settings.currency=defaults.currency;
+ if(typeof settings.theme!=='string')settings.theme=defaults.theme;
  const store=document.querySelector('#settings-default-store'),currency=document.querySelector('#settings-currency'),theme=document.querySelector('#settings-theme');
  if(!store)return;store.value=settings.defaultStore;currency.value=settings.currency;theme.value=settings.theme;
  document.querySelectorAll('[name="enabled-store"]').forEach(input=>input.checked=settings.enabledStores.includes(input.value));
