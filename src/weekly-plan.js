@@ -13,7 +13,7 @@ export function getShoppingReminders(items = [], today = new Date(), daysAhead =
   const end = new Date(start);
   end.setDate(end.getDate() + Math.max(0, Math.min(31, Number(daysAhead) || 0)));
   const endKey = localDateKey(end);
-  const pending = (items || []).filter(item => !item.checked && item.planned_for);
+  const pending = sortShoppingItemsByPriority((items || []).filter(item => !item.checked && item.planned_for));
   const overdue = pending.filter(item => item.planned_for < todayKey);
   const dates = [...new Set(pending.filter(item => item.planned_for >= todayKey && item.planned_for <= endKey).map(item => item.planned_for))].sort();
   const upcoming = dates.map(date => {
@@ -21,7 +21,7 @@ export function getShoppingReminders(items = [], today = new Date(), daysAhead =
     const parsed = new Date(year, month - 1, day);
     const offset = Math.round((parsed - start) / 86400000);
     const label = offset === 0 ? 'Hoy' : offset === 1 ? 'Mañana' : new Intl.DateTimeFormat('es-PA', { weekday: 'long' }).format(parsed);
-    return { date, label, dateLabel: new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(parsed), items: pending.filter(item => item.planned_for === date) };
+    return { date, label, dateLabel: new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short' }).format(parsed), items: sortShoppingItemsByPriority(pending.filter(item => item.planned_for === date)) };
   });
   return { overdue, upcoming, total: overdue.length + upcoming.reduce((sum, group) => sum + group.items.length, 0) };
 }
@@ -46,8 +46,16 @@ export function getCalendarWeek(today = new Date(), offset = 0) {
   });
 }
 
+export function sortShoppingItemsByPriority(items = []) {
+  const rank = { urgent: 0, normal: 1, low: 2 };
+  return [...(items || [])].sort((a, b) => {
+    if (Boolean(a.checked) !== Boolean(b.checked)) return Number(Boolean(a.checked)) - Number(Boolean(b.checked));
+    return (rank[a.priority] ?? rank.normal) - (rank[b.priority] ?? rank.normal);
+  });
+}
+
 export function groupShoppingItemsByDate(items = [], days = []) {
-  return days.map(day => ({ ...day, items: (items || []).filter(item => item.planned_for === day.date) }));
+  return days.map(day => ({ ...day, items: sortShoppingItemsByPriority((items || []).filter(item => item.planned_for === day.date)) }));
 }
 
 export function summarizeWeeklyPlan(items = [], pantryItems = [], today = new Date()) {
