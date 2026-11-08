@@ -209,7 +209,7 @@ async function loadList() {
     const unit=product?(product.normalized_quantity&&product.normalized_unit_name?product.normalized_quantity+' '+product.normalized_unit_name+' por unidad':'unidades'):'unidades';
     const duplicate=findDuplicateListItem(items,product?.id||null,customName);
     if(duplicate){
-      const {error}=await supabase.from('shopping_list_items').update({quantity:Number(duplicate.quantity)+quantity}).eq('id',duplicate.id).eq('list_id',activeList.id);
+      const {error}=await supabase.from('shopping_list_items').update({quantity:Number(duplicate.quantity)+quantity,checked:false}).eq('id',duplicate.id).eq('list_id',activeList.id);
       if(error)alert('No se pudo actualizar la cantidad del artículo.');else await loadList();
       return;
     }
