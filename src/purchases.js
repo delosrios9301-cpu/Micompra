@@ -135,6 +135,18 @@ const parseInvoiceDraft = (text, products) => {
   return drafts.slice(0, 100);
 };
 
+const getInvoiceDuplicateGroups = items => {
+  const groups = new Map();
+  items.forEach((item, index) => {
+    const identity = item.productId ? 'product:' + item.productId : 'name:' + norm(item.name || '');
+    if (!identity || identity === 'name:') return;
+    const key = [identity, norm(item.package || ''), norm(item.unit || 'unidad')].join('|');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(index);
+  });
+  return [...groups.values()].filter(group => group.length > 1);
+};
+
 const parseInvoiceTotals = text => {
   const lines = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const parseAmount = raw => {
@@ -388,20 +400,23 @@ export async function renderPurchases({ container, supabase, user }) {
       const host = container.querySelector('#invoice-draft-list');
       const confirm = container.querySelector('#confirm-invoice-draft');
       if (!host) return;
-      host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>El importe leído es<select data-field="priceMode"><option value="line" '+(item.priceMode==='line'?'selected':'')+'>Total de la línea</option><option value="unit" '+(item.priceMode==='unit'?'selected':'')+'>Precio unitario</option></select></label><label>Importe leído USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label><small class="invoice-line-calculation">Precio unitario calculado: <b>'+money(item.priceMode==='line' ? Number(item.price)/Math.max(Number(item.quantity),0.001) : Number(item.price))+'</b> · Total línea: <b>'+money(item.priceMode==='line' ? Number(item.price) : Number(item.price)*Number(item.quantity))+'</b></small></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
+      const duplicateGroups = getInvoiceDuplicateGroups(invoiceDraft);
+      const duplicateIndexes = new Set(duplicateGroups.flat());
+      host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>El importe leído es<select data-field="priceMode"><option value="line" '+(item.priceMode==='line'?'selected':'')+'>Total de la línea</option><option value="unit" '+(item.priceMode==='unit'?'selected':'')+'>Precio unitario</option></select></label><label>Importe leído USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label><small class="invoice-line-calculation">Precio unitario calculado: <b>'+money(item.priceMode==='line' ? Number(item.price)/Math.max(Number(item.quantity),0.001) : Number(item.price))+'</b> · Total línea: <b>'+money(item.priceMode==='line' ? Number(item.price) : Number(item.price)*Number(item.quantity))+'</b></small></div>'+(duplicateIndexes.has(index)?'<small class="invoice-duplicate-warning">Posible artículo repetido. Compara cantidad e importe con la otra línea; no se combinará automáticamente.</small>':'')+'</div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
       const reconciliation = container.querySelector('#invoice-reconciliation');
       if (reconciliation) {
+        const duplicateNote = duplicateGroups.length ? ' · ' + duplicateGroups.length + ' grupo(s) de posibles repetidos: revisa las líneas marcadas antes de confirmar.' : ' · No se detectaron posibles artículos repetidos.';
         const lineSum = invoiceDraft.filter(x => x.selected).reduce((sum,x) => sum + (x.priceMode === 'line' ? Number(x.price) || 0 : (Number(x.price) || 0) * (Number(x.quantity) || 0)), 0);
         const totals = parseInvoiceTotals(container.querySelector('#invoice-ocr-text')?.value || '');
-        if (totals.total == null) reconciliation.textContent = 'Verificación de factura: no se detectó un total final legible. La suma preliminar de artículos seleccionados es ' + money(lineSum) + '.';
+        if (totals.total == null) reconciliation.textContent = 'Verificación de factura: no se detectó un total final legible. La suma preliminar de artículos seleccionados es ' + money(lineSum) + duplicateNote;
         else {
           const difference = totals.total - lineSum;
           const matches = Math.abs(difference) <= 0.02;
           reconciliation.textContent = (matches ? 'La suma de los artículos coincide con el total detectado. ' : 'Hay una diferencia entre los artículos y el total de la factura. ') +
             'Artículos: ' + money(lineSum) + ' · Total factura: ' + money(totals.total) + ' · Diferencia: ' + money(difference) +
             (totals.tax || totals.discount ? ' · ITBMS/descuentos detectados: ' + money(totals.tax - totals.discount) : '') +
-            ' No se modificó ningún importe; revisa líneas omitidas, impuestos, descuentos o errores del OCR.';
+            ' No se modificó ningún importe; revisa líneas omitidas, impuestos, descuentos o errores del OCR.' + duplicateNote;
         }
       }
     };
