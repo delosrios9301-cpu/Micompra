@@ -1,7 +1,7 @@
-const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const units = ['unidad','unidades','kg','g','lb','oz','L','ml','paquete','paquetes','botella','botellas','lata','latas','bolsa','bolsas','rollo','rollos'];
 import { readStoredArraySafely } from './storage-recovery.js';
 
+const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const units = ['unidad','unidades','kg','g','lb','oz','L','ml','paquete','paquetes','botella','botellas','lata','latas','bolsa','bolsas','rollo','rollos'];
 export function normalizePantryName(value) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
