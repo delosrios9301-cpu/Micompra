@@ -726,6 +726,7 @@ function refreshWorkspaceViews() {
 
 async function start() {
   shell();
+  collectLocalRecoveryCopies();
   renderPersonalCatalog();
   window.addEventListener('micompra:workspace-synced', refreshWorkspaceViews);
   if (!supabase) { await renderAuth(); await loadList(); message('Modo local disponible. Configura el acceso para sincronizar entre dispositivos.'); return; }
