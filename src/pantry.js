@@ -5,6 +5,16 @@ export function normalizePantryName(value) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+export function findPantryListDuplicate(listItems = [], pantryItem) {
+  const name = normalizePantryName(pantryItem?.item_name);
+  const unit = String(pantryItem?.unit || 'unidades').trim().toLowerCase();
+  if (!name) return null;
+  return (listItems || []).find(row =>
+    normalizePantryName(row.item_name) === name &&
+    String(row.unit || 'unidades').trim().toLowerCase() === unit
+  ) || null;
+}
+
 export function isPantryLowStock(item) {
   const quantity = Number(item?.quantity) || 0;
   const minimum = Number(item?.minimum_quantity) || 0;
@@ -91,9 +101,9 @@ export async function renderPersonalPantry({ container, supabase, user }) {
           }
           const { data: listItems, error: itemsError } = await supabase.from('shopping_list_items').select('id,item_name,quantity,unit,checked').eq('list_id', activeList.id);
           if (itemsError) throw itemsError;
-          const duplicate = (listItems || []).find(row => normalizePantryName(row.item_name) === normalizePantryName(items.find(x => x.id === id)?.item_name) && String(row.unit || 'unidades').trim().toLowerCase() === String(items.find(x => x.id === id)?.unit || 'unidades').trim().toLowerCase());
           const pantryItem = items.find(x => x.id === id);
           if (!pantryItem) throw new Error('Artículo no encontrado');
+          const duplicate = findPantryListDuplicate(listItems, pantryItem);
           if (duplicate) {
             const { error } = await supabase.from('shopping_list_items').update({ quantity: Number(duplicate.quantity) + 1, checked: false }).eq('id', duplicate.id).eq('list_id', activeList.id);
             if (error) throw error;
