@@ -1066,3 +1066,89 @@ main{padding-top:22px}
  .account-module-heading h3{font-size:16px}
  .account-session-card{padding:12px}
 }
+
+
+/* Ajuste integral de proporciones y dimensiones en todos los módulos */
+:root{
+ --mc-content-width:1180px;
+ --mc-gutter:clamp(14px,2.4vw,30px);
+ --mc-control-height:44px;
+}
+html{width:100%;min-width:320px;scroll-behavior:smooth}
+body{width:100%;min-width:320px;min-height:100vh;overflow-x:hidden;background:var(--mc-page,#f4f7f4)}
+#app{width:100%;min-width:0;min-height:100vh}
+main{width:min(100%,var(--mc-content-width));max-width:var(--mc-content-width);margin-inline:auto;padding:clamp(18px,3vw,34px) var(--mc-gutter)}
+header{width:100%;min-height:64px;height:auto;gap:14px;padding:12px max(var(--mc-gutter),calc((100vw - var(--mc-content-width))/2))}
+.app-views,.app-view,.app-view>*{min-width:0;max-width:100%}
+.app-view{width:100%;gap:clamp(12px,1.6vw,18px);padding-bottom:clamp(18px,3vw,28px)}
+.app-view>section,.app-view>.page-card,.app-view>.settings-card,.app-view>.account-module-block{width:100%;min-width:0}
+.page-card,.settings-card,.account-module-block,.account-session-card,.dashboard-panel,.dashboard-metric,.purchase-card,.list-comparison{min-width:0;max-width:100%}
+.app-view :is(input,select,textarea){width:100%;max-width:100%;min-width:0;min-height:var(--mc-control-height);font-size:14px}
+.app-view input[type=checkbox],.app-view input[type=radio],.app-view input[type=file]{width:auto;min-height:0}
+.app-view button{min-height:var(--mc-control-height);max-width:100%;white-space:normal;line-height:1.3}
+.app-view :is(h1,h2,h3,h4,p,small,strong,span,label){overflow-wrap:anywhere}
+.app-view .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.app-view .section-head>*{min-width:0}
+.app-view .grid,.app-view .dashboard-metrics,.app-view .dashboard-detail-grid,.app-view .purchase-kpis{min-width:0}
+.app-view img,.app-view video,.app-view canvas,.app-view svg{max-width:100%;height:auto}
+.app-view table{max-width:100%}
+.app-view :is(.purchase-compare-wrap,.table-wrap,.comparison-table-wrap){width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.app-view .purchase-compare{width:100%}
+.app-view .more-page,.app-view .personal-catalog,.app-view .settings-page,.app-view .personal-pantry{width:100%;max-width:960px;margin-inline:auto}
+.app-view .home-dashboard{width:100%;max-width:100%}
+.app-navigation{width:min(100%,var(--mc-content-width));max-width:var(--mc-content-width);margin-inline:auto}
+@media(min-width:1100px){
+ main{padding-top:34px;padding-bottom:38px}
+ .app-view{gap:18px}
+ .dashboard-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .dashboard-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .stores-page-card .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .personal-catalog-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(min-width:761px) and (max-width:1099px){
+ main{padding:26px 22px}
+ .app-view{gap:15px}
+ .dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dashboard-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .personal-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ main{width:100%;max-width:100%;padding:18px 14px 24px}
+ header{min-height:58px;padding:10px 14px}
+ .brand{font-size:20px}
+ .app-view{gap:12px;padding-bottom:16px}
+ .page-card,.settings-card,.account-module-block{padding:13px;border-radius:14px}
+ .dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dashboard-detail-grid{grid-template-columns:1fr}
+ .purchase-form,.invoice-draft-grid,.barcode-admin-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .app-view .guest-add-form{grid-template-columns:1fr}
+ .app-navigation{position:sticky;bottom:0;z-index:30;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:7px max(6px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));background:rgba(255,255,255,.97);backdrop-filter:blur(12px);border-top:1px solid #e3ebe4}
+}
+@media(max-width:480px){
+ main{padding:15px 11px 22px}
+ .app-view{gap:11px}
+ .page-card,.settings-card,.account-module-block{padding:11px;border-radius:12px}
+ .dashboard-metrics{gap:7px}
+ .dashboard-metric{padding:10px 9px}
+ .dashboard-detail-grid{gap:9px}
+ .purchase-form,.invoice-draft-grid,.barcode-admin-form{grid-template-columns:minmax(0,1fr)}
+ .app-view .purchase-form .wide,.app-view .invoice-draft-grid .wide{grid-column:auto}
+ .app-view .section-head{align-items:flex-start}
+ .app-view .product,.app-view .price-row{gap:8px;padding:11px}
+ .app-view .cart-item{gap:8px;padding:10px}
+ .app-view .review-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+ .app-view .review-actions button{min-width:0}
+ .app-view .receipt-upload{grid-template-columns:minmax(0,1fr)}
+ .app-view .receipt-upload small{grid-column:auto}
+ .app-view .purchase-card-head{flex-wrap:wrap}
+ .app-view .purchase-card-head select{max-width:100%}
+ .app-view .account-session-card .signed{align-items:flex-start}
+}
+@media(max-width:360px){
+ main{padding-inline:9px}
+ .brand{font-size:18px}
+ .app-view .dashboard-metric{padding:9px 8px}
+ .app-view .dashboard-metric strong{font-size:17px}
+ .app-view .app-nav-item small{font-size:8px}
+ .app-view .review-actions{grid-template-columns:1fr}
+}
