@@ -1,0 +1,1 @@
+create index if not exists purchase_records_branch_store_idx on public.purchase_records(branch_id, supermarket_id) where branch_id is not null;
