@@ -15,7 +15,7 @@ const normalizeUnit = value => {
   const v=String(value??'').trim().toLowerCase();
   if(['gr','gramo','gramos'].includes(v))return 'g';
   if(['kilo','kilos','kilogramo','kilogramos'].includes(v))return 'kg';
-  if(['lt','litro','litros'].includes(v))return 'L';
+  if(['l','lt','litro','litros'].includes(v))return 'L';
   if(['libra','libras','lbs'].includes(v))return 'lb';
   return v;
 };
