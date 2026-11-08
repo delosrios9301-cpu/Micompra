@@ -203,6 +203,14 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
   merged.settings = mergeSettings(local.settings, remote.settings, baseline.settings);
   const remotePayload = stableStringify(remote);
   const mergedPayload = stableStringify(merged);
+  const localChangedDuringSync = () => storageKeys.some((key, index) => storage.getItem(key) !== storageSnapshot[index]);
+  if (localChangedDuringSync()) {
+    return {
+      ok: false,
+      retry: true,
+      message: 'Se detectaron cambios nuevos en este dispositivo durante la sincronización. Se conservaron y se volverán a sincronizar; no se aplicaron datos antiguos.'
+    };
+  }
   if (!cloudRow || remotePayload !== mergedPayload) {
     const { error: writeError } = await supabase.from('personal_workspace').upsert({
       user_id: user.id,
@@ -211,8 +219,7 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
     }, { onConflict: 'user_id' });
     if (writeError) return { ok: false, message: 'No se pudo guardar la sincronización: ' + writeError.message };
   }
-  const localChangedDuringSync = storageKeys.some((key, index) => storage.getItem(key) !== storageSnapshot[index]);
-  if (localChangedDuringSync) {
+  if (localChangedDuringSync()) {
     return {
       ok: false,
       retry: true,
