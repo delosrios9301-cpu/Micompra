@@ -135,6 +135,27 @@ const parseInvoiceDraft = (text, products) => {
   return drafts.slice(0, 100);
 };
 
+const parseInvoiceTotals = text => {
+  const lines = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const parseAmount = raw => {
+    if (raw.includes('.') && raw.includes(',')) return Number(raw.lastIndexOf('.') > raw.lastIndexOf(',') ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.'));
+    return Number(raw.replace(',', '.'));
+  };
+  const result = { total: null, subtotal: null, tax: 0, discount: 0 };
+  for (const line of lines) {
+    const match = line.match(/(?:B\/|USD|\$)?\s*(\d{1,4}(?:[.,]\d{3})*[.,]\d{2})\s*$/i);
+    if (!match) continue;
+    const amount = parseAmount(match[1]);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 100000) continue;
+    const label = line.slice(0, match.index).trim();
+    if (/^(?:total\s*(?:a\s*pagar|general|factura)?|importe\s*total|monto\s*total)\b/i.test(label)) result.total = amount;
+    else if (/^subtotal\b/i.test(label)) result.subtotal = amount;
+    else if (/^(?:itbms|impuesto|tax)\b/i.test(label)) result.tax += amount;
+    else if (/^(?:descuento|descto|ahorro|promo(?:cion)?|cup[oó]n)\b/i.test(label)) result.discount += amount;
+  }
+  return result;
+};
+
 const dateLabel = value => value ? new Date(value + (String(value).length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-PA') : '—';
 const norm = value => String(value ?? '').trim().toLocaleLowerCase('es').replace(/\s+/g, ' ');
 
@@ -261,6 +282,7 @@ export async function renderPurchases({ container, supabase, user }) {
             <button type="button" class="secondary" id="prepare-invoice-draft">Preparar artículos desde el texto</button>
             <small class="invoice-ocr-note">Se omiten líneas de impuestos, totales, descuentos y promociones para evitar registrarlas como productos. Los artículos por peso se convierten a lb, kg u oz; revisa siempre cantidad e importe antes de confirmar.</small>
             <div id="invoice-draft-list"></div>
+            <div id="invoice-reconciliation" class="invoice-ocr-note" aria-live="polite"></div>
             <button type="button" id="confirm-invoice-draft" disabled>Agregar artículos revisados a esta compra</button>
           </section>
           <form id="purchase-add-item" class="purchase-form item-form">
@@ -368,6 +390,20 @@ export async function renderPurchases({ container, supabase, user }) {
       if (!host) return;
       host.innerHTML = invoiceDraft.length ? invoiceDraft.map((item,index) => '<div class="invoice-draft-row" data-invoice-row="'+index+'"><label><input type="checkbox" data-field="selected" '+(item.selected?'checked':'')+'> Incluir</label><label>Artículo<input data-field="name" maxlength="180" value="'+safe(item.name)+'"></label><label>Producto de catálogo<select data-field="productId"><option value="">Artículo libre</option>'+products.map(p=>'<option value="'+p.id+'" '+(item.productId===p.id?'selected':'')+'>'+safe(p.canonical_name)+'</option>').join('')+'</select></label><div class="invoice-draft-grid"><label>Presentación<input data-field="package" maxlength="180" value="'+safe(item.package)+'"></label><label>Cantidad<input data-field="quantity" type="number" min="0.001" step="0.001" value="'+safe(item.quantity)+'"></label><label>Unidad<input data-field="unit" maxlength="40" value="'+safe(item.unit)+'"></label><label>El importe leído es<select data-field="priceMode"><option value="line" '+(item.priceMode==='line'?'selected':'')+'>Total de la línea</option><option value="unit" '+(item.priceMode==='unit'?'selected':'')+'>Precio unitario</option></select></label><label>Importe leído USD<input data-field="price" type="number" min="0" step="0.01" value="'+safe(item.price)+'"></label><small class="invoice-line-calculation">Precio unitario calculado: <b>'+money(item.priceMode==='line' ? Number(item.price)/Math.max(Number(item.quantity),0.001) : Number(item.price))+'</b> · Total línea: <b>'+money(item.priceMode==='line' ? Number(item.price) : Number(item.price)*Number(item.quantity))+'</b></small></div></div>').join('') : '<small>No se detectaron líneas con precio claro. Puedes corregir el texto o agregar artículos manualmente.</small>';
       if (confirm) confirm.disabled = !invoiceDraft.some(x => x.selected && x.name.trim() && Number(x.quantity)>0 && Number(x.price)>=0);
+      const reconciliation = container.querySelector('#invoice-reconciliation');
+      if (reconciliation) {
+        const lineSum = invoiceDraft.filter(x => x.selected).reduce((sum,x) => sum + (x.priceMode === 'line' ? Number(x.price) || 0 : (Number(x.price) || 0) * (Number(x.quantity) || 0)), 0);
+        const totals = parseInvoiceTotals(container.querySelector('#invoice-ocr-text')?.value || '');
+        if (totals.total == null) reconciliation.textContent = 'Verificación de factura: no se detectó un total final legible. La suma preliminar de artículos seleccionados es ' + money(lineSum) + '.';
+        else {
+          const difference = totals.total - lineSum;
+          const matches = Math.abs(difference) <= 0.02;
+          reconciliation.textContent = (matches ? 'La suma de los artículos coincide con el total detectado. ' : 'Hay una diferencia entre los artículos y el total de la factura. ') +
+            'Artículos: ' + money(lineSum) + ' · Total factura: ' + money(totals.total) + ' · Diferencia: ' + money(difference) +
+            (totals.tax || totals.discount ? ' · ITBMS/descuentos detectados: ' + money(totals.tax - totals.discount) : '') +
+            ' No se modificó ningún importe; revisa líneas omitidas, impuestos, descuentos o errores del OCR.';
+        }
+      }
     };
 
     const metaStore = container.querySelector('#invoice-meta-store');
