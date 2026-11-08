@@ -40,6 +40,13 @@ export function summarizeSpending(purchases, today = new Date()) {
   return { week, month, monthItems: monthItems.length, totalItems: items.length, topProducts: rank(products).slice(0, 6), categories: rank(categories).slice(0, 6) };
 }
 
+export function getBudgetThresholdsReached(monthSpend, monthlyBudget) {
+  const spend = Number(monthSpend) || 0;
+  const budget = Number(monthlyBudget) || 0;
+  if (budget <= 0) return [];
+  return [75, 90, 100].filter(threshold => spend >= budget * threshold / 100);
+}
+
 export function summarizeMonthlySpending(purchases, today = new Date(), monthCount = 6) {
   const count = Math.max(1, Math.min(24, Math.floor(Number(monthCount) || 6)));
   const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -73,7 +80,7 @@ export async function renderSpendingDashboard({ container, supabase, user }) {
   container.querySelector('.personal-spending')?.remove();
   const section = document.createElement('section');
   section.className = 'personal-spending';
-  section.innerHTML = '<div class="spending-heading"><div><p class="eyebrow">CONTROL DEL HOGAR</p><h3>Mis gastos</h3><small>Resumen de tus compras registradas en Mi Compra.</small></div><button type="button" class="spending-refresh">Actualizar</button></div><div class="spending-kpis"><article><small>Esta semana</small><strong id="spending-week">—</strong></article><article><small>Este mes</small><strong id="spending-month">—</strong></article><article><small>Presupuesto restante</small><strong id="spending-remaining">—</strong></article></div><section class="spending-budget"><form id="spending-budget-form"><label for="spending-budget-input">Mi presupuesto mensual (USD)</label><div><input id="spending-budget-input" type="number" min="0" max="10000000" step="0.01" placeholder="Ej. 350"><button type="submit">Guardar presupuesto</button></div><small id="spending-budget-status" aria-live="polite">Opcional. Puedes dejarlo en 0 si todavía no deseas definir un presupuesto.</small></form><div class="spending-progress"><div><span>Uso del presupuesto</span><b id="spending-progress-label">Sin presupuesto definido</b></div><i><span id="spending-progress-fill"></span></i></div></section><div class="spending-analysis"><section><h4>Productos con mayor gasto</h4><div id="spending-products"></div></section><section><h4>Gasto por categoría</h4><div id="spending-categories"></div></section></div><section class="spending-monthly"><div><h4>Historial de gastos</h4><small>Comparación de los últimos 6 meses</small></div><div id="spending-month-history" class="spending-month-history" role="img" aria-label="Gastos mensuales de los últimos seis meses"></div></section><p class="spending-footnote" id="spending-footnote">Los importes se calculan a partir de las compras guardadas. Registra tus compras para que el resumen refleje tus gastos.</p>';
+  section.innerHTML = '<div class="spending-heading"><div><p class="eyebrow">CONTROL DEL HOGAR</p><h3>Mis gastos</h3><small>Resumen de tus compras registradas en Mi Compra.</small></div><button type="button" class="spending-refresh">Actualizar</button></div><div class="spending-kpis"><article><small>Esta semana</small><strong id="spending-week">—</strong></article><article><small>Este mes</small><strong id="spending-month">—</strong></article><article><small>Presupuesto restante</small><strong id="spending-remaining">—</strong></article></div><section class="spending-budget"><form id="spending-budget-form"><label for="spending-budget-input">Mi presupuesto mensual (USD)</label><div><input id="spending-budget-input" type="number" min="0" max="10000000" step="0.01" placeholder="Ej. 350"><button type="submit">Guardar presupuesto</button></div><small id="spending-budget-status" aria-live="polite">Opcional. Puedes dejarlo en 0 si todavía no deseas definir un presupuesto.</small></form><div class="spending-progress"><div><span>Uso del presupuesto</span><b id="spending-progress-label">Sin presupuesto definido</b></div><i><span id="spending-progress-fill"></span></i></div></section><div class="spending-analysis"><section><h4>Productos con mayor gasto</h4><div id="spending-products"></div></section><section><h4>Gasto por categoría</h4><div id="spending-categories"></div></section></div><section class="spending-alerts" aria-live="polite"><h4>Avisos de presupuesto</h4><div id="spending-alert-list"><p class="spending-empty">Todavía no hay avisos este mes.</p></div></section><section class="spending-monthly"><div><h4>Historial de gastos</h4><small>Comparación de los últimos 6 meses</small></div><div id="spending-month-history" class="spending-month-history" role="img" aria-label="Gastos mensuales de los últimos seis meses"></div></section><p class="spending-footnote" id="spending-footnote">Los importes se calculan a partir de las compras guardadas. Registra tus compras para que el resumen refleje tus gastos.</p>';
   container.appendChild(section);
   const $ = selector => section.querySelector(selector);
   const refresh = async () => {
@@ -94,6 +101,37 @@ export async function renderSpendingDashboard({ container, supabase, user }) {
     const monthlyHistory = summarizeMonthlySpending(purchaseResult.data || []);
     const budget = Number(budgetResult.data?.monthly_budget || 0);
     const remaining = budget > 0 ? budget - summary.month : null;
+    const periodStart = `${localDateKey().slice(0, 7)}-01`;
+    const reached = getBudgetThresholdsReached(summary.month, budget);
+    if (reached.length) {
+      const alertRows = reached.map(threshold => ({
+        user_id: user.id, period_start: periodStart, threshold
+      }));
+      const { error: alertWriteError } = await supabase.from('personal_budget_alerts')
+        .upsert(alertRows, { onConflict: 'user_id,period_start,threshold', ignoreDuplicates: true });
+      if (alertWriteError) {
+        $('#spending-alert-list').innerHTML = '<p class="spending-empty">No se pudieron guardar los avisos. Actualiza para volver a intentarlo.</p>';
+      }
+    }
+    const { data: alertRows, error: alertReadError } = await supabase.from('personal_budget_alerts')
+      .select('threshold,triggered_at').eq('user_id', user.id).eq('period_start', periodStart)
+      .order('threshold', { ascending: true });
+    if (alertReadError) {
+      $('#spending-alert-list').innerHTML = '<p class="spending-empty">No se pudieron consultar los avisos de este mes.</p>';
+    } else if (!budget) {
+      $('#spending-alert-list').innerHTML = '<p class="spending-empty">Define tu presupuesto mensual para activar los avisos del 75 %, 90 % y 100 %.</p>';
+    } else if (!alertRows?.length) {
+      $('#spending-alert-list').innerHTML = '<p class="spending-empty">Aún no has alcanzado el 75 % de tu presupuesto este mes.</p>';
+    } else {
+      $('#spending-alert-list').innerHTML = alertRows.map(alert => {
+        const messages = {
+          75: 'Has utilizado el 75 % de tu presupuesto mensual. Conviene revisar lo que queda por comprar.',
+          90: 'Has utilizado el 90 % de tu presupuesto mensual. Modera los gastos restantes.',
+          100: 'Has alcanzado o superado el 100 % de tu presupuesto mensual.'
+        };
+        return `<article class="spending-alert spending-alert-${alert.threshold}"><b>${alert.threshold}% del presupuesto</b><span>${messages[alert.threshold]}</span><small>${new Date(alert.triggered_at).toLocaleString('es-PA')}</small></article>`;
+      }).join('');
+    }
     $('#spending-week').textContent = money(summary.week);
     $('#spending-month').textContent = money(summary.month);
     $('#spending-remaining').textContent = remaining === null ? '—' : money(remaining);
