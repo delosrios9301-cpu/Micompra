@@ -94,36 +94,62 @@ async function searchProducts(term) {
       const price = (item.price_observations || []).filter(p => p.is_verified && p.review_status === 'approved' && p.currency === 'USD' && Number(p.price) > 0 && Date.now() - new Date(p.observed_at).getTime() <= 86400000).sort((a,b) => Number(a.price)-Number(b.price))[0];
       return '<article class="product store-product-result"><div><strong>' + safe(item.source_product_name) + '</strong><small>' + safe(item.package_description || 'Presentación por confirmar') + (item.source_sku ? ' · SKU ' + safe(item.source_sku) : '') + '</small><small>' + safe(item.products?.canonical_name || '') + (item.supermarket_branches?.name ? ' · Sucursal: ' + safe(item.supermarket_branches.name) : ' · Sucursal por confirmar') + '</small><small class="' + (price ? 'price-current' : 'price-pending') + '">' + (price ? money(price.price) + ' · precio verificado recientemente' : 'Precio y disponibilidad pendientes de verificación') + '</small>' + (item.source_product_url ? '<a href="' + safe(item.source_product_url) + '" target="_blank" rel="noreferrer">Ver publicación oficial ↗</a>' : '') + '</div><button type="button" data-add-listing="' + safe(item.id) + '">Agregar a mi compra</button></article>';
     }).join('');
-    box.querySelectorAll('[data-add-listing]').forEach(button => button.addEventListener('click', async () => {
+    box.onclick = async event => {
+      const button = event.target.closest('button[data-add-listing]');
+      if (!button || !box.contains(button)) return;
       const item = listings.find(row => row.id === button.dataset.addListing);
-      if (!item) return;
-      button.disabled = true;
-      await addSearchItem({name:item.source_product_name,store:storeName,productId:item.product_id,price:null});
-      button.disabled = false;
-    }));
+      if (!item || button.disabled) return;
+      await addSearchItemFromButton(button, {name:item.source_product_name,store:storeName,productId:item.product_id,price:null});
+    };
     return;
   }
   const { data: products, error: productError } = await supabase.from('products').select('id,canonical_name,brand,normalized_quantity,normalized_unit_name').eq('active', true).ilike('canonical_name', '%' + clean + '%').order('canonical_name').limit(20);
   if (productError) { box.innerHTML = '<p class="empty">No se pudo consultar el catálogo. Inténtalo más tarde.</p>'; return; }
   if (!products?.length) { box.innerHTML = '<p class="empty">No encontramos "' + safe(term) + '" en el catálogo de ' + safe(storeName) + '.</p>'; return; }
   box.innerHTML = '<p class="catalog-empty-store">No hay publicaciones específicas registradas para ' + safe(storeName) + '. Puedes agregar el artículo como pendiente de confirmar, sin inventar precio ni disponibilidad.</p>' + products.map(p => '<article class="product store-product-result"><div><strong>' + safe(p.canonical_name) + '</strong><small>' + safe([p.brand,p.normalized_quantity && p.normalized_unit_name ? p.normalized_quantity + ' ' + p.normalized_unit_name : ''].filter(Boolean).join(' · ') || 'Presentación por confirmar') + '</small><small class="price-pending">Sin publicación ni precio confirmado en ' + safe(storeName) + '</small></div><button type="button" data-add-catalog="' + safe(p.id) + '">Agregar pendiente</button></article>').join('');
-  box.querySelectorAll('[data-add-catalog]').forEach(button => button.addEventListener('click', async () => {
+  box.onclick = async event => {
+    const button = event.target.closest('button[data-add-catalog]');
+    if (!button || !box.contains(button)) return;
     const p = products.find(row => row.id === button.dataset.addCatalog);
-    if (!p) return;
-    button.disabled = true;
-    await addSearchItem({name:p.canonical_name,store:storeName,productId:p.id,price:null});
-    button.disabled = false;
-  }));
+    if (!p || button.disabled) return;
+    await addSearchItemFromButton(button, {name:p.canonical_name,store:storeName,productId:p.id,price:null});
+  };
+}
+async function addSearchItemFromButton(button, item) {
+  const card = button.closest('.store-product-result');
+  let feedback = card?.querySelector('.add-feedback');
+  if (!feedback && card) {
+    feedback = document.createElement('small');
+    feedback.className = 'add-feedback';
+    feedback.setAttribute('role','status');
+    feedback.setAttribute('aria-live','polite');
+    card.appendChild(feedback);
+  }
+  button.disabled = true;
+  button.textContent = 'Agregando...';
+  if (feedback) feedback.textContent = '';
+  const result = await addSearchItem(item);
+  button.disabled = false;
+  button.textContent = result.ok ? 'Agregado ✓' : 'Reintentar';
+  if (feedback) feedback.textContent = result.message;
 }
 async function addSearchItem({name,store,productId=null,price=null}) {
-  if (!name) return;
-  if (user && activeList) {
-    const {error} = await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:productId,item_name:name,quantity:1,unit:'unidades'});
-    if (error) { alert('No se pudo agregar el producto a tu lista.'); return; }
-    await loadList();
-    return;
+  if (!name) return {ok:false,message:'No se identificó el producto.'};
+  try {
+    if (user) {
+      if (!activeList) await loadList();
+      if (!activeList) return {ok:false,message:'No se pudo abrir tu lista. Inténtalo nuevamente.'};
+      const {error} = await supabase.from('shopping_list_items').insert({list_id:activeList.id,product_id:productId,item_name:name,quantity:1,unit:'unidades'});
+      if (error) return {ok:false,message:'No se guardó en tu cuenta: '+(error.message || 'error de permisos')};
+      await loadList();
+      return {ok:true,message:'Producto guardado en tu lista.'};
+    }
+    addGuestCartItem({name,store,qty:1,price});
+    const saved = readGuestCart().some(row => row.name === name && row.store === store);
+    return saved ? {ok:true,message:'Producto agregado a tu lista de este dispositivo.'} : {ok:false,message:'No se pudo guardar en este dispositivo.'};
+  } catch (error) {
+    return {ok:false,message:'No se pudo agregar: '+(error?.message || 'error inesperado')};
   }
-  addGuestCartItem({name,store,qty:1,price});
 }
 function addGuestCartItem({name,store,qty=1,price=null}) {
   const current = readGuestCart();
