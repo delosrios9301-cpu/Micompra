@@ -95,3 +95,10 @@
 #confirm-invoice-draft{width:100%;border:0;border-radius:9px;background:#245b45;color:#fff;padding:11px;font:600 12px 'DM Sans',sans-serif}
 #confirm-invoice-draft:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:420px){.invoice-draft-grid{grid-template-columns:1fr}}
+
+
+.invoice-metadata{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:14px 0;padding:14px;border:1px solid var(--border,#d9e0e8);border-radius:12px}
+.invoice-metadata>strong,.invoice-metadata>small{grid-column:1/-1}
+.invoice-metadata label{display:grid;gap:6px;min-width:0}
+.invoice-metadata input,.invoice-metadata select{width:100%;min-width:0}
+.invoice-metadata button{justify-self:start}
