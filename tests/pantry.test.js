@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePantryName, isPantryLowStock, summarizePantry, findPantryListDuplicate, buildPantryRestockPlan } from '../src/pantry.js';
+import { normalizePantryName, isPantryLowStock, summarizePantry, findPantryListDuplicate, findPantryCatalogMatch, buildPantryRestockPlan } from '../src/pantry.js';
 
 test('pantry names normalize accents, case and whitespace', () => {
   assert.equal(normalizePantryName('  Café   Molido '), 'cafe molido');
@@ -57,4 +57,40 @@ test('bulk restock plan avoids creating duplicates among planned inserts', () =>
   ], []);
   assert.equal(plan.inserts.length, 1);
   assert.equal(plan.updates.length, 1);
+});
+
+test('pantry catalog matching requires exact name, compatible unit and unambiguous single-size package', () => {
+  const products = [
+    { id: 'rice-1kg', canonical_name: 'Arroz', normalized_quantity: 1, normalized_unit_name: 'kg', active: true },
+    { id: 'rice-500g', canonical_name: 'Arroz', normalized_quantity: 500, normalized_unit_name: 'g', active: true },
+    { id: 'milk', canonical_name: 'Leche', normalized_quantity: 1, normalized_unit_name: 'L', active: true }
+  ];
+  assert.equal(findPantryCatalogMatch({ item_name: 'ARROZ', unit: 'kg' }, products).product?.id, 'rice-1kg');
+  assert.equal(findPantryCatalogMatch({ item_name: 'Arroz', unit: 'lb' }, products).product, null);
+  assert.equal(findPantryCatalogMatch({ item_name: 'Leche', unit: 'paquete' }, products).product, null);
+  assert.equal(findPantryCatalogMatch({ item_name: 'Arroz', unit: 'g' }, products).product?.id, 'rice-500g');
+});
+
+test('pantry catalog matching refuses ambiguous and multi-unit packages', () => {
+  const products = [
+    { id: 'a', canonical_name: 'Sal', normalized_quantity: 1, normalized_unit_name: 'unidades', active: true },
+    { id: 'b', canonical_name: 'Sal', normalized_quantity: 1, normalized_unit_name: 'unidad', active: true },
+    { id: 'c', canonical_name: 'Azúcar', normalized_quantity: 2, normalized_unit_name: 'kg', active: true }
+  ];
+  assert.equal(findPantryCatalogMatch({ item_name: 'Sal', unit: 'unidad' }, products).reason, 'ambiguous');
+  assert.equal(findPantryCatalogMatch({ item_name: 'Azúcar', unit: 'kg' }, products).product, null);
+});
+
+test('bulk restock plan links only safe unique catalog matches', () => {
+  const plan = buildPantryRestockPlan([
+    { item_name: 'Arroz', quantity: 0, minimum_quantity: 1, unit: 'kg' },
+    { item_name: 'Leche', quantity: 0, minimum_quantity: 1, unit: 'L' }
+  ], [], [
+    { id: 'rice-1kg', canonical_name: 'Arroz', normalized_quantity: 1, normalized_unit_name: 'kg', active: true },
+    { id: 'milk-half', canonical_name: 'Leche', normalized_quantity: 500, normalized_unit_name: 'ml', active: true }
+  ]);
+  assert.equal(plan.linked, 1);
+  assert.equal(plan.unlinked, 1);
+  assert.equal(plan.inserts[0].product_id, 'rice-1kg');
+  assert.equal(plan.inserts[1].product_id, null);
 });
