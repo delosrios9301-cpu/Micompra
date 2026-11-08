@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode, isValidBarcodeChecksum } from '../src/purchases.js';
+import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode, isValidBarcodeChecksum, getBarcodePackageVariants, getBarcodeAssociationStatus } from '../src/purchases.js';
 
 test('CSV includes UTF-8 BOM and Spanish headers', () => {
   const csv = buildPurchasesCsv([]);
@@ -107,4 +107,25 @@ test('UPC-E check digit validates against its expanded UPC-A value', () => {
 test('non-numeric barcode formats are not forced through UPC/EAN checksum rules', () => {
   assert.equal(isValidBarcodeChecksum('ABC123XYZ', 'code_128'), true);
   assert.equal(isValidBarcodeChecksum('AB-CD 123', 'code_39'), true);
+});
+
+test('barcode associations detect duplicate codes across products and normalize formatting', () => {
+  const products = [
+    { id: 'rice-1', canonical_name: 'Arroz blanco', normalized_quantity: '1', normalized_unit_name: 'kg', barcode: null },
+    { id: 'rice-5', canonical_name: 'Arroz blanco', normalized_quantity: '5', normalized_unit_name: 'kg', barcode: null }
+  ];
+  const mappings = [{ id: 1, product_id: 'rice-5', barcode: '012345678905' }];
+  assert.equal(getBarcodeAssociationStatus(products, mappings, 'rice-1', '012-345 678905').status, 'assigned_to_other_product');
+  assert.equal(getBarcodeAssociationStatus(products, mappings, 'rice-5', '012345678905').status, 'already_on_selected_product');
+  assert.equal(getBarcodeAssociationStatus(products, mappings, 'rice-1', '098765432109').status, 'available');
+});
+
+test('barcode package variants identify same catalog product with different presentations', () => {
+  const products = [
+    { id: 'coffee-250', canonical_name: 'Café molido', normalized_quantity: '250', normalized_unit_name: 'g' },
+    { id: 'coffee-500', canonical_name: 'Café molido', normalized_quantity: '500', normalized_unit_name: 'g' },
+    { id: 'tea', canonical_name: 'Té negro', normalized_quantity: '36', normalized_unit_name: 'g' }
+  ];
+  assert.deepEqual(getBarcodePackageVariants(products, 'coffee-250').map(item => item.id), ['coffee-500']);
+  assert.deepEqual(getBarcodePackageVariants(products, 'tea'), []);
 });
