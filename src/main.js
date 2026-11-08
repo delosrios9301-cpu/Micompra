@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import './style.css';
 import { importPriceCsv } from './price-import.js';
-import { renderPurchases } from './purchases.js';
+import { renderPurchases, normalizeProductBarcode, isValidBarcodeChecksum } from './purchases.js';
+import { getProductRegistrationCheck, validateProductRegistrationDraft } from './catalog-admin.js';
 import { findCatalogNameMatches, findDuplicateListItem } from './catalog-duplicates.js';
 
 const env = import.meta.env;
@@ -112,6 +113,72 @@ async function renderAuth() {
 }
 
 
+
+async function renderProductAdmin(panel) {
+  const section=document.createElement('section');
+  section.className='catalog-product-admin';
+  section.innerHTML='<div class="catalog-admin-heading"><div><strong>Agregar producto al catálogo</strong><small>Solo el administrador principal puede crear productos. Los precios no se modifican aquí.</small></div></div><form id="catalog-product-form" class="catalog-product-form" novalidate><label>Nombre del producto<input id="new-product-name" maxlength="120" required placeholder="Ej. Arroz blanco"></label><div class="catalog-admin-grid"><label>Marca (opcional)<input id="new-product-brand" maxlength="80" placeholder="Ej. marca comercial"></label><label>Categoría<input id="new-product-category" maxlength="60" list="catalog-category-options" required placeholder="Ej. Granos y cereales"><datalist id="catalog-category-options"></datalist></label><label>Cantidad del empaque<input id="new-product-quantity" type="number" min="0.001" max="1000000" step="0.001" required placeholder="Ej. 1"></label><label>Unidad<select id="new-product-unit" required><option value="">Selecciona</option><option value="kg">kg</option><option value="g">g</option><option value="lb">lb</option><option value="oz">oz</option><option value="L">L</option><option value="ml">ml</option><option value="unidad">unidad</option><option value="unidades">unidades</option><option value="rollos">rollos</option></select></label></div><label>Código de barras (opcional)<input id="new-product-barcode" maxlength="64" inputmode="numeric" placeholder="Escanea o escribe el código"></label><div id="catalog-product-match" class="catalog-product-match" hidden aria-live="polite"></div><label id="catalog-variant-confirm-wrap" class="catalog-variant-confirm" hidden><input id="catalog-variant-confirm" type="checkbox"> Confirmo que es un producto o presentación diferente de los registros señalados</label><button id="catalog-product-save" type="submit">Guardar producto en el catálogo</button><small id="catalog-product-status" aria-live="polite"></small></form>';
+  panel.appendChild(section);
+  const form=section.querySelector('#catalog-product-form'),status=section.querySelector('#catalog-product-status'),matchBox=section.querySelector('#catalog-product-match'),confirmWrap=section.querySelector('#catalog-variant-confirm-wrap'),confirmBox=section.querySelector('#catalog-variant-confirm'),save=section.querySelector('#catalog-product-save');
+  const fields={
+    name:section.querySelector('#new-product-name'),brand:section.querySelector('#new-product-brand'),category:section.querySelector('#new-product-category'),
+    quantity:section.querySelector('#new-product-quantity'),unit:section.querySelector('#new-product-unit'),barcode:section.querySelector('#new-product-barcode')
+  };
+  const {data:products,error:productsError}=await supabase.from('products').select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode').order('canonical_name').limit(1000);
+  const {data:mappings,error:mappingsError}=await supabase.from('product_barcodes').select('product_id,barcode');
+  if(productsError||mappingsError){status.textContent='No se pudo cargar la validación del catálogo. No se permite guardar sin esa comprobación.';save.disabled=true;return;}
+  const categories=[...new Set((products||[]).map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  section.querySelector('#catalog-category-options').innerHTML=categories.map(category=>'<option value="'+safe(category)+'"></option>').join('');
+  let exactDuplicate=false,barcodeDuplicate=false,needsConfirmation=false;
+  const draft=()=>({
+    canonical_name:fields.name.value.trim(),brand:fields.brand.value.trim()||null,category:fields.category.value.trim(),
+    normalized_quantity:fields.quantity.value===''?null:Number(fields.quantity.value),
+    normalized_unit_name:fields.unit.value,
+    barcode:normalizeProductBarcode(fields.barcode.value)||null
+  });
+  const updateValidation=()=>{
+    const value=draft(),check=getProductRegistrationCheck(products||[],value,mappings||[]);
+    exactDuplicate=Boolean(check.exactDuplicate);barcodeDuplicate=Boolean(check.barcodeOwner);
+    needsConfirmation=check.nameMatches.length>0&&!exactDuplicate;
+    matchBox.hidden=!check.nameMatches.length&&!check.barcodeOwner;
+    matchBox.innerHTML=(check.exactDuplicate?'<strong>Este producto con la misma marca y presentación ya existe. No se puede duplicar.</strong>':'')+
+      (check.nameMatches.length?'<div><strong>Coincidencias de nombre en el catálogo</strong>'+check.nameMatches.map(p=>'<small>'+safe(p.canonical_name)+' · '+safe(p.brand||'Sin marca')+' · '+safe([p.normalized_quantity,p.normalized_unit_name].filter(Boolean).join(' ')||'Presentación sin definir')+'</small>').join('')+'</div>':'')+
+      (check.barcodeOwner?'<strong>El código de barras ya está asociado a '+safe(check.barcodeOwner.canonical_name||'otro producto')+'.</strong>':'');
+    confirmWrap.hidden=!needsConfirmation;
+    if(!needsConfirmation)confirmBox.checked=false;
+    save.disabled=exactDuplicate||barcodeDuplicate;
+    status.textContent='';
+  };
+  Object.values(fields).forEach(field=>field.addEventListener('input',updateValidation));
+  Object.values(fields).forEach(field=>field.addEventListener('change',updateValidation));
+  confirmBox.addEventListener('change',()=>{});
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const value=draft(),validation=validateProductRegistrationDraft(value);
+    if(!validation.valid){status.textContent=validation.message;return;}
+    if(value.barcode&&!isValidBarcodeChecksum(value.barcode)){status.textContent='El código EAN/UPC no supera la validación de su dígito de control.';return;}
+    updateValidation();
+    if(exactDuplicate||barcodeDuplicate){status.textContent='Corrige el duplicado señalado antes de guardar.';return;}
+    if(needsConfirmation&&!confirmBox.checked){status.textContent='Confirma que la presentación o el producto es diferente.';return;}
+    save.disabled=true;status.textContent='Guardando producto...';
+    const normalizedUnit=['kg','g','lb','oz'].includes(value.normalized_unit_name)?'weight':['L','ml'].includes(value.normalized_unit_name)?'volume':'unit';
+    const {data:created,error}=await supabase.from('products').insert({
+      canonical_name:value.canonical_name,brand:value.brand,category:value.category,
+      normalized_quantity:value.normalized_quantity,normalized_unit:normalizedUnit,
+      normalized_unit_name:value.normalized_unit_name,barcode:value.barcode,active:true
+    }).select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode').single();
+    if(error){
+      status.textContent=error.code==='23505'?'El producto o el código ya existe. Actualiza la lista y revisa las coincidencias.':'No se pudo guardar. Verifica los datos y tus permisos.';
+      save.disabled=false;return;
+    }
+    productCatalogCache=[];
+    status.textContent='Producto agregado correctamente al catálogo. Ya puede seleccionarse en las listas y comparaciones.';
+    form.reset();matchBox.hidden=true;matchBox.innerHTML='';confirmWrap.hidden=true;confirmBox.checked=false;
+    save.disabled=false;
+    products.push(created);
+  });
+}
+
 async function renderPriceReview() {
   const box=document.querySelector('#auth');
   if(!box||!user||!supabase) return;
@@ -122,6 +189,7 @@ async function renderPriceReview() {
   panel.className='review-panel';
   panel.innerHTML='<strong>Revisión de precios pendientes</strong><p>Solo se aprobarán precios con fuente HTTPS y observación dentro de las últimas 24 horas.</p><div class="review-items"><small>Cargando precios pendientes...</small></div>';
   box.appendChild(panel);
+  await renderProductAdmin(panel);
   const list=panel.querySelector('.review-items');
   const {data,error}=await supabase.from('price_observations')
     .select('id,price,currency,regular_price,promotion_label,availability,source_url,observed_at,review_status,store_products(source_product_name,package_description,supermarkets(name),supermarket_branches(name))')
