@@ -251,3 +251,16 @@
 .spending-bar-row>i{height:6px}.spending-bar-row>i>span{background:#719b7c}
 .spending-empty,.spending-footnote{margin:0;color:var(--muted,#65756e);font-size:11px;line-height:1.5}
 @media(max-width:520px){.personal-spending{padding:12px}.spending-kpis{grid-template-columns:1fr 1fr}.spending-kpis article:last-child{grid-column:1/-1}.spending-analysis{grid-template-columns:1fr}.spending-heading{align-items:flex-start}.spending-budget form>div{grid-template-columns:1fr}.spending-budget form button{width:100%}}
+/* Historial mensual de gastos personales */
+.spending-monthly{display:grid;gap:12px;padding:13px;border:1px solid var(--line,#dce3e0);border-radius:11px;min-width:0}
+.spending-monthly>div:first-child{display:grid;gap:4px}
+.spending-monthly h4{margin:0;font-size:13px}
+.spending-monthly>div:first-child small{color:var(--muted,#65756e);font-size:11px}
+.spending-month-history{display:grid;gap:11px;min-width:0}
+.spending-month-row{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0}
+.spending-month-row>div{display:flex;justify-content:space-between;gap:8px;font-size:11px}
+.spending-month-row>div span{text-transform:capitalize;color:var(--muted,#65756e)}
+.spending-month-row>div b{white-space:nowrap}
+.spending-month-row>i{display:block;height:9px;overflow:hidden;border-radius:99px;background:#e8eee9}
+.spending-month-row>i>span{display:block;height:100%;border-radius:99px;background:#39845e;min-width:0}
+.spending-month-row>small{font-size:10px;color:var(--muted,#65756e)}
