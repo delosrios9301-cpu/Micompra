@@ -104,26 +104,75 @@ async function compareProduct(id) {
 
 async function renderAuth() {
   const box = document.querySelector('#auth');
-  if (!supabase) { box.innerHTML = ''; return; }
+  if (!supabase) {
+    box.classList.add('auth-gate');
+    box.innerHTML = '<section class="login-card"><div class="login-mark">Mi<span>Compra</span></div><p class="eyebrow">ACCESO SEGURO</p><h1>Bienvenido</h1><p class="login-intro">Inicia sesión para entrar a tus listas, compras y despensa.</p><p class="login-message">La conexión segura todavía no está configurada. Inténtalo más tarde.</p></section>';
+    return;
+  }
   if (!user) {
-    box.innerHTML = '<form id="login-form"><label for="email">Correo electrónico para guardar tu lista</label><div class="login-row"><input id="email" type="email" required placeholder="tu@correo.com"><button>Enviar enlace</button></div><small>Te enviaremos un enlace seguro de acceso; no necesitas contraseña.</small></form>';
-    box.querySelector('#login-form').addEventListener('submit', async e => {
+    box.classList.add('auth-gate');
+    box.innerHTML = `<section class="login-card">
+      <div class="login-mark">Mi<span>Compra</span></div><p class="eyebrow">ACCESO SEGURO</p>
+      <h1 id="auth-title">Iniciar sesión</h1><p class="login-intro">Accede a tus listas y datos personales de forma segura.</p>
+      <form id="password-login" class="password-form">
+        <label for="auth-email">Correo electrónico</label><input id="auth-email" type="email" autocomplete="username" required placeholder="tu@correo.com">
+        <label for="auth-password">Contraseña</label><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="Tu contraseña">
+        <button type="submit" id="auth-submit">Entrar</button>
+      </form>
+      <div class="login-links"><button type="button" data-auth-mode="reset">Olvidé mi contraseña</button><button type="button" data-auth-mode="signup">Crear cuenta</button></div>
+      <p id="auth-feedback" class="login-feedback" role="status" aria-live="polite"></p>
+      <small class="login-footnote">Tu información personal solo se muestra después de autenticarte.</small>
+    </section>`;
+    const form=box.querySelector('#password-login');
+    const feedback=box.querySelector('#auth-feedback');
+    const emailInput=box.querySelector('#auth-email');
+    const passwordInput=box.querySelector('#auth-password');
+    let mode='login';
+    const setMode=next=>{
+      mode=next;
+      const reset=mode==='reset', signup=mode==='signup';
+      box.querySelector('#auth-title').textContent=reset?'Recuperar contraseña':signup?'Crear cuenta':'Iniciar sesión';
+      passwordInput.hidden=reset;
+      passwordInput.required=!reset;
+      passwordInput.autocomplete=signup?'new-password':'current-password';
+      box.querySelector('#auth-submit').textContent=reset?'Enviar instrucciones':signup?'Crear cuenta':'Entrar';
+      box.querySelector('[data-auth-mode="reset"]').hidden=reset;
+      box.querySelector('[data-auth-mode="signup"]').hidden=signup;
+      feedback.textContent='';
+    };
+    box.querySelectorAll('[data-auth-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.authMode)));
+    form.addEventListener('submit',async e=>{
       e.preventDefault();
-      const email = box.querySelector('#email').value.trim();
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } });
-      box.querySelector('small').textContent = error ? 'No se pudo enviar el enlace. Verifica el correo e inténtalo de nuevo.' : 'Enlace enviado. Revisa tu correo para iniciar sesión.';
+      const email=emailInput.value.trim();
+      const password=passwordInput.value;
+      const submit=box.querySelector('#auth-submit');
+      submit.disabled=true; feedback.textContent='Procesando solicitud...';
+      try {
+        let result;
+        const redirectTo=location.origin+location.pathname;
+        if(mode==='reset') {
+          result=await supabase.auth.resetPasswordForEmail(email,{redirectTo});
+          feedback.textContent=result.error?'No se pudo enviar la recuperación. Verifica el correo.':'Si el correo está registrado, recibirás instrucciones para restablecer la contraseña.';
+        } else if(mode==='signup') {
+          result=await supabase.auth.signUp({email,password,options:{emailRedirectTo:redirectTo}});
+          feedback.textContent=result.error?'No se pudo crear la cuenta: '+result.error.message:result.data.session?'Cuenta creada. Acceso iniciado.':'Cuenta creada. Revisa tu correo para confirmar la dirección antes de iniciar sesión.';
+        } else {
+          result=await supabase.auth.signInWithPassword({email,password});
+          if(result.error) feedback.textContent='No se pudo iniciar sesión. Verifica el correo y la contraseña; si tu cuenta se creó con enlace, usa «Olvidé mi contraseña» para establecer una contraseña.';
+        }
+      } catch(error) { feedback.textContent='No fue posible completar la solicitud. Inténtalo nuevamente.'; }
+      finally { submit.disabled=false; }
     });
-  } else {
-    box.innerHTML = `<div class="signed"><span>Sesión: ${safe(user.email)}</span><button id="logout" class="secondary">Cerrar sesión</button></div><section class="import-panel"><strong>Importar precios desde CSV</strong><p>Usa fecha ISO 8601 de Panamá (-05:00), SKU y presentación exacta. Marca verificado=SI solo después de revisar el producto y su precio. Solo acepta enlaces HTTPS de dominios oficiales autorizados y precios de las últimas 24 horas. Los precios importados quedan pendientes de revisión.</p><div class="import-row"><input id="price-csv" type="file" accept=".csv,text/csv"><button id="import-csv" class="secondary">Validar e importar</button></div><small id="import-result" aria-live="polite"></small></section><div id="purchases-module"></div><div id="spending-module"></div><div id="pantry-module"></div>`;
-    box.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
-    box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });
+    return;
   }
-  if(user) {
-    const purchasesContainer=box.querySelector('#purchases-module');
-    await renderPurchases({container:purchasesContainer,supabase,user});
-    await renderSpendingDashboard({container:box.querySelector('#spending-module'),supabase,user});
-    await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase,user});
-  }
+  box.classList.remove('auth-gate');
+  box.innerHTML = `<div class="signed"><span>Sesión: ${safe(user.email)}</span><button id="logout" class="secondary">Cerrar sesión</button></div><section class="import-panel"><strong>Importar precios desde CSV</strong><p>Usa fecha ISO 8601 de Panamá (-05:00), SKU y presentación exacta. Marca verificado=SI solo después de revisar el producto y su precio. Solo acepta enlaces HTTPS de dominios oficiales autorizados y precios de las últimas 24 horas. Los precios importados quedan pendientes de revisión.</p><div class="import-row"><input id="price-csv" type="file" accept=".csv,text/csv"><button id="import-csv" class="secondary">Validar e importar</button></div><small id="import-result" aria-live="polite"></small></section><div id="purchases-module"></div><div id="spending-module"></div><div id="pantry-module"></div>`;
+  box.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
+  box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });
+  const purchasesContainer=box.querySelector('#purchases-module');
+  await renderPurchases({container:purchasesContainer,supabase,user});
+  await renderSpendingDashboard({container:box.querySelector('#spending-module'),supabase,user});
+  await renderPersonalPantry({container:box.querySelector('#pantry-module'),supabase,user});
 }
 
 
