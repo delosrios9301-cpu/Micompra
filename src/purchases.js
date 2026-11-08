@@ -276,9 +276,17 @@ export async function renderPurchases({ container, supabase, user }) {
         <div class="purchase-card-head"><div><strong>Administrador de códigos de barras</strong><small>Asocia códigos reales a productos del catálogo. Puedes registrar varios empaques por producto; cada código sólo puede pertenecer a un producto.</small></div></div>
         <form id="barcode-admin-form" class="purchase-form barcode-admin-form">
           <label>Producto del catálogo<select id="barcode-admin-product" required><option value="">Selecciona un producto</option>${productOptions}</select></label>
-          <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Usa un lector o escribe el código" required></label>
+          <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Escanea con la cámara, lector o escribe el código" required></label>
           <button type="submit">Asociar código</button>
         </form>
+        <div class="barcode-admin-camera-actions">
+          <button type="button" class="secondary" id="scan-admin-barcode">Escanear con cámara</button>
+          <button type="button" class="secondary" id="stop-admin-barcode" hidden>Detener cámara</button>
+        </div>
+        <div id="barcode-admin-camera-panel" class="barcode-camera-panel" hidden>
+          <video id="barcode-admin-camera-video" playsinline muted></video>
+          <small>Centra el código de barras dentro del encuadre. El código leído se copiará al campo; debes pulsar «Asociar código» para guardarlo.</small>
+        </div>
         <small id="barcode-admin-status" class="purchase-message" aria-live="polite"></small>
         <div class="barcode-admin-list">${barcodeMappings.length ? barcodeMappings.map(mapping => {
           const product = products.find(item => item.id === mapping.product_id);
@@ -637,10 +645,74 @@ export async function renderPurchases({ container, supabase, user }) {
       barcodeFrame = 0;
       if (barcodeStream) barcodeStream.getTracks().forEach(track => track.stop());
       barcodeStream = null;
-      const panel = container.querySelector('#barcode-camera-panel');
-      const video = container.querySelector('#barcode-camera-video');
-      if (video) video.srcObject = null;
-      if (panel) panel.hidden = true;
+      ['#barcode-camera-panel', '#barcode-admin-camera-panel'].forEach(selector => {
+        const panel = container.querySelector(selector);
+        if (panel) panel.hidden = true;
+      });
+      ['#barcode-camera-video', '#barcode-admin-camera-video'].forEach(selector => {
+        const video = container.querySelector(selector);
+        if (video) video.srcObject = null;
+      });
+      const stopAdminButton = container.querySelector('#stop-admin-barcode');
+      if (stopAdminButton) stopAdminButton.hidden = true;
+      const stopPurchaseButton = container.querySelector('#stop-purchase-barcode');
+      if (stopPurchaseButton) stopPurchaseButton.hidden = false;
+    };
+    const startBarcodeCamera = async ({ videoId, panelId, statusId, stopButtonId, onDetected }) => {
+      const status = container.querySelector(statusId);
+      if (!('BarcodeDetector' in globalThis)) {
+        if (status) status.textContent = 'Este navegador no permite leer códigos con la cámara. Puedes usar un lector USB/Bluetooth o escribir el código.';
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (status) status.textContent = 'La cámara requiere HTTPS y permiso del navegador. Puedes escribir el código manualmente.';
+        return;
+      }
+      stopBarcodeCamera();
+      try {
+        const supported = await globalThis.BarcodeDetector.getSupportedFormats();
+        const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code'].filter(format => supported.includes(format));
+        if (!formats.length) throw new Error('Este navegador no admite formatos de productos compatibles.');
+        const detector = new globalThis.BarcodeDetector({ formats });
+        barcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        const video = container.querySelector(videoId);
+        const panel = container.querySelector(panelId);
+        if (!video || !panel) { stopBarcodeCamera(); return; }
+        video.srcObject = barcodeStream;
+        panel.hidden = false;
+        const stopButton = container.querySelector(stopButtonId);
+        if (stopButton) stopButton.hidden = false;
+        await video.play();
+        barcodeDetecting = true;
+        if (status) status.textContent = 'Cámara activa. Coloca el código dentro del encuadre.';
+        let lastScan = 0;
+        const scanFrame = async () => {
+          if (!barcodeDetecting || !video || video.readyState < 2) {
+            if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
+            return;
+          }
+          const now = Date.now();
+          if (now - lastScan >= 220) {
+            lastScan = now;
+            try {
+              const results = await detector.detect(video);
+              if (results.length && barcodeDetecting) {
+                barcodeDetecting = false;
+                onDetected(results[0].rawValue);
+                stopBarcodeCamera();
+                return;
+              }
+            } catch (_) {}
+          }
+          if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
+        };
+        barcodeFrame = requestAnimationFrame(scanFrame);
+      } catch (error) {
+        stopBarcodeCamera();
+        if (status) status.textContent = error.name === 'NotAllowedError'
+          ? 'No se concedió permiso para usar la cámara. Habilítalo en el navegador o escribe el código manualmente.'
+          : 'No se pudo iniciar el escáner: ' + (error.message || 'revisa la cámara y los permisos') + '.';
+      }
     };
     const applyScannedBarcode = async rawValue => {
       const code = normalizeProductBarcode(rawValue);
@@ -701,61 +773,45 @@ export async function renderPurchases({ container, supabase, user }) {
     container.querySelector('#purchase-barcode')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); lookupBarcode(); }
     });
-    container.querySelector('#scan-purchase-barcode')?.addEventListener('click', async () => {
-      const status = container.querySelector('#barcode-scan-status');
-      if (!('BarcodeDetector' in globalThis)) {
-        if (status) status.textContent = 'Este navegador no ofrece lectura de códigos por cámara. Puedes escribir el código o usar un lector USB/Bluetooth que actúa como teclado.';
-        return;
-      }
-      if (!navigator.mediaDevices?.getUserMedia) {
-        if (status) status.textContent = 'La cámara requiere HTTPS y permiso del navegador. Usa el campo manual si no está disponible.';
-        return;
-      }
-      try {
-        const supported = await globalThis.BarcodeDetector.getSupportedFormats();
-        const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code'].filter(format => supported.includes(format));
-        if (!formats.length) throw new Error('Este navegador no admite formatos de productos compatibles.');
-        const detector = new globalThis.BarcodeDetector({ formats });
-        barcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-        const video = container.querySelector('#barcode-camera-video');
-        const panel = container.querySelector('#barcode-camera-panel');
-        if (!video || !panel) { stopBarcodeCamera(); return; }
-        video.srcObject = barcodeStream;
-        panel.hidden = false;
-        await video.play();
-        barcodeDetecting = true;
-        if (status) status.textContent = 'Cámara activa. Coloca el código dentro del encuadre.';
-        let lastScan = 0;
-        const scanFrame = async () => {
-          if (!barcodeDetecting || !video || video.readyState < 2) {
-            if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
-            return;
+    container.querySelector('#scan-purchase-barcode')?.addEventListener('click', () => {
+      startBarcodeCamera({
+        videoId: '#barcode-camera-video',
+        panelId: '#barcode-camera-panel',
+        statusId: '#barcode-scan-status',
+        stopButtonId: '#stop-purchase-barcode',
+        onDetected: applyScannedBarcode
+      });
+    });
+    container.querySelector('#scan-admin-barcode')?.addEventListener('click', () => {
+      startBarcodeCamera({
+        videoId: '#barcode-admin-camera-video',
+        panelId: '#barcode-admin-camera-panel',
+        statusId: '#barcode-admin-status',
+        stopButtonId: '#stop-admin-barcode',
+        onDetected: rawValue => {
+          const code = normalizeProductBarcode(rawValue);
+          const field = container.querySelector('#barcode-admin-value');
+          const status = container.querySelector('#barcode-admin-status');
+          if (field) field.value = code;
+          if (!/^[A-Z0-9]{4,64}$/.test(code)) {
+            if (status) status.textContent = 'Código leído, pero su formato no es válido. Puedes corregirlo manualmente.';
+          } else if (findProductByBarcode(products, code, barcodeMappings)) {
+            if (status) status.textContent = 'Código leído: ' + code + '. Ya está asociado a un producto; no se guardará un duplicado.';
+          } else if (status) {
+            status.textContent = 'Código leído: ' + code + '. Selecciona el producto y pulsa «Asociar código» para guardarlo.';
           }
-          const now = Date.now();
-          if (now - lastScan >= 220) {
-            lastScan = now;
-            try {
-              const results = await detector.detect(video);
-              if (results.length && barcodeDetecting) {
-                await applyScannedBarcode(results[0].rawValue);
-                return;
-              }
-            } catch (_) {}
-          }
-          if (barcodeDetecting) barcodeFrame = requestAnimationFrame(scanFrame);
-        };
-        barcodeFrame = requestAnimationFrame(scanFrame);
-      } catch (error) {
-        stopBarcodeCamera();
-        if (status) status.textContent = error.name === 'NotAllowedError'
-          ? 'No se concedió permiso para usar la cámara. Habilítalo en el navegador o escribe el código manualmente.'
-          : 'No se pudo iniciar el escáner: ' + (error.message || 'revisa la cámara y los permisos') + '. También puedes escribir el código manualmente.';
-      }
+        }
+      });
     });
     container.querySelector('#stop-purchase-barcode')?.addEventListener('click', () => {
       stopBarcodeCamera();
       const status = container.querySelector('#barcode-scan-status');
       if (status) status.textContent = 'Escáner detenido.';
+    });
+    container.querySelector('#stop-admin-barcode')?.addEventListener('click', () => {
+      stopBarcodeCamera();
+      const status = container.querySelector('#barcode-admin-status');
+      if (status) status.textContent = 'Escáner detenido. El código leído, si lo había, permanece en el campo.';
     });
     container.querySelector('#purchase-product')?.addEventListener('change', event => {
       const p = products.find(x => x.id === event.target.value);
