@@ -213,7 +213,15 @@ export async function startPersonalWorkspaceSync({ supabase, user, onStatus = ()
     do {
       pending = false;
       onStatus('Sincronizando tus datos…');
-      const result = await syncPersonalWorkspace({ supabase, user });
+      let result;
+      try {
+        result = await syncPersonalWorkspace({ supabase, user });
+      } catch (error) {
+        // Una caída de red o una excepción del cliente no debe detener las
+        // sincronizaciones posteriores ni modificar los datos locales.
+        onStatus('No se pudo completar la sincronización. Tus datos locales se conservaron; se volverá a intentar al realizar otro cambio o abrir la app.' + (error?.message ? ' ' + error.message : ''));
+        continue;
+      }
       if (!result.ok) onStatus(result.message);
       else {
         onStatus(result.conflicts
