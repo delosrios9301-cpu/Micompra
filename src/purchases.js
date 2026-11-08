@@ -51,7 +51,7 @@ export function isValidBarcodeChecksum(value, format = '') {
 export function getBarcodePackageVariants(products = [], productId) {
   const selected = products.find(product => product.id === productId);
   if (!selected) return [];
-  const normalizeName = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalizeName = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const name = normalizeName(selected.canonical_name);
   const packageKey = product => {
     const quantity = Number(product.normalized_quantity);
