@@ -31,7 +31,7 @@ test('CSV neutralizes spreadsheet formulas in user text', () => {
     supermarkets: { name: 'Xtra' },
     purchase_items: [{ item_name: '=HYPERLINK("https://example.com")', quantity: 1, unit: 'unidad', unit_price: 1, line_total: 1 }]
   }]);
-  assert.match(csv, /"'=HYPERLINK(""https://example.com"")"/);
+  assert.ok(csv.includes("\"'=HYPERLINK(\"\"https://example.com\"\")\""));
 });
 
 test('CSV retains a purchase with no item rows', () => {
