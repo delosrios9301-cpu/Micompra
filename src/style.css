@@ -750,3 +750,17 @@ main{padding-top:22px}
  .app-nav-item small{font-size:8px}
  .app-navigation{padding-inline:3px}
 }
+
+
+.account-overview{display:grid;justify-items:center;gap:12px;max-width:640px;margin:10px auto;padding:25px 20px;border:1px solid #e2ece4;border-radius:22px;background:linear-gradient(145deg,#fff,#f4faf5);text-align:center;box-shadow:0 8px 26px rgba(31,74,45,.05)}
+.account-avatar{display:grid;place-items:center;width:76px;height:76px;border-radius:25px;background:linear-gradient(145deg,#2ca46b,#176c49);color:#fff;font:800 23px Manrope;box-shadow:0 8px 18px rgba(36,148,97,.18)}
+.account-overview h2{margin:0;color:#193b2e;font:800 25px Manrope}
+.account-overview>p:not(.eyebrow){max-width:440px;margin:0;color:#718477;font-size:12px;line-height:1.55}
+.account-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;margin:8px 0}
+.account-stats article{display:grid;gap:5px;padding:14px;border:1px solid #e5eee7;border-radius:13px;background:#fff}
+.account-stats b{color:#238653;font:800 21px Manrope}
+.account-stats small{color:#788b7e;font-size:10px}
+.account-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%}
+.account-actions button{min-height:42px;border:0;border-radius:10px;background:#e4f3e8;color:#21794a;font:700 11px 'DM Sans'}
+.account-local-note{max-width:480px;color:#85948a;font-size:10px;line-height:1.5}
+@media(max-width:760px){.account-overview{padding:21px 15px}.account-actions{grid-template-columns:1fr}.account-actions button{min-height:40px}}
