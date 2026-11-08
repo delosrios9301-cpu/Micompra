@@ -125,7 +125,7 @@ async function renderProductAdmin(panel) {
     name:section.querySelector('#new-product-name'),brand:section.querySelector('#new-product-brand'),category:section.querySelector('#new-product-category'),
     quantity:section.querySelector('#new-product-quantity'),unit:section.querySelector('#new-product-unit'),barcode:section.querySelector('#new-product-barcode')
   };
-  const {data:products,error:productsError}=await supabase.from('products').select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode').order('canonical_name').limit(1000);
+  const {data:products,error:productsError}=await supabase.from('products').select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode,active').order('canonical_name').limit(1000);
   const {data:mappings,error:mappingsError}=await supabase.from('product_barcodes').select('product_id,barcode');
   if(productsError||mappingsError){status.textContent='No se pudo cargar la validación del catálogo. No se permite guardar sin esa comprobación.';save.disabled=true;return;}
   const categories=[...new Set((products||[]).map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
@@ -237,6 +237,71 @@ async function renderProductAdmin(panel) {
     csvStatus.textContent=(created?.length||0)+' productos agregados correctamente. Las filas omitidas no se modificaron.';
     csvImport.hidden=true;csvFile.value='';importAnalysis=null;csvVariantWrap.hidden=true;csvSummary.hidden=true;csvPreview.hidden=true;
   });
+
+
+  const manager=document.createElement('section');
+  manager.className='catalog-personal-manager';
+  manager.innerHTML='<div class="catalog-admin-heading"><div><strong>Mi catálogo personal</strong><small>Corrige los datos o desactiva productos que ya no usas. No se eliminan registros ni historial de compras.</small></div></div><label class="catalog-manager-search">Buscar en mi catálogo<input id="catalog-manager-search" type="search" placeholder="Nombre, marca, categoría o código"></label><div id="catalog-manager-count" class="catalog-manager-count"></div><div id="catalog-manager-list" class="catalog-manager-list"></div><div id="catalog-manager-editor" class="catalog-manager-editor" hidden><strong id="catalog-manager-edit-title">Editar producto</strong><form id="catalog-manager-edit-form" class="catalog-product-form" novalidate><label>Nombre del producto<input id="edit-product-name" maxlength="120" required></label><div class="catalog-admin-grid"><label>Marca<input id="edit-product-brand" maxlength="80"></label><label>Categoría<input id="edit-product-category" maxlength="60" required></label><label>Cantidad del empaque<input id="edit-product-quantity" type="number" min="0.001" max="1000000" step="0.001" required></label><label>Unidad<select id="edit-product-unit" required><option value=\"kg\">kg</option><option value=\"g\">g</option><option value=\"lb\">lb</option><option value=\"oz\">oz</option><option value=\"L\">L</option><option value=\"ml\">ml</option><option value=\"unidad\">unidad</option><option value=\"unidades\">unidades</option><option value=\"rollos\">rollos</option></select></label></div><label>Código de barras<input id="edit-product-barcode" maxlength="64" inputmode="numeric"></label><div id="edit-product-match" class="catalog-product-match" hidden></div><label id="edit-variant-confirm-wrap" class="catalog-variant-confirm" hidden><input id="edit-variant-confirm" type="checkbox"> Confirmo que revisé las presentaciones similares y que son distintas</label><div class="catalog-manager-edit-actions"><button type="submit" id="catalog-manager-save">Guardar cambios</button><button type="button" id="catalog-manager-cancel" class="catalog-csv-secondary">Cancelar</button></div><small id="catalog-manager-edit-status" aria-live="polite"></small></form></div>';
+  section.appendChild(manager);
+  const managerSearch=manager.querySelector('#catalog-manager-search'),managerList=manager.querySelector('#catalog-manager-list'),managerCount=manager.querySelector('#catalog-manager-count'),editor=manager.querySelector('#catalog-manager-editor'),editForm=manager.querySelector('#catalog-manager-edit-form'),editStatus=manager.querySelector('#catalog-manager-edit-status'),editMatch=manager.querySelector('#edit-product-match'),editConfirmWrap=manager.querySelector('#edit-variant-confirm-wrap'),editConfirm=manager.querySelector('#edit-variant-confirm'),editSave=manager.querySelector('#catalog-manager-save');
+  const editFields={name:manager.querySelector('#edit-product-name'),brand:manager.querySelector('#edit-product-brand'),category:manager.querySelector('#edit-product-category'),quantity:manager.querySelector('#edit-product-quantity'),unit:manager.querySelector('#edit-product-unit'),barcode:manager.querySelector('#edit-product-barcode')};
+  let editingProduct=null;
+  const renderPersonalCatalog=()=>{
+    const term=managerSearch.value.trim().toLocaleLowerCase('es');
+    const filtered=(products||[]).filter(p=>[p.canonical_name,p.brand,p.category,p.barcode,p.normalized_quantity,p.normalized_unit_name].join(' ').toLocaleLowerCase('es').includes(term));
+    managerCount.textContent=filtered.length+' productos · '+filtered.filter(p=>p.active!==false).length+' activos · '+filtered.filter(p=>p.active===false).length+' desactivados';
+    managerList.innerHTML=filtered.map(p=>'<article class="catalog-manager-item"><div class="catalog-manager-item-main"><strong>'+safe(p.canonical_name)+'</strong><small>'+safe(p.brand||'Sin marca')+' · '+safe(p.category||'Sin categoría')+' · '+safe([p.normalized_quantity,p.normalized_unit_name].filter(Boolean).join(' ')||'Sin presentación')+'</small><small>'+safe(p.barcode||'Sin código de barras')+'</small></div><span class="catalog-manager-state '+(p.active===false?'is-inactive':'is-active')+'">'+(p.active===false?'Desactivado':'Activo')+'</span><div class="catalog-manager-item-actions"><button type="button" data-edit-product="'+p.id+'">Editar</button><button type="button" data-toggle-product="'+p.id+'">'+(p.active===false?'Reactivar':'Desactivar')+'</button></div></article>').join('')||'<p class="catalog-manager-empty">No hay productos que coincidan con tu búsqueda.</p>';
+  };
+  managerSearch.addEventListener('input',renderPersonalCatalog);
+  manager.querySelector('#catalog-manager-cancel').addEventListener('click',()=>{editor.hidden=true;editingProduct=null;editForm.reset();});
+  managerList.addEventListener('click',async event=>{
+    const editButton=event.target.closest('[data-edit-product]'),toggleButton=event.target.closest('[data-toggle-product]');
+    if(editButton){
+      editingProduct=products.find(p=>p.id===editButton.dataset.editProduct);if(!editingProduct)return;
+      manager.querySelector('#catalog-manager-edit-title').textContent='Editar: '+editingProduct.canonical_name;
+      editFields.name.value=editingProduct.canonical_name||'';editFields.brand.value=editingProduct.brand||'';editFields.category.value=editingProduct.category||'';
+      editFields.quantity.value=editingProduct.normalized_quantity??'';editFields.unit.value=editingProduct.normalized_unit_name||'unidad';editFields.barcode.value=editingProduct.barcode||'';
+      editMatch.hidden=true;editConfirmWrap.hidden=true;editConfirm.checked=false;editStatus.textContent='';editor.hidden=false;editor.scrollIntoView({behavior:'smooth',block:'nearest'});return;
+    }
+    if(toggleButton){
+      const product=products.find(p=>p.id===toggleButton.dataset.toggleProduct);if(!product)return;
+      const nextActive=product.active===false;
+      if(!window.confirm((nextActive?'¿Reactivar':'¿Desactivar')+' "'+product.canonical_name+'"? '+(nextActive?'Volverá a aparecer en las búsquedas del catálogo.':'Se conservará su historial y dejará de aparecer en nuevas selecciones.')))return;
+      toggleButton.disabled=true;
+      const {data,error}=await supabase.from('products').update({active:nextActive}).eq('id',product.id).select('id,active').single();
+      if(error||!data){toggleButton.disabled=false;managerCount.textContent='No se pudo actualizar el producto. Comprueba tus permisos e inténtalo otra vez.';return;}
+      product.active=data.active;productCatalogCache=[];renderPersonalCatalog();managerCount.textContent='Producto '+(nextActive?'reactivado':'desactivado')+' correctamente. Su historial se conserva.';
+    }
+  });
+  const updateEditValidation=()=>{
+    if(!editingProduct)return;
+    const value={canonical_name:editFields.name.value.trim(),brand:editFields.brand.value.trim()||null,category:editFields.category.value.trim(),normalized_quantity:editFields.quantity.value===''?null:Number(editFields.quantity.value),normalized_unit_name:editFields.unit.value,barcode:normalizeProductBarcode(editFields.barcode.value)||null};
+    const otherProducts=products.filter(p=>p.id!==editingProduct.id),otherMappings=(mappings||[]).filter(p=>p.product_id!==editingProduct.id);
+    const check=getProductRegistrationCheck(otherProducts,value,otherMappings);
+    const exact=Boolean(check.exactDuplicate),codeDuplicate=Boolean(check.barcodeOwner),variant=check.nameMatches.length>0&&!exact;
+    editMatch.hidden=!exact&&!codeDuplicate&&!variant;
+    editMatch.innerHTML=(exact?'<strong>Ya existe otro producto con la misma marca y presentación.</strong>':'')+(variant?'<div><strong>Otras presentaciones del mismo producto</strong>'+check.nameMatches.map(p=>'<small>'+safe(p.canonical_name)+' · '+safe(p.brand||'Sin marca')+' · '+safe([p.normalized_quantity,p.normalized_unit_name].filter(Boolean).join(' '))+'</small>').join('')+'</div>':'')+(codeDuplicate?'<strong>El código ya pertenece a '+safe(check.barcodeOwner.canonical_name||'otro producto')+'.</strong>':'');
+    editConfirmWrap.hidden=!variant;if(!variant)editConfirm.checked=false;
+    editSave.disabled=exact||codeDuplicate;
+    return {value,exact,codeDuplicate,variant};
+  };
+  Object.values(editFields).forEach(field=>{field.addEventListener('input',updateEditValidation);field.addEventListener('change',updateEditValidation);});
+  editForm.addEventListener('submit',async event=>{
+    event.preventDefault();if(!editingProduct)return;
+    const result=updateEditValidation();if(!result)return;
+    const {value,exact,codeDuplicate,variant}=result,validation=validateProductRegistrationDraft(value);
+    if(!validation.valid){editStatus.textContent=validation.message;return;}
+    if(value.barcode&&!isValidBarcodeChecksum(value.barcode)){editStatus.textContent='El código EAN/UPC no supera la validación de su dígito de control.';return;}
+    if(exact||codeDuplicate){editStatus.textContent='Corrige el duplicado antes de guardar.';return;}
+    if(variant&&!editConfirm.checked){editStatus.textContent='Confirma que revisaste las otras presentaciones.';return;}
+    editSave.disabled=true;editStatus.textContent='Guardando cambios...';
+    const normalizedUnit=['kg','g','lb','oz'].includes(value.normalized_unit_name)?'weight':['L','ml'].includes(value.normalized_unit_name)?'volume':'unit';
+    const {data,error}=await supabase.from('products').update({canonical_name:value.canonical_name,brand:value.brand,category:value.category,normalized_quantity:value.normalized_quantity,normalized_unit:normalizedUnit,normalized_unit_name:value.normalized_unit_name,barcode:value.barcode}).eq('id',editingProduct.id).select('id,canonical_name,brand,category,normalized_quantity,normalized_unit_name,barcode,active').single();
+    if(error||!data){editStatus.textContent=error?.code==='23505'?'El catálogo detectó un duplicado. Actualiza la lista y revisa los datos.':'No se pudieron guardar los cambios. Verifica tus permisos.';editSave.disabled=false;return;}
+    const index=products.findIndex(p=>p.id===data.id);if(index>=0)products[index]=data;
+    productCatalogCache=[];editingProduct=data;editStatus.textContent='Cambios guardados. Las compras y listas anteriores conservan sus registros.';manager.querySelector('#catalog-manager-edit-title').textContent='Editar: '+data.canonical_name;renderPersonalCatalog();editSave.disabled=false;
+  });
+  renderPersonalCatalog();
 
 }
 
