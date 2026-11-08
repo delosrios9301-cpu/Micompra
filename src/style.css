@@ -162,3 +162,21 @@
 .catalog-match-option span,.catalog-match-option small{overflow-wrap:anywhere}
 .catalog-match-option small{color:#64756c;text-align:right}
 @media(max-width:520px){.catalog-match-option{align-items:flex-start;flex-direction:column}.catalog-match-option small{text-align:left}}
+
+
+/* Registro seguro de productos, solo para el administrador principal */
+.catalog-product-admin{display:grid;gap:13px;margin:16px 0;padding:16px;border:1px solid var(--line,#dce3ea);border-radius:14px;background:var(--surface,#fff);min-width:0}
+.catalog-admin-heading{display:grid;gap:4px}.catalog-admin-heading strong{font-size:16px}.catalog-admin-heading small,.catalog-product-form small{color:var(--muted,#64756c);font-size:12px;line-height:1.45}
+.catalog-product-form{display:grid;gap:11px;min-width:0}
+.catalog-product-form label{display:grid;gap:5px;font-size:13px;font-weight:600;min-width:0}
+.catalog-product-form input,.catalog-product-form select{width:100%;min-width:0;min-height:42px;padding:9px 11px;border:1px solid var(--line,#dce3ea);border-radius:9px;background:#fff;color:#18332d;font:inherit}
+.catalog-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.catalog-product-form>button{min-height:43px;border:0;border-radius:9px;padding:10px 14px;background:#1d6950;color:#fff;font-weight:700}
+.catalog-product-form>button:disabled{opacity:.55;cursor:not-allowed}
+.catalog-product-match{display:grid;gap:7px;padding:11px;border:1px solid #ead6b4;border-radius:10px;background:#fff8ed;overflow-wrap:anywhere}
+.catalog-product-match[hidden]{display:none}
+.catalog-product-match small{display:block;padding-top:4px}
+.catalog-variant-confirm{display:flex!important;align-items:flex-start;gap:8px!important;padding:9px;border:1px solid var(--line,#dce3ea);border-radius:9px}
+.catalog-variant-confirm[hidden]{display:none!important}
+.catalog-variant-confirm input{width:18px;min-width:18px;min-height:18px;margin:0}
+@media(max-width:520px){.catalog-admin-grid{grid-template-columns:minmax(0,1fr)}.catalog-product-admin{padding:12px}}
