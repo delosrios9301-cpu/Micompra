@@ -28,3 +28,40 @@
 @media(max-width:520px){.add-row{flex-wrap:wrap}.add-row select{flex-basis:100%;width:100%}.add-row input[type=number]{flex:1;max-width:none}.list-comparison{padding:12px}.combo-total li{align-items:flex-start}}
 
 .catalog-source-note{display:block;margin:-8px 0 14px;color:#74837a;font-size:11px;line-height:1.5}
+
+
+.purchase-module{margin-top:18px;display:grid;gap:14px;color:#18332d;min-width:0}
+.purchase-title h3{font:700 22px Manrope;margin:0 0 6px}.purchase-title small,.purchase-card>small,.purchase-card-head small{display:block;color:#74837a;font-size:11px;line-height:1.5}
+.purchase-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.purchase-kpis article{background:#edf4ee;border:1px solid #e0e9e1;border-radius:11px;padding:12px;min-width:0}
+.purchase-kpis small{display:block;font-size:10px;color:#6e7f74}.purchase-kpis b{display:block;font:700 clamp(14px,3vw,19px) Manrope;margin-top:5px;overflow-wrap:anywhere}
+.purchase-card{background:#fff;border:1px solid #e3eae4;border-radius:13px;padding:14px;min-width:0}
+.purchase-card>strong,.purchase-card-head strong{display:block;font:700 14px Manrope;margin-bottom:5px}
+.purchase-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.purchase-form label{display:grid;gap:5px;font-size:11px;font-weight:600;color:#4d6558;min-width:0}
+.purchase-form input,.purchase-form select,.purchase-card-head select{width:100%;min-width:0;padding:10px;border:1px solid #dce5de;border-radius:8px;background:#fff;color:#18332d;font:12px 'DM Sans'}
+.purchase-form .wide{grid-column:1/-1}
+.purchase-form button{grid-column:1/-1;border:0;border-radius:9px;background:#245b45;color:#fff;padding:11px;font:600 12px 'DM Sans'}
+.purchase-message{display:block;margin-top:8px;color:#607769;font-size:11px}
+.purchase-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;min-width:0}
+.purchase-card-head>div{min-width:0}.purchase-card-head select{max-width:150px}
+.purchase-line,.store-spend{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #edf1ed;font-size:12px}
+.purchase-line b,.store-spend b{white-space:nowrap;font:700 12px Manrope}
+.purchase-grand-total{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #dfe8e1;margin-top:10px;padding-top:12px;font-size:12px}
+.purchase-grand-total b{font:800 19px Manrope;color:#245b45}
+.store-spend small{display:block;color:#829087;font-size:10px;margin-top:3px}
+.purchase-compare-wrap{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}
+.purchase-compare{border-collapse:collapse;width:100%;min-width:620px;font-size:10px}
+.purchase-compare th,.purchase-compare td{padding:9px 8px;border-bottom:1px solid #edf1ed;text-align:left;vertical-align:top}
+.purchase-compare th{background:#f5f8f5;color:#536a5c;position:sticky;top:0}
+.purchase-compare td:first-child{min-width:130px}.purchase-compare td strong,.purchase-compare td small{display:block}.purchase-compare td small{color:#77857d;font-size:9px;margin-top:3px}
+.purchase-compare .bought b{color:#26704d}.purchase-compare .not-bought span{color:#9a805e}
+.purchase-footnote{display:block;margin-top:10px;color:#8a775d;font-size:10px;line-height:1.5}
+.purchase-history{border-top:1px solid #edf1ed;padding:10px 0}
+.purchase-history summary{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer;list-style:none}
+.purchase-history summary::-webkit-details-marker{display:none}
+.purchase-history summary span{min-width:0}.purchase-history summary b,.purchase-history summary small{display:block}.purchase-history summary b{font-size:12px}.purchase-history summary small{font-size:10px;color:#77857d;margin-top:4px}
+.purchase-history summary>strong{font:700 13px Manrope;white-space:nowrap}
+.history-items{padding:8px 0 0 10px}.history-items>div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:10px}.history-items>div b{white-space:nowrap}.history-items>small{display:block;color:#77857d;font-size:10px;margin-top:5px}
+.negative-stock{color:#b04a3c}
+@media(max-width:520px){.purchase-kpis{grid-template-columns:1fr 1fr}.purchase-kpis article:last-child{grid-column:1/-1}.purchase-form{grid-template-columns:1fr}.purchase-form .wide{grid-column:auto}.purchase-card{padding:12px}.purchase-card-head{align-items:flex-start}.purchase-card-head select{max-width:130px}.purchase-compare{min-width:580px}}
