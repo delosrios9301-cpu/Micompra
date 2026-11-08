@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode, isValidBarcodeChecksum, getBarcodePackageVariants, getBarcodeAssociationStatus } from '../src/purchases.js';
+import { buildPurchasesCsv, normalizeProductBarcode, findProductByBarcode, isValidBarcodeChecksum, getBarcodePackageVariants, getBarcodeAssociationStatus, getCatalogDuplicateGroups } from '../src/purchases.js';
 
 test('CSV includes UTF-8 BOM and Spanish headers', () => {
   const csv = buildPurchasesCsv([]);
@@ -128,4 +128,20 @@ test('barcode package variants identify same catalog product with different pres
   ];
   assert.deepEqual(getBarcodePackageVariants(products, 'coffee-250').map(item => item.id), ['coffee-500']);
   assert.deepEqual(getBarcodePackageVariants(products, 'tea'), []);
+});
+
+
+test('catalog audit separates exact duplicates from valid package variants', () => {
+  const products = [
+    { id: 'rice-a', canonical_name: 'Arroz Blanco', normalized_quantity: 1, normalized_unit_name: 'kg' },
+    { id: 'rice-b', canonical_name: 'arroz blanco', normalized_quantity: '1.0', normalized_unit_name: 'kg' },
+    { id: 'coffee-250', canonical_name: 'Café molido', normalized_quantity: 250, normalized_unit_name: 'g' },
+    { id: 'coffee-500', canonical_name: 'Cafe molido', normalized_quantity: 500, normalized_unit_name: 'gramos' },
+    { id: 'tea', canonical_name: 'Té negro', normalized_quantity: 36, normalized_unit_name: 'g' }
+  ];
+  const result = getCatalogDuplicateGroups(products);
+  assert.equal(result.exactDuplicates.length, 1);
+  assert.deepEqual(result.exactDuplicates[0].products.map(item => item.id), ['rice-a', 'rice-b']);
+  assert.equal(result.presentationVariants.length, 1);
+  assert.deepEqual(result.presentationVariants[0].products.map(item => item.id), ['coffee-250', 'coffee-500']);
 });
