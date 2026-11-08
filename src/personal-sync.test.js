@@ -140,3 +140,27 @@ test('restaura desde la nube si el almacenamiento local está vacío pero existe
   assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.catalog)), cloudWorkspace.catalog);
   assert.deepEqual(JSON.parse(storage.getItem(PERSONAL_WORKSPACE_KEYS.settings)), cloudWorkspace.settings);
 });
+
+test('no modifica datos locales cuando una colección está dañada o incompleta', async () => {
+  const broken = '[{"id":"p1","name":';
+  const values = new Map([
+    [PERSONAL_WORKSPACE_KEYS.catalog, broken],
+    [PERSONAL_WORKSPACE_KEYS.cart, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.purchases, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.pantry, '[]'],
+    [PERSONAL_WORKSPACE_KEYS.settings, '{}']
+  ]);
+  const storage = {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key)
+  };
+  const result = await syncPersonalWorkspace({
+    supabase: { from: () => { throw new Error('La nube no debe consultarse si los datos locales no se pueden leer'); } },
+    user: { id: 'user-1' },
+    storage
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /No se pudo leer/);
+  assert.equal(storage.getItem(PERSONAL_WORKSPACE_KEYS.catalog), broken);
+});
