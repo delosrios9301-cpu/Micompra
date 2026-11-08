@@ -74,3 +74,16 @@ test('barcode lookup requires an exact normalized match', () => {
   assert.equal(findProductByBarcode(products, '001234567890') , null);
   assert.equal(findProductByBarcode(products, '') , null);
 });
+
+test('barcode lookup resolves alternate codes to the linked catalog product', () => {
+  const products = [
+    { id: 'rice', canonical_name: 'Arroz', barcode: null },
+    { id: 'milk', canonical_name: 'Leche', barcode: '7501234567890' }
+  ];
+  const mappings = [
+    { product_id: 'rice', barcode: ' 0-987-654-321 ' }
+  ];
+  assert.equal(findProductByBarcode(products, '0987654321', mappings)?.id, 'rice');
+  assert.equal(findProductByBarcode(products, '7501234567890', mappings)?.id, 'milk');
+  assert.equal(findProductByBarcode(products, '098765432', mappings), null);
+});
