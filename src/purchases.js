@@ -19,10 +19,13 @@ export function normalizeProductBarcode(value) {
   return String(value ?? '').trim().replace(/\s+/g, '').replace(/-/g, '');
 }
 
-export function findProductByBarcode(products = [], barcode) {
+export function findProductByBarcode(products = [], barcode, mappings = []) {
   const code = normalizeProductBarcode(barcode);
   if (!code) return null;
-  return products.find(product => normalizeProductBarcode(product.barcode) === code) || null;
+  const primary = products.find(product => normalizeProductBarcode(product.barcode) === code);
+  if (primary) return primary;
+  const mapping = mappings.find(item => normalizeProductBarcode(item.barcode) === code);
+  return mapping ? products.find(product => product.id === mapping.product_id) || null : null;
 }
 
 export function parseInvoiceMetadata(text, stores = [], branches = []) {
@@ -185,6 +188,7 @@ export async function renderPurchases({ container, supabase, user }) {
   if (!container || !supabase || !user) return;
   let activePurchaseId = null;
   let stores = [], branches = [], products = [], purchases = [], adjustments = [];
+  let barcodeMappings = [], canManageBarcodes = false;
   let rangeDays = '30';
   let invoiceDraft = [];
   let barcodeStream = null;
@@ -192,10 +196,11 @@ export async function renderPurchases({ container, supabase, user }) {
   let barcodeDetecting = false;
   container.innerHTML = '<section class="purchase-module"><p class="empty">Cargando compras e inventario…</p></section>';
 
-  const [storeResult, branchResult, productResult] = await Promise.all([
+  const [storeResult, branchResult, productResult, barcodeAccess] = await Promise.all([
     supabase.from('supermarkets').select('id,name').eq('active', true).order('name'),
     supabase.from('supermarket_branches').select('id,name,supermarket_id').eq('active', true).order('name'),
-    supabase.from('products').select('id,canonical_name,barcode,normalized_quantity,normalized_unit_name').eq('active', true).order('canonical_name')
+    supabase.from('products').select('id,canonical_name,barcode,normalized_quantity,normalized_unit_name').eq('active', true).order('canonical_name'),
+    supabase.rpc('is_price_reviewer')
   ]);
   if (storeResult.error || branchResult.error || productResult.error) {
     container.innerHTML = '<section class="purchase-module"><p class="empty">No se pudo cargar el catálogo de compras. Inténtalo de nuevo más tarde.</p></section>';
@@ -204,6 +209,15 @@ export async function renderPurchases({ container, supabase, user }) {
   stores = storeResult.data || [];
   branches = branchResult.data || [];
   products = productResult.data || [];
+  canManageBarcodes = !barcodeAccess.error && barcodeAccess.data === true;
+
+  const reloadBarcodeMappings = async () => {
+    const { data, error } = await supabase.from('product_barcodes')
+      .select('id,product_id,barcode,created_at')
+      .order('created_at', { ascending: false });
+    if (!error) barcodeMappings = data || [];
+  };
+  await reloadBarcodeMappings();
 
   const loadData = async () => {
     const [purchaseResult, adjustmentResult] = await Promise.all([
@@ -257,10 +271,25 @@ export async function renderPurchases({ container, supabase, user }) {
       stockMap.set(key, previous);
     }
     const stockRows = [...stockMap.values()].sort((a,b) => a.name.localeCompare(b.name, 'es'));
+    const barcodeAdminMarkup = canManageBarcodes ? `
+      <section class="purchase-card barcode-admin-panel">
+        <div class="purchase-card-head"><div><strong>Administrador de códigos de barras</strong><small>Asocia códigos reales a productos del catálogo. Puedes registrar varios empaques por producto; cada código sólo puede pertenecer a un producto.</small></div></div>
+        <form id="barcode-admin-form" class="purchase-form barcode-admin-form">
+          <label>Producto del catálogo<select id="barcode-admin-product" required><option value="">Selecciona un producto</option>${productOptions}</select></label>
+          <label>Código de barras<input id="barcode-admin-value" type="text" maxlength="64" autocomplete="off" placeholder="Escanea o escribe el código" required></label>
+          <button type="submit">Asociar código</button>
+        </form>
+        <small id="barcode-admin-status" class="purchase-message" aria-live="polite"></small>
+        <div class="barcode-admin-list">${barcodeMappings.length ? barcodeMappings.map(mapping => {
+          const product = products.find(item => item.id === mapping.product_id);
+          return '<article class="barcode-admin-row"><div><strong>' + safe(product?.canonical_name || 'Producto no disponible') + '</strong><small>' + safe(mapping.barcode) + ' · Asociado ' + new Date(mapping.created_at).toLocaleString('es-PA') + '</small></div><button type="button" class="secondary" data-remove-barcode="' + mapping.id + '">Quitar</button></article>';
+        }).join('') : '<small>Aún no hay códigos adicionales asociados.</small>'}</div>
+      </section>` : '';
 
     container.innerHTML = `
       <section class="purchase-module">
-        <div class="purchase-title"><div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras. El historial y el CSV incluyen hasta las 300 compras más recientes.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
+        <div class="purchase-title">${''}<div><p class="eyebrow">CONTROL PERSONAL</p><h3>Compras e inventario</h3><small>Registra lo que realmente compraste. Los precios del comparador no se convierten automáticamente en compras. El historial y el CSV incluyen hasta las 300 compras más recientes.</small></div><button type="button" class="secondary" id="export-purchases">Exportar gastos CSV</button></div>
+        ${barcodeAdminMarkup}
         <div class="purchase-kpis">
           <article><small>Gastado este mes</small><b>${money(totalMonth)}</b></article>
           <article><small>Gasto acumulado</small><b>${money(totalAll)}</b></article>
@@ -619,7 +648,7 @@ export async function renderPurchases({ container, supabase, user }) {
       const status = container.querySelector('#barcode-scan-status');
       if (!code) return;
       if (field) field.value = code;
-      const product = findProductByBarcode(products, code);
+      const product = findProductByBarcode(products, code, barcodeMappings);
       if (product) {
         const selector = container.querySelector('#purchase-product');
         if (selector) {
@@ -638,10 +667,36 @@ export async function renderPurchases({ container, supabase, user }) {
       const code = normalizeProductBarcode(container.querySelector('#purchase-barcode')?.value);
       if (!code) return;
       const status = container.querySelector('#barcode-scan-status');
-      const product = findProductByBarcode(products, code);
+      const product = findProductByBarcode(products, code, barcodeMappings);
       if (product) { await applyScannedBarcode(code); return; }
       if (status) status.textContent = 'Código leído, pero no encontrado en los códigos registrados del catálogo. Selecciona el producto manualmente.';
     };
+    container.querySelector('#barcode-admin-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const productId = container.querySelector('#barcode-admin-product')?.value;
+      const code = normalizeProductBarcode(container.querySelector('#barcode-admin-value')?.value);
+      const status = container.querySelector('#barcode-admin-status');
+      if (!productId || !code) { if (status) status.textContent = 'Selecciona un producto e introduce un código válido.'; return; }
+      if (!/^[A-Z0-9]{4,64}$/.test(code)) { if (status) status.textContent = 'El código debe tener entre 4 y 64 caracteres alfanuméricos.'; return; }
+      if (findProductByBarcode(products, code, barcodeMappings)) {
+        if (status) status.textContent = 'Este código ya está asociado a un producto del catálogo. No se creó un duplicado.';
+        return;
+      }
+      const { error } = await supabase.from('product_barcodes').insert({ product_id: productId, barcode: code, created_by: user.id });
+      if (error) {
+        if (status) status.textContent = error.code === '23505' ? 'Ese código ya está registrado. Cada código sólo puede pertenecer a un producto.' : 'No se pudo asociar el código. Verifica los datos y tus permisos.';
+        return;
+      }
+      if (status) status.textContent = 'Código asociado correctamente.';
+      await refresh();
+    });
+    container.querySelectorAll('[data-remove-barcode]').forEach(button => button.addEventListener('click', async () => {
+      if (!canManageBarcodes || !confirm('¿Quitar este código del catálogo?')) return;
+      button.disabled = true;
+      const { error } = await supabase.from('product_barcodes').delete().eq('id', button.dataset.removeBarcode);
+      if (error) { button.disabled = false; alert('No se pudo quitar el código.'); return; }
+      await refresh();
+    }));
     container.querySelector('#lookup-purchase-barcode')?.addEventListener('click', lookupBarcode);
     container.querySelector('#purchase-barcode')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); lookupBarcode(); }
@@ -749,7 +804,7 @@ export async function renderPurchases({ container, supabase, user }) {
 
   const refresh = async () => {
     stopBarcodeCamera();
-    try { await loadData(); await render(); }
+    try { await Promise.all([loadData(), reloadBarcodeMappings()]); await render(); }
     catch (error) { container.innerHTML = '<section class="purchase-module"><p class="empty">' + safe(error.message) + '</p></section>'; }
   };
   await refresh();
