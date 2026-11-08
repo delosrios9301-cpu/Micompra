@@ -7,7 +7,7 @@ const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABL
 const supabase = configured ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY) : null;
 const stores = [
   { name: 'Super 99', url: 'https://www.super99.com/nuestra-tienda-en-linea' },
-  { name: 'El Rey' }, { name: 'Xtra', url: 'https://www.superxtra.com/' }, { name: 'Riba Smith' }, { name: 'Machetazo' }, { name: 'Jumbo' }
+  { name: 'El Rey' }, { name: 'Xtra', url: 'https://www.superxtra.com/supermercado' }, { name: 'Riba Smith' }, { name: 'Machetazo' }, { name: 'Jumbo' }
 ];
 let user = null;
 let activeList = null;
