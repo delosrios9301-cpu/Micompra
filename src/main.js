@@ -15,6 +15,7 @@ import { readStoredArraySafely, readStoredObjectSafely, collectLocalRecoveryCopi
 import { groupComparableProducts, hasComparableStorePrices } from './comparison.js';
 import { BUILT_IN_STORES, buildStoreList, collectCustomStoreNames } from './store-names.js';
 import { applyCartItemEdits } from './cart-items.js';
+import { formatStoredCurrency } from './currency.js';
 
 const env = import.meta.env;
 const configured = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY);
@@ -33,7 +34,7 @@ let productCatalogCache = [];
 let stopPersonalWorkspaceSync = null;
 
 const app = document.querySelector('#app');
-const money = value => { let currency='USD'; try { const prefs=JSON.parse(localStorage.getItem('micompra_settings_v1')||'{}'); if(['USD','PAB'].includes(prefs.currency))currency=prefs.currency; } catch {} return new Intl.NumberFormat('es-PA',{style:'currency',currency}).format(Number(value)||0); };
+const money = value => formatStoredCurrency(value);
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeImageSource = value => { const source=String(value??'').trim(); return (/^data:image\/(?:png|jpe?g|webp);base64,/i.test(source)||/^https:\/\//i.test(source))?safe(source):''; };
 
