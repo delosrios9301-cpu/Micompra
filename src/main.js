@@ -123,7 +123,7 @@ function shell() {
   const purchaseLedger=document.createElement('section');
   purchaseLedger.id='purchase-records-ledger';
   purchaseLedger.className='page-card purchase-ledger-card';
-  purchaseLedger.innerHTML='<div class="module-intro"><p class="eyebrow">REGISTRO DETALLADO</p><h2>Mis compras e inventario</h2><p>Registra compras reales, adjunta comprobantes, revisa gastos y actualiza tu inventario. Este registro detallado requiere iniciar sesión.</p></div><p id="purchase-ledger-access" class="empty" role="status">Inicia sesión para consultar tus compras e inventario registrados.</p><div id="purchases-module"></div><details class="account-tools"><summary>Resumen de gastos</summary><div id="spending-module"></div></details><details class="account-tools"><summary>Mi despensa e inventario del hogar</summary><div id="pantry-module"></div></details>';
+  purchaseLedger.innerHTML='<div class="module-intro"><p class="eyebrow">REGISTRO DETALLADO</p><h2>Mis compras e inventario</h2><p>Registra compras reales, adjunta comprobantes, revisa gastos y actualiza tu inventario. Este registro detallado requiere iniciar sesión.</p></div><div id="purchase-ledger-access" class="empty" role="status">Inicia sesión para consultar tus compras e inventario registrados.</div><div id="purchases-module"></div><details class="account-tools"><summary>Resumen de gastos</summary><div id="spending-module"></div></details><details class="account-tools"><summary>Mi despensa e inventario del hogar</summary><div id="pantry-module"></div></details>';
   panels.comprar.appendChild(purchaseLedger);
   const compareIntro=document.createElement('div');compareIntro.className='module-intro';compareIntro.innerHTML='<p class="eyebrow">ANÁLISIS DE PRECIOS</p><h2>Comparar precios</h2><p>Compara los registros que has guardado para el mismo producto, presentación y unidad.</p>';
   panels.comparar.prepend(compareIntro);
@@ -389,7 +389,7 @@ async function renderAuth() {
       } catch(error) { feedback.textContent='No fue posible completar la solicitud. Inténtalo nuevamente.'; }
       finally { submit.disabled=false; }
     });
-    const ledgerAccess=document.querySelector('#purchase-ledger-access');if(ledgerAccess)ledgerAccess.textContent='Inicia sesión para consultar el registro detallado de compras y gastos. Tu despensa local sigue disponible abajo.';
+    const ledgerAccess=document.querySelector('#purchase-ledger-access');if(ledgerAccess)ledgerAccess.innerHTML='Inicia sesión para consultar el registro detallado de compras y gastos. Tu despensa local sigue disponible abajo. <button type="button" class="secondary" data-more-view="cuenta">Iniciar sesión</button>';
     const purchasesModule=document.querySelector('#purchases-module');if(purchasesModule)purchasesModule.innerHTML='';
     const spendingModule=document.querySelector('#spending-module');if(spendingModule)spendingModule.innerHTML='';
     await renderPersonalPantry({container:document.querySelector('#pantry-module'),supabase:null,user:null});
