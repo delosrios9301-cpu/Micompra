@@ -137,6 +137,8 @@ function createBaseline(workspace) {
 }
 
 function mergeCustomStoreNames(merged, local, remote) {
+  const hasCustomStores = Array.isArray(local?.customStores) || Array.isArray(remote?.customStores);
+  if (!hasCustomStores) return merged;
   const values = [...(Array.isArray(remote?.customStores) ? remote.customStores : []), ...(Array.isArray(local?.customStores) ? local.customStores : [])];
   const seen = new Set();
   merged.customStores = values.filter(value => {
