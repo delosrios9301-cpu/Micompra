@@ -49,6 +49,8 @@ export function groupComparableProducts(products = []) {
 }
 
 export function hasComparableStorePrices(group = []) {
+  // Missing package size is not enough information to claim two prices are equivalent.
+  if (!Array.isArray(group) || group.length < 2 || group.some(product => !normalizeComparisonText(product?.presentation))) return false;
   const stores = new Set(
     group
       .filter(product => Number.isFinite(Number(product?.price)) && Number(product.price) > 0 && String(product?.store || '').trim())
