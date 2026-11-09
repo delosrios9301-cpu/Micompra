@@ -1,5 +1,8 @@
+import { formatStoredCurrency, getStoredCurrency } from './currency.js';
+
 export function buildPurchasesCsv(purchases = []) {
-  const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario USD','Total USD','Notas'];
+  const currency=getStoredCurrency();
+  const headers = ['Fecha','Supermercado','Sucursal','Referencia factura','Producto','Presentación','Cantidad','Unidad','Precio unitario '+currency,'Total '+currency,'Notas'];
   const cell = value => {
     let v = String(value ?? '');
     if (/^[\s\u0000-\u001f]*[=+\-@]/.test(v)) v = "'" + v;
@@ -177,7 +180,7 @@ export function parseInvoiceMetadata(text, stores = [], branches = []) {
   return { supermarketId: store?.id || '', branchId: branch?.id || '', purchaseDate: date, receiptReference: reference };
 }
 
-const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+const money = value => formatStoredCurrency(value);
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const parseInvoiceDraft = (text, products) => {
