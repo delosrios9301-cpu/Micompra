@@ -7,10 +7,10 @@ Aplicación personal para organizar compras del hogar y comparar precios registr
 - **Comprar:** crear y administrar una lista, indicar supermercado, cantidad y precio; el total se actualiza automáticamente.
 - **Comparar:** comparar el mismo producto y presentación entre supermercados utilizando los registros guardados.
 - **Productos:** mantener un catálogo personal con nombre, presentación, categoría, unidad, supermercado, precio habitual y fotografía opcional.
-- **Mis compras:** finalizar una compra, registrar la forma de pago, consultar el historial e imprimir comprobantes personales.
-- **Ajustes:** administrar supermercados, moneda, apariencia, cuenta, copias de seguridad y preferencias.
+- **Mis compras:** consultar las listas finalizadas y abrir el registro detallado de compras reales, comprobantes, códigos de barras e inventario. Gastos y despensa quedan agrupados en subsecciones.
+- **Ajustes:** administrar supermercados, moneda, apariencia, cuenta, acceso, copias de seguridad y preferencias.
 
-La cuenta también dispone de herramientas personales de historial, gastos y despensa.
+El historial rápido de listas finalizadas se conserva separado del registro detallado de compras e inventario; ambos se mantienen para no perder funciones ni datos.
 
 ## Política de precios y fuentes
 
