@@ -420,11 +420,13 @@ async function renderAuth() {
   box.querySelector('#import-csv').addEventListener('click', async () => { const output=box.querySelector('#import-result'); output.textContent='Procesando...'; try { await importPriceCsv({file:box.querySelector('#price-csv').files[0],supabase,user,output}); await renderPriceReview(); } catch(error) { output.textContent=error.message || 'No se pudo importar el archivo.'; } });
   const ledgerAccess=document.querySelector('#purchase-ledger-access');if(ledgerAccess)ledgerAccess.textContent='Registro sincronizado con tu cuenta. Los datos se cargan con tus permisos.';
   const purchasesContainer=document.querySelector('#purchases-module');
-  if(purchasesContainer)await renderPurchases({container:purchasesContainer,supabase,user});
   const spendingContainer=document.querySelector('#spending-module');
-  if(spendingContainer)await renderSpendingDashboard({container:spendingContainer,supabase,user});
   const pantryContainer=document.querySelector('#pantry-module');
-  if(pantryContainer)await renderPersonalPantry({container:pantryContainer,supabase:null,user});
+  await Promise.all([
+    purchasesContainer ? renderPurchases({container:purchasesContainer,supabase,user}).catch(() => { purchasesContainer.innerHTML='<p class="empty">No se pudo cargar el registro de compras. Puedes volver a intentarlo al abrir Mis compras.</p>'; }) : Promise.resolve(),
+    spendingContainer ? renderSpendingDashboard({container:spendingContainer,supabase,user}).catch(() => { spendingContainer.innerHTML='<p class="empty">No se pudo cargar el resumen de gastos. Intenta actualizarlo nuevamente.</p>'; }) : Promise.resolve(),
+    pantryContainer ? renderPersonalPantry({container:pantryContainer,supabase:null,user}).catch(() => { pantryContainer.innerHTML='<p class="empty">No se pudo cargar la despensa en este momento.</p>'; }) : Promise.resolve()
+  ]);
 }
 
 
