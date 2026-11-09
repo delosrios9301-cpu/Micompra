@@ -1,3 +1,5 @@
+import { normalizeComparisonText, normalizeComparisonUnit } from './comparison.js';
+
 export function applyCartItemEdits(items, itemId, fields = {}) {
   if (!Array.isArray(items)) throw new TypeError('La lista de compra no es válida.');
   const id = String(itemId ?? '');
@@ -59,4 +61,12 @@ export function summarizeCartItems(items = []) {
     pending: rows.length - pricedCount,
     stores: [...storeMap.values()]
   };
+}
+
+export function sameCartItemIdentity(left, right) {
+  if (!left || !right) return false;
+  return normalizeComparisonText(left.name) === normalizeComparisonText(right.name)
+    && normalizeComparisonText(left.store) === normalizeComparisonText(right.store)
+    && normalizeComparisonText(left.presentation) === normalizeComparisonText(right.presentation)
+    && normalizeComparisonUnit(left.priceUnit) === normalizeComparisonUnit(right.priceUnit);
 }
