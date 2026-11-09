@@ -87,9 +87,25 @@ function shell() {
   const viewHost=document.createElement('div');viewHost.className='app-views';
   const panels={};
   views.forEach(view=>{
-    const panel=document.createElement('section');panel.className='app-view';panel.dataset.view=view.id;panel.hidden=view.id!=='inicio';panels[view.id]=panel;viewHost.appendChild(panel);
+    const panel=document.createElement('section');panel.className='app-view';panel.dataset.view=view.id;panel.hidden=view.id!=='comprar';panels[view.id]=panel;viewHost.appendChild(panel);
     view.nodes.forEach(selector=>{const node=main.querySelector(selector);if(node)panel.appendChild(node);});
-    if(['inicio','comprar','comparar','catalogo','mas'].includes(view.id)){const button=document.createElement('button');button.type='button';button.className='app-nav-item'+(view.id==='inicio'?' active':'');button.dataset.openView=view.id;button.innerHTML='<span aria-hidden="true">'+view.icon+'</span><small>'+view.label+'</small>';nav.appendChild(button);}
+  });
+  const navItems=[
+    {id:'comprar',label:'Comprar',icon:'🛒',view:'comprar'},
+    {id:'comparar',label:'Comparar',icon:'⇄',view:'comparar'},
+    {id:'catalogo',label:'Productos',icon:'▣',view:'catalogo'},
+    {id:'compras',label:'Mis compras',icon:'▤',view:'comprar',purchases:true},
+    {id:'configuracion',label:'Ajustes',icon:'⚙',view:'configuracion'}
+  ];
+  navItems.forEach(item=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='app-nav-item'+(item.id==='comprar'?' active':'');
+    button.dataset.navKey=item.id;
+    if(item.purchases) button.dataset.openPurchases='true';
+    else button.dataset.openView=item.view;
+    button.innerHTML='<span aria-hidden="true">'+item.icon+'</span><small>'+item.label+'</small>';
+    nav.appendChild(button);
   });
   const searchCard=document.createElement('section');searchCard.className='page-card shopping-search-card';
   ['.section-head:not(.list-heading):not(.stores-heading)','#search','.store-filter','.catalog-source-note','.branch-filter','#results'].forEach(selector=>{const node=panels.comprar.querySelector(selector);if(node)searchCard.appendChild(node);});
@@ -102,10 +118,14 @@ function shell() {
   const storesCard=document.createElement('section');storesCard.className='page-card stores-page-card';
   ['.stores-heading','.grid','aside'].forEach(selector=>{const node=panels.tiendas.querySelector(selector);if(node)storesCard.appendChild(node);});
   panels.tiendas.appendChild(storesCard);
-  panels.cuenta.appendChild(authPanel);
   panels.mas.innerHTML='<section class="more-page"><div class="settings-heading"><p class="eyebrow">CENTRO DE HERRAMIENTAS</p><h2>Más opciones</h2><p>Las herramientas están agrupadas por función para que encuentres cada módulo sin mezclar tareas.</p></div><section class="more-group"><h3>Gestión personal</h3><div class="more-links"><button type="button" data-more-view="tiendas"><span>▦</span><span><strong>Supermercados</strong><small>Tiendas disponibles y datos de referencia</small></span><b>›</b></button><button type="button" data-more-view="cuenta"><span>◉</span><span><strong>Mi espacio</strong><small>Cuenta, compras guardadas, gastos y despensa</small></span><b>›</b></button></div></section><section class="more-group"><h3>Aplicación</h3><div class="more-links"><button type="button" data-more-view="configuracion"><span>⚙</span><span><strong>Configuración</strong><small>Preferencias, apariencia y copias de seguridad</small></span><b>›</b></button></div></section></section>';
   panels.configuracion.innerHTML='<section class="settings-page"><div class="settings-heading"><p class="eyebrow">PERSONALIZA TU EXPERIENCIA</p><h2>Configuración</h2><p>Controla cómo funciona Mi Compra. Tus supermercados y precios se registran manualmente.</p></div><article class="settings-card"><div class="settings-card-title"><span>🏬</span><div><strong>Supermercados</strong><small>Selecciona los establecimientos que utilizas.</small></div></div><div class="settings-store-list">'+guestStores.map(name=>'<label><input type="checkbox" name="enabled-store" value="'+name+'" checked><span>'+name+'</span></label>').join('')+'</div><form id="settings-add-store" class="settings-add-store"><label>Agregar supermercado<input name="storeName" maxlength="50" required placeholder="Ej. Supermercado local"></label><button type="submit">Agregar supermercado</button><small id="settings-store-feedback" role="status"></small></form></article><article class="settings-card"><div class="settings-card-title"><span>🛒</span><div><strong>Preferencias de compra</strong><small>Define los valores iniciales de tus listas.</small></div></div><label class="settings-field">Supermercado predeterminado<select id="settings-default-store">'+guestStores.map(name=>'<option>'+name+'</option>').join('')+'</select></label><label class="settings-field">Moneda de referencia<select id="settings-currency"><option value="USD">Dólar estadounidense (USD)</option><option value="PAB">Balboa panameño (PAB)</option></select></label></article><article class="settings-card"><div class="settings-card-title"><span>🎨</span><div><strong>Apariencia</strong><small>Interfaz clara y adaptable a tu dispositivo.</small></div></div><label class="settings-field">Tema<select id="settings-theme"><option value="light">Claro</option><option value="dark">Oscuro</option><option value="system">Según dispositivo</option></select></label></article><article class="settings-card"><div class="settings-card-title"><span>🛡️</span><div><strong>Respaldo de datos</strong><small>Guarda una copia de tus productos, fotografías, lista, inventario e historial de compras de este dispositivo.</small></div></div><button type="button" id="settings-export">Descargar copia de seguridad</button><label class="settings-restore-control">Restaurar una copia guardada<input type="file" id="settings-import" accept="application/json,.json"></label><small id="settings-feedback" role="status"></small></article><article class="settings-card"><div class="settings-card-title"><span>📊</span><div><strong>Estado de tus datos</strong><small>Resumen de la información guardada en este dispositivo.</small></div></div><div class="settings-data-summary"><div><b id="settings-count-products">0</b><small>Productos</small></div><div><b id="settings-count-cart">0</b><small>En la lista</small></div><div><b id="settings-count-purchases">0</b><small>Compras</small></div><div><b id="settings-count-pantry">0</b><small>En despensa</small></div></div><p class="settings-storage-note">Tus datos se guardan en este dispositivo. Para utilizarlos en otro equipo, restaura una copia de seguridad. La sincronización entre dispositivos requiere una cuenta autenticada.</p><button type="button" id="settings-reset-preferences" class="settings-secondary-button">Restablecer solo preferencias</button><small id="settings-reset-feedback" role="status"></small><div class="settings-danger-zone"><strong>Empezar desde cero</strong><p>Elimina permanentemente tus productos, fotografías, listas, compras, despensa, supermercados personalizados, preferencias y copias de recuperación. Si has iniciado sesión, también limpia los datos de tu cuenta en la nube.</p><button type="button" id="settings-reset-all" class="settings-danger-button">Borrar toda mi información y empezar de cero</button><small id="settings-reset-all-feedback" role="status"></small></div></article><article class="settings-card"><div class="settings-card-title"><span>ℹ️</span><div><strong>Acerca de Mi Compra</strong><small>Comparador manual de precios · Panamá.</small></div></div><p class="settings-storage-note">Los precios se registran manualmente. Mi Compra no consulta páginas de supermercados. Las comparaciones se calculan a partir de los productos y precios que tú ingresas.</p></article><p class="settings-version">Mi Compra · Panamá · Comparaciones basadas en precios ingresados manualmente.</p></section>';
   panels.catalogo.innerHTML='<section class="personal-catalog"><div class="catalog-page-heading"><p class="eyebrow">TUS PRODUCTOS FAVORITOS</p><h2>Mi catálogo</h2><p>Guarda cada producto con su fotografía y agrégalo a tu compra con un solo toque.</p></div><form id="personal-product-form" class="personal-product-form"><h3>Agregar un producto</h3><label class="catalog-photo-picker"><input id="personal-product-photo" type="file" accept="image/*" capture="environment"><span class="catalog-photo-preview" id="catalog-photo-preview">＋</span><span><strong>Fotografía del producto</strong><small>La app buscará imágenes similares automáticamente si tienes Internet; también puedes tomar o elegir una foto.</small></span></label><div id="product-image-suggestions" class="product-image-suggestions" aria-live="polite"></div><label>Nombre del producto<input name="name" maxlength="100" required placeholder="Ej. Leche entera"></label><label>Marca y presentación<input name="presentation" maxlength="100" required placeholder="Ej. 1 litro · marca opcional"></label><div class="catalog-form-grid"><label>Categoría<select name="category"><option>Abarrotes</option><option>Frutas</option><option>Vegetales</option><option>Carnes y pollo</option><option>Lácteos</option><option>Bebidas</option><option>Limpieza</option><option>Higiene personal</option><option>Otros</option></select></label><label>Supermercado<select name="store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Precio habitual<input name="price" type="number" min="0" step="0.01" placeholder="Opcional"></label><label>Unidad<select name="unit"><option value="unidad">Unidad</option><option value="kg">Kilogramo</option><option value="paquete">Paquete</option><option value="litro">Litro</option><option value="lb">Libra</option></select></label></div><button type="submit">Guardar en mi catálogo</button><small class="catalog-form-feedback" id="catalog-form-feedback" role="status"></small></form><div class="personal-catalog-list-heading"><div><h3>Mis productos</h3><small id="personal-catalog-count">0 productos guardados</small></div><input id="personal-catalog-filter" type="search" placeholder="Buscar en mi catálogo"></div><div id="personal-catalog-grid" class="personal-catalog-grid"></div><small class="catalog-storage-note">Los cambios se sincronizan con tu cuenta cuando has iniciado sesión; sin sesión, permanecen en este dispositivo.</small></section>';
+  const accountDetails=document.createElement('details');
+  accountDetails.className='settings-account-details';
+  accountDetails.innerHTML='<summary>Cuenta y datos personales</summary><p>Acceso, compras sincronizadas, gastos y despensa.</p>';
+  accountDetails.appendChild(authPanel);
+  panels.configuracion.querySelector('.settings-page')?.prepend(accountDetails);
   const shortcuts=document.createElement('section');
   shortcuts.className='home-shortcuts';
   shortcuts.innerHTML=`
@@ -123,13 +143,27 @@ function shell() {
   const dashboard=document.createElement('section');dashboard.id='home-dashboard';dashboard.className='home-dashboard';panels.inicio.appendChild(dashboard);
   panels.inicio.appendChild(shortcuts);
   main.prepend(nav);main.appendChild(viewHost);renderHomeDashboard();
-  const openView=id=>{
+  const openView=(id,activeKey=id)=>{
     if(id==='inicio')renderHomeDashboard();
     Object.entries(panels).forEach(([key,panel])=>{panel.hidden=key!==id;});
-    nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.openView===id||(button.dataset.openView==='mas'&&['tiendas','cuenta','configuracion'].includes(id));button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
+    nav.querySelectorAll('button').forEach(button=>{const active=button.dataset.navKey===activeKey;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
     window.scrollTo({top:0,behavior:'smooth'});
   };
-  nav.addEventListener('click',event=>{const button=event.target.closest('[data-open-view]');if(button){openView(button.dataset.openView);if(button.dataset.openView==='comparar')renderManualComparisonDashboard();if(button.dataset.openView==='comprar'){searchProducts(document.querySelector('#search')?.value||'');renderGuestList();}}});
+  nav.addEventListener('click',event=>{
+    const button=event.target.closest('[data-nav-key]');
+    if(!button)return;
+    if(button.dataset.openPurchases){
+      openView('comprar','compras');
+      searchProducts(document.querySelector('#search')?.value||'');
+      renderGuestList();
+      document.querySelector('.purchase-history')?.scrollIntoView({behavior:'smooth',block:'start'});
+      return;
+    }
+    const target=button.dataset.openView;
+    openView(target,button.dataset.navKey);
+    if(target==='comparar')renderManualComparisonDashboard();
+    if(target==='comprar'){searchProducts(document.querySelector('#search')?.value||'');renderGuestList();}
+  });
   shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-view]');if(button)openView(button.dataset.homeView);});
   shortcuts.addEventListener('click',event=>{const button=event.target.closest('[data-home-category]');if(!button)return;const term=button.dataset.homeCategory;openView('comprar');const search=document.querySelector('#search');if(search){search.value=term;searchProducts(term);}});
   viewHost.addEventListener('click',event=>{const account=event.target.closest('[data-account-view]');const more=event.target.closest('[data-more-view]');const target=more?.dataset.moreView||account?.dataset.accountView;if(!target)return;openView(target);if(target==='comparar')renderManualComparisonDashboard();if(target==='comprar'){searchProducts(document.querySelector('#search')?.value||'');renderGuestList();}});
