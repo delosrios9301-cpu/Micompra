@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCartItemEdits, summarizeCartItems } from '../src/cart-items.js';
+import { applyCartItemEdits, summarizeCartItems, sameCartItemIdentity } from '../src/cart-items.js';
 
 const items = [
   { id: 'one', name: 'Arroz', store: 'Super 99', qty: 1, price: 2.5, priceUnit: 'lb', imageData: 'photo' },
@@ -58,4 +58,20 @@ test('cart summary ignores invalid prices and quantities instead of counting the
 
 test('cart summary handles an empty list', () => {
   assert.deepEqual(summarizeCartItems([]), { total: 0, count: 0, priced: 0, pending: 0, stores: [] });
+});
+
+test('cart item identity keeps different package presentations separate', () => {
+  const halfKg = { name: 'Arroz', store: 'Super 99', presentation: 'Bolsa 500 g', priceUnit: 'unidad' };
+  const oneKg = { ...halfKg, presentation: 'Bolsa 1 kg' };
+  assert.equal(sameCartItemIdentity(halfKg, oneKg), false);
+});
+
+test('cart item identity merges only matching product, store, presentation and unit', () => {
+  const first = { name: 'Café molido', store: 'Super 99', presentation: 'Bolsa 250 g', priceUnit: 'unidad' };
+  const same = { name: '  CAFE MOLIDO ', store: ' super 99 ', presentation: 'bolsa 250 g', priceUnit: 'unidades' };
+  const otherStore = { ...first, store: 'Xtra' };
+  const otherUnit = { ...first, priceUnit: 'kg' };
+  assert.equal(sameCartItemIdentity(first, same), true);
+  assert.equal(sameCartItemIdentity(first, otherStore), false);
+  assert.equal(sameCartItemIdentity(first, otherUnit), false);
 });
