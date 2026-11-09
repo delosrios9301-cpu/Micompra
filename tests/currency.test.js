@@ -12,7 +12,7 @@ test('only supported currencies are accepted', () => {
 });
 
 test('currency formatter produces consistent Panama currency labels', () => {
-  assert.match(formatCurrency(12.5, 'USD'), /US\$/);
+  assert.match(formatCurrency(12.5, 'USD'), /USD/);
   assert.match(formatCurrency(12.5, 'PAB'), /B\/?\.?/);
 });
 
@@ -25,5 +25,5 @@ test('stored currency preference is read safely', () => {
 test('storage failures fall back to USD instead of breaking the UI', () => {
   const brokenStorage = { getItem() { throw new Error('storage unavailable'); } };
   assert.equal(getStoredCurrency(brokenStorage), 'USD');
-  assert.match(formatStoredCurrency(1, brokenStorage), /US\$/);
+  assert.match(formatStoredCurrency(1, brokenStorage), /USD/);
 });
