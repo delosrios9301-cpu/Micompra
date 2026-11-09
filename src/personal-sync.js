@@ -129,46 +129,69 @@ function readBaseline(storage) {
 }
 
 function createBaseline(workspace) {
-  const result = { version: 1, settings: hashWorkspaceRecord(workspace.settings || {}) };
+  const result = { version: 1, settings: hashWorkspaceRecord(workspace.settings || {}), settingsData: workspace.settings || {} };
   for (const collection of COLLECTIONS) {
     result[collection] = Object.fromEntries((workspace[collection] || []).map(row => [String(row.id), hashWorkspaceRecord(row)]));
   }
   return result;
 }
 
-function mergeStorePreferenceArrays(merged, local, remote) {
-  // Preserve store names and enabled selections added on either device.
-  for (const key of ['customStores', 'enabledStores']) {
-    if (!Array.isArray(local?.[key]) && !Array.isArray(remote?.[key])) continue;
-    const values = [...(Array.isArray(remote?.[key]) ? remote[key] : []), ...(Array.isArray(local?.[key]) ? local[key] : [])];
-    const seen = new Set();
-    merged[key] = values.filter(value => {
-      if (typeof value !== 'string' || !value.trim()) return false;
-      const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('es-PA');
-      if (seen.has(normalized)) return false;
-      seen.add(normalized);
-      return true;
-    });
-  }
+function mergeCustomStoreNames(merged, local, remote) {
+  const values = [...(Array.isArray(remote?.customStores) ? remote.customStores : []), ...(Array.isArray(local?.customStores) ? local.customStores : [])];
+  const seen = new Set();
+  merged.customStores = values.filter(value => {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('es-PA');
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
   return merged;
 }
 
-export function mergeWorkspaceSettings(local, remote, previousHash) {
+export function mergeWorkspaceSettings(local, remote, previousHash, previousValues) {
   const localValues = local && typeof local === 'object' ? local : {};
   const remoteValues = remote && typeof remote === 'object' ? remote : {};
   const localHash = hashWorkspaceRecord(localValues), remoteHash = hashWorkspaceRecord(remoteValues);
   if (!previousHash) {
-    // First login on a new device: keep established cloud preferences and fill
-    // missing values from local defaults, while preserving store lists on both.
-    return mergeStorePreferenceArrays({ ...localValues, ...remoteValues }, localValues, remoteValues);
+    // First login on a new device: established cloud preferences win. Local
+    // defaults fill missing values; custom store names are preserved on both.
+    return mergeCustomStoreNames({ ...localValues, ...remoteValues }, localValues, remoteValues);
   }
   const localChanged = localHash !== previousHash, remoteChanged = remoteHash !== previousHash;
+  if (!localChanged && !remoteChanged) return localValues;
   if (localChanged && !remoteChanged) return localValues;
   if (remoteChanged && !localChanged) return remoteValues;
-  if (localChanged && remoteChanged) {
-    return mergeStorePreferenceArrays({ ...remoteValues, ...localValues }, localValues, remoteValues);
+
+  // On older devices the baseline may contain only a hash. Keep local
+  // preference precedence for that legacy format, but never lose store names.
+  if (!previousValues || typeof previousValues !== 'object' || Array.isArray(previousValues)) {
+    return mergeCustomStoreNames({ ...remoteValues, ...localValues }, localValues, remoteValues);
   }
-  return localValues;
+
+  // Three-way merge each setting so a change to currency on one device does
+  // not overwrite a theme change made on another device.
+  const merged = {};
+  const keys = new Set([...Object.keys(previousValues), ...Object.keys(localValues), ...Object.keys(remoteValues)]);
+  const has = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+  for (const key of keys) {
+    const baseHas = has(previousValues, key), localHas = has(localValues, key), remoteHas = has(remoteValues, key);
+    const baseValue = previousValues[key], localValue = localValues[key], remoteValue = remoteValues[key];
+    const localKeyChanged = localHas !== baseHas || (localHas && stableStringify(localValue) !== stableStringify(baseValue));
+    const remoteKeyChanged = remoteHas !== baseHas || (remoteHas && stableStringify(remoteValue) !== stableStringify(baseValue));
+    let chosen, chosenExists;
+    if (localKeyChanged && !remoteKeyChanged) { chosen = localValue; chosenExists = localHas; }
+    else if (remoteKeyChanged && !localKeyChanged) { chosen = remoteValue; chosenExists = remoteHas; }
+    else if (localKeyChanged && remoteKeyChanged) {
+      if (key === 'customStores') {
+        chosen = [...(Array.isArray(remoteValue) ? remoteValue : []), ...(Array.isArray(localValue) ? localValue : [])];
+        chosenExists = true;
+      } else { chosen = localValue; chosenExists = localHas; }
+    } else if (remoteHas) { chosen = remoteValue; chosenExists = true; }
+    else { chosen = localValue; chosenExists = localHas; }
+    if (chosenExists) merged[key] = chosen;
+  }
+  return mergeCustomStoreNames(merged, localValues, remoteValues);
 }
 function writeLocalWorkspace(storage, workspace) {
   const keys = COLLECTIONS.map(collection => PERSONAL_WORKSPACE_KEYS[collection]).concat(PERSONAL_WORKSPACE_KEYS.settings);
@@ -225,7 +248,7 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
     merged[collection] = result.items;
     conflicts = conflicts.concat(result.conflicts.map(conflict => ({ ...conflict, collection })));
   }
-  merged.settings = mergeWorkspaceSettings(local.settings, remote.settings, baseline.settings);
+  merged.settings = mergeWorkspaceSettings(local.settings, remote.settings, baseline.settings, baseline.settingsData);
   const remotePayload = stableStringify(remote);
   const mergedPayload = stableStringify(merged);
   const localChangedDuringSync = () => storageKeys.some((key, index) => storage.getItem(key) !== storageSnapshot[index]);
