@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePantryName, isPantryLowStock, summarizePantry, findPantryListDuplicate, findPantryCatalogMatch, buildPantryRestockPlan } from '../src/pantry.js';
+import { normalizePantryName, isPantryLowStock, summarizePantry, findPantryListDuplicate, findPantryCatalogMatch, buildPantryRestockPlan, mergePurchasedItemsIntoPantry } from '../src/pantry.js';
 
 test('pantry names normalize accents, case and whitespace', () => {
   assert.equal(normalizePantryName('  Café   Molido '), 'cafe molido');
@@ -93,4 +93,35 @@ test('bulk restock plan links only safe unique catalog matches', () => {
   assert.equal(plan.unlinked, 1);
   assert.equal(plan.inserts[0].product_id, 'rice-1kg');
   assert.equal(plan.inserts[1].product_id, null);
+});
+
+test('purchased pantry stock keeps different package presentations separate', () => {
+  const result = mergePurchasedItemsIntoPantry([], [
+    { name: 'Leche', presentation: 'Botella 1 L', qty: 2, priceUnit: 'unidad' },
+    { name: 'Leche', presentation: 'Botella 2 L', qty: 1, priceUnit: 'unidad' },
+    { name: 'Leche', presentation: 'Botella 1 L', qty: 3, priceUnit: 'unidad' }
+  ]);
+  assert.equal(result.added, 2);
+  assert.equal(result.updated, 1);
+  assert.deepEqual(result.items.map(item => [item.presentation, item.quantity]), [
+    ['Botella 1 L', 5],
+    ['Botella 2 L', 1]
+  ]);
+});
+
+test('purchased pantry stock retains legacy identity when presentation is absent', () => {
+  const result = mergePurchasedItemsIntoPantry([
+    { id: 'milk', item_name: 'Leche', quantity: 2, unit: 'unidad' }
+  ], [{ name: 'LECHE', qty: 1, priceUnit: 'unidades' }]);
+  assert.equal(result.added, 0);
+  assert.equal(result.updated, 1);
+  assert.equal(result.items[0].quantity, 3);
+});
+
+test('purchased pantry stock skips invalid rows without changing existing quantities', () => {
+  const result = mergePurchasedItemsIntoPantry([
+    { id: 'rice', item_name: 'Arroz', quantity: 2, unit: 'kg' }
+  ], [{ name: '', qty: 1 }, { name: 'Arroz', qty: -2, priceUnit: 'kg' }]);
+  assert.equal(result.skipped, 2);
+  assert.equal(result.items[0].quantity, 2);
 });
