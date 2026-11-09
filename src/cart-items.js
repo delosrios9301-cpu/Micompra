@@ -24,3 +24,39 @@ export function applyCartItemEdits(items, itemId, fields = {}) {
     : item
   );
 }
+
+export function summarizeCartItems(items = []) {
+  const rows = Array.isArray(items) ? items : [];
+  const storeMap = new Map();
+  let total = 0, pricedCount = 0;
+  for (const item of rows) {
+    const store = String(item?.store ?? '').trim();
+    const quantity = Number(item?.qty);
+    const price = item?.price === null || item?.price === undefined || item?.price === ''
+      ? NaN
+      : Number(item.price);
+    const validQuantity = Number.isFinite(quantity) && quantity > 0;
+    const validPrice = Number.isFinite(price) && price > 0;
+    const priced = validQuantity && validPrice;
+    if (priced) {
+      const subtotal = quantity * price;
+      total += subtotal;
+      pricedCount += 1;
+    }
+    if (!store) continue;
+    if (!storeMap.has(store)) storeMap.set(store, { store, total: 0, count: 0, priced: 0 });
+    const group = storeMap.get(store);
+    group.count += 1;
+    if (priced) {
+      group.total += quantity * price;
+      group.priced += 1;
+    }
+  }
+  return {
+    total,
+    count: rows.length,
+    priced: pricedCount,
+    pending: rows.length - pricedCount,
+    stores: [...storeMap.values()]
+  };
+}
