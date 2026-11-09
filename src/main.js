@@ -78,8 +78,8 @@ function shell() {
   const authPanel=document.querySelector('#auth');
   const views=[
     {id:'inicio',label:'Inicio',icon:'⌂',nodes:['.hero','#connection']},
-    {id:'comprar',label:'Comprar',icon:'＋',nodes:['.section-head:not(.list-heading):not(.stores-heading)','#search','.store-filter','.catalog-source-note','.branch-filter','#results','.list-heading','#cart','#list-comparison']},
-    {id:'comparar',label:'Comparar',icon:'⇄',nodes:['#weekly-plan-module']},
+    {id:'comprar',label:'Comprar',icon:'＋',nodes:['.section-head:not(.list-heading):not(.stores-heading)','#search','.store-filter','.catalog-source-note','.branch-filter','#results','.list-heading','#cart']},
+    {id:'comparar',label:'Comparar',icon:'⇄',nodes:['#list-comparison','#weekly-plan-module']},
     {id:'tiendas',label:'Tiendas',icon:'▦',nodes:['.stores-heading','.grid','aside']},
     {id:'cuenta',label:'Mi espacio',icon:'◉',nodes:[]},{id:'catalogo',label:'Mi catálogo',icon:'▣',nodes:[]},{id:'configuracion',label:'Ajustes',icon:'⚙',nodes:[]},{id:'mas',label:'Más',icon:'⋯',nodes:[]}
   ];
@@ -113,6 +113,11 @@ function shell() {
   const cartCard=document.createElement('section');cartCard.className='page-card shopping-cart-card';
   ['.list-heading','#cart'].forEach(selector=>{const node=panels.comprar.querySelector(selector);if(node)cartCard.appendChild(node);});
   panels.comprar.appendChild(cartCard);
+  const checkout=document.createElement('section');
+  checkout.id='purchase-checkout';
+  checkout.className='list-comparison';
+  checkout.innerHTML='<p class="empty">Tu cierre de compra e historial aparecerán aquí.</p>';
+  cartCard.appendChild(checkout);
   const compareIntro=document.createElement('div');compareIntro.className='module-intro';compareIntro.innerHTML='<p class="eyebrow">ANÁLISIS DE PRECIOS</p><h2>Comparar precios</h2><p>Compara los registros que has guardado para el mismo producto y presentación.</p>';
   panels.comparar.prepend(compareIntro);
   const storesCard=document.createElement('section');storesCard.className='page-card stores-page-card';
@@ -735,7 +740,7 @@ function renderPersonalCatalog(){
  form.onsubmit=e=>{e.preventDefault();const d=new FormData(form),name=String(d.get('name')||'').trim(),raw=String(d.get('price')||'').trim(),price=raw===''?null:Number(raw);if(!name||(price!==null&&(!Number.isFinite(price)||price<0))){feedback.textContent='Revisa el nombre y el precio.';return;}const items=readPersonalCatalog(),presentation=String(d.get('presentation')||'').trim();const existing=items.find(p=>p.name.toLowerCase()===name.toLowerCase()&&(p.presentation||'').toLowerCase()===presentation.toLowerCase()&&p.store===d.get('store'));if(existing){if(price!==null&&Number(existing.price)!==price){const previous=Number(existing.price);existing.priceHistory=Array.isArray(existing.priceHistory)?existing.priceHistory:[];if(previous>0)existing.priceHistory.push({price:previous,date:new Date().toISOString(),kind:'anterior'});existing.priceHistory.push({price,date:new Date().toISOString(),kind:'actual'});existing.price=price;}existing.imageData=photoData||existing.imageData;existing.category=d.get('category');existing.unit=d.get('unit');}else{items.unshift({id:Date.now().toString(36),name,presentation,category:d.get('category'),store:d.get('store'),price,unit:d.get('unit'),imageData:photoData,priceHistory:price!==null?[{price,date:new Date().toISOString(),kind:'registro'}]:[]});}try{savePersonalCatalog(items);}catch{feedback.textContent='No hay espacio para guardar esa foto. Usa una imagen más pequeña.';return;}form.reset();photoData=null;imageSearchToken++;if(imageSearchTimer)clearTimeout(imageSearchTimer);imageSuggestions.innerHTML='';preview.textContent='＋';feedback.textContent=existing?'Producto actualizado. El precio anterior quedó registrado para las métricas.':(photoData?'Producto guardado con imagen. Ya puedes agregarlo con un toque.':'Producto guardado. No encontramos imagen automática; puedes añadir una foto cuando quieras.');render();renderManualComparisonDashboard();};render();
 }
 function renderGuestList(){
-  const label=document.querySelector('#list-label'),cart=document.querySelector('#cart'),panel=document.querySelector('#list-comparison');
+  const label=document.querySelector('#list-label'),cart=document.querySelector('#cart'),panel=document.querySelector('#purchase-checkout');
   const items=readGuestCart(),purchases=readGuestPurchases();label.textContent=user?'Lista sincronizada con tu cuenta':'Lista temporal · guardada en este dispositivo';
   cart.innerHTML='<p class="guest-cart-note">Agrega productos manualmente o desde el catálogo. Coloca el precio y la cantidad para calcular cada subtotal automáticamente. '+(user?'Esta lista se sincroniza con tu cuenta.':'Esta lista se guarda en este dispositivo.')+'</p><form id="guest-add-item" class="guest-add-form"><label>Supermercado<select id="guest-store">'+guestStores.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>Producto<input id="guest-name" required maxlength="100" placeholder="Ej. Pollo"></label><div class="guest-fields"><label>Cantidad<input id="guest-qty" type="number" min="0.01" step="0.01" value="1" required></label><label>Precio por unidad<input id="guest-price" type="number" min="0.01" step="0.01" placeholder="Ej. 3.50" required></label></div><button type="submit">Agregar a mi compra</button><small id="guest-feedback" role="status"></small></form>';
   const preferredStore=(()=>{try{const pref=JSON.parse(localStorage.getItem('micompra_settings_v1')||'{}');return guestStores.includes(pref.defaultStore)?pref.defaultStore:guestStores[0];}catch{return guestStores[0];}})();
