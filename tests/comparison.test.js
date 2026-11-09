@@ -30,6 +30,16 @@ test('only identical product, presentation and unit records are grouped', () => 
   assert.equal(hasComparableStorePrices(groups[0]), true);
 });
 
+test('products without a specified presentation are never compared as equivalent', () => {
+  const products = [
+    { id: 'a', name: 'Leche', store: 'Super 99', price: 1.25 },
+    { id: 'b', name: 'Leche', store: 'Xtra', price: 1.1 }
+  ];
+  const groups = groupComparableProducts(products);
+  assert.equal(groups.length, 1);
+  assert.equal(hasComparableStorePrices(groups[0]), false);
+});
+
 test('duplicate records from one store do not create a valid store comparison', () => {
   const group = [
     { store: 'Super 99', price: 2.5 },
