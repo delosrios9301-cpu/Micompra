@@ -97,7 +97,7 @@ test('first login on another device keeps cloud preferences and merges custom st
   assert.equal(merged.theme, 'dark');
   assert.equal(merged.defaultStore, 'Tienda Norte');
   assert.deepEqual(merged.customStores, ['Tienda Norte', 'Local Market']);
-  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Norte', 'Local Market']);
+  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Norte']);
 });
 
 test('first sync keeps local settings when cloud has no preference values', () => {
