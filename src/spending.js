@@ -1,4 +1,5 @@
-const money = value => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(value) || 0);
+import { formatStoredCurrency } from './currency.js';
+const money = value => formatStoredCurrency(value);
 const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function localDateKey(date = new Date()) {
