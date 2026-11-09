@@ -136,13 +136,30 @@ function createBaseline(workspace) {
   return result;
 }
 
-function mergeSettings(local, remote, previousHash) {
+export function mergeWorkspaceSettings(local, remote, previousHash) {
   const localHash = hashWorkspaceRecord(local || {}), remoteHash = hashWorkspaceRecord(remote || {});
   if (!previousHash) return Object.keys(local || {}).length ? local : remote || {};
   const localChanged = localHash !== previousHash, remoteChanged = remoteHash !== previousHash;
   if (localChanged && !remoteChanged) return local || {};
   if (remoteChanged && !localChanged) return remote || {};
-  return localChanged && remoteChanged ? { ...(remote || {}), ...(local || {}) } : localChanged ? (local || {}) : (remote || {});
+  if (localChanged && remoteChanged) {
+    const merged = { ...(remote || {}), ...(local || {}) };
+    // Concurrent device preference edits must not discard a store added on the other device.
+    for (const key of ['customStores', 'enabledStores']) {
+      if (!Array.isArray(local?.[key]) && !Array.isArray(remote?.[key])) continue;
+      const values = [...(Array.isArray(remote?.[key]) ? remote[key] : []), ...(Array.isArray(local?.[key]) ? local[key] : [])];
+      const seen = new Set();
+      merged[key] = values.filter(value => {
+        if (typeof value !== 'string' || !value.trim()) return false;
+        const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('es-PA');
+        if (seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      });
+    }
+    return merged;
+  }
+  return localChanged ? (local || {}) : remoteChanged ? (remote || {}) : (local || {});
 }
 
 function writeLocalWorkspace(storage, workspace) {
@@ -200,7 +217,7 @@ export async function syncPersonalWorkspace({ supabase, user, storage = globalTh
     merged[collection] = result.items;
     conflicts = conflicts.concat(result.conflicts.map(conflict => ({ ...conflict, collection })));
   }
-  merged.settings = mergeSettings(local.settings, remote.settings, baseline.settings);
+  merged.settings = mergeWorkspaceSettings(local.settings, remote.settings, baseline.settings);
   const remotePayload = stableStringify(remote);
   const mergedPayload = stableStringify(merged);
   const localChangedDuringSync = () => storageKeys.some((key, index) => storage.getItem(key) !== storageSnapshot[index]);
