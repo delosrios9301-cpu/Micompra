@@ -10,7 +10,8 @@ import { renderSpendingDashboard } from './spending.js';
 import { renderPersonalPantry, GUEST_PANTRY_KEY, readGuestPantry, addPurchasedItemsToGuestPantry } from './pantry.js';
 import { startPersonalWorkspaceSync } from './personal-sync.js';
 import { searchProductImages } from './product-images.js';
-import { readStoredArraySafely, readStoredObjectSafely, collectLocalRecoveryCopies, restoreLocalRecoveryCopies } from './storage-recovery.js';
+import { readStoredArraySafely, readStoredObjectSafely, collectLocalRecoveryCopies } from './storage-recovery.js';
+import { validateBackupPayload, writeStorageEntriesAtomically } from './backup.js';
 import { groupComparableProducts, hasComparableStorePrices } from './comparison.js';
 import { BUILT_IN_STORES, buildStoreList, collectCustomStoreNames } from './store-names.js';
 import { applyCartItemEdits, summarizeCartItems, sameCartItemIdentity } from './cart-items.js';
@@ -772,7 +773,56 @@ function renderAppSettings(){
  };
  document.querySelector('#settings-export').onclick=()=>{const backup={format:'micompra-backup-v1',createdAt:new Date().toISOString(),catalog:readPersonalCatalog(),cart:readGuestCart(),purchases:readGuestPurchases(),pantry:readGuestPantry(),customStores:settings.customStores||[],settings,recoveryCopies:collectLocalRecoveryCopies()};const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='mi-compra-respaldo-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);document.querySelector('#settings-feedback').textContent='Copia de seguridad preparada.';};
  const importInput=document.querySelector('#settings-import'),feedback=document.querySelector('#settings-feedback');
- importInput.onchange=async()=>{const file=importInput.files?.[0];if(!file)return;try{if(file.size>15*1024*1024)throw new Error('El archivo supera el límite de 15 MB.');const backup=JSON.parse(await file.text());if(backup.format!=='micompra-backup-v1'||!Array.isArray(backup.catalog)||!Array.isArray(backup.cart)||!Array.isArray(backup.purchases)||(backup.pantry!==undefined&&!Array.isArray(backup.pantry))||!backup.settings||typeof backup.settings!=='object')throw new Error('El archivo no tiene el formato de copia de Mi Compra.');if(!confirm('Restaurar esta copia reemplazará el catálogo, la lista, las compras, el inventario y las preferencias actuales de este dispositivo. ¿Deseas continuar?')){importInput.value='';return;}const restoredCustomStores=collectCustomStoreNames({localStores:Array.isArray(backup.customStores)?backup.customStores:[],settings:backup.settings,catalog:backup.catalog,cart:backup.cart,purchases:backup.purchases});const restoredSettings={...backup.settings,customStores:restoredCustomStores};const customStoreKey='micompra_custom_stores_v1';const keys=[PERSONAL_CATALOG_KEY,GUEST_CART_KEY,GUEST_PURCHASES_KEY,GUEST_PANTRY_KEY,key,customStoreKey],previous=keys.map(k=>localStorage.getItem(k));try{localStorage.setItem(PERSONAL_CATALOG_KEY,JSON.stringify(backup.catalog));localStorage.setItem(GUEST_CART_KEY,JSON.stringify(backup.cart));localStorage.setItem(GUEST_PURCHASES_KEY,JSON.stringify(backup.purchases));if(Array.isArray(backup.pantry))localStorage.setItem(GUEST_PANTRY_KEY,JSON.stringify(backup.pantry));localStorage.setItem(key,JSON.stringify(restoredSettings));localStorage.setItem(customStoreKey,JSON.stringify(restoredCustomStores));restoreLocalRecoveryCopies(backup.recoveryCopies);}catch(error){keys.forEach((k,i)=>{if(previous[i]===null)localStorage.removeItem(k);else localStorage.setItem(k,previous[i]);});throw new Error('No hubo espacio suficiente. Los datos anteriores se conservaron.');}feedback.textContent='Copia restaurada. Actualizando la vista…';window.dispatchEvent(new CustomEvent('micompra:local-data-changed',{detail:{collection:'all'}}));renderPersonalCatalog();renderGuestList();renderAuth();renderAppSettings();renderManualComparisonDashboard();}catch(error){feedback.textContent=error.message||'No se pudo restaurar la copia.';}finally{importInput.value='';}};
+importInput.onchange=async()=>{
+  const file=importInput.files?.[0];
+  if(!file)return;
+  try{
+    if(file.size>15*1024*1024)throw new Error('El archivo supera el límite de 15 MB.');
+    const backup=JSON.parse(await file.text());
+    const validation=validateBackupPayload(backup);
+    if(!validation.valid)throw new Error(validation.message);
+    const legacyPantryNote=Array.isArray(backup.pantry)?'':' Esta copia antigua no incluye despensa; se conservará la despensa actual.';
+    if(!confirm('Restaurar esta copia reemplazará el catálogo, la lista, las compras y las preferencias actuales de este dispositivo.'+legacyPantryNote+' ¿Deseas continuar?'))return;
+    const restoredCustomStores=collectCustomStoreNames({
+      localStores:Array.isArray(backup.customStores)?backup.customStores:[],
+      settings:backup.settings,
+      catalog:backup.catalog,
+      cart:backup.cart,
+      purchases:backup.purchases
+    });
+    const restoredSettings={...backup.settings,customStores:restoredCustomStores};
+    const customStoreKey='micompra_custom_stores_v1';
+    const entries={
+      [PERSONAL_CATALOG_KEY]:JSON.stringify(backup.catalog),
+      [GUEST_CART_KEY]:JSON.stringify(backup.cart),
+      [GUEST_PURCHASES_KEY]:JSON.stringify(backup.purchases),
+      [GUEST_PANTRY_KEY]:JSON.stringify(Array.isArray(backup.pantry)?backup.pantry:readGuestPantry()),
+      [key]:JSON.stringify(restoredSettings),
+      [customStoreKey]:JSON.stringify(restoredCustomStores)
+    };
+    const recoveryAllowedKeys=[PERSONAL_CATALOG_KEY,GUEST_CART_KEY,GUEST_PURCHASES_KEY,GUEST_PANTRY_KEY,key,customStoreKey];
+    for(const [recoveryKey,record] of Object.entries(backup.recoveryCopies||{})){
+      if(!recoveryAllowedKeys.includes(recoveryKey)||!record||typeof record.raw!=='string')continue;
+      entries['micompra_recovery_v1_'+recoveryKey]=JSON.stringify({
+        key:recoveryKey,
+        raw:record.raw,
+        savedAt:record.savedAt||new Date().toISOString()
+      });
+    }
+    writeStorageEntriesAtomically(localStorage,entries);
+    feedback.textContent='Copia restaurada. Actualizando la vista…';
+    window.dispatchEvent(new CustomEvent('micompra:local-data-changed',{detail:{collection:'all'}}));
+    renderPersonalCatalog();
+    renderGuestList();
+    renderAuth();
+    renderAppSettings();
+    renderManualComparisonDashboard();
+  }catch(error){
+    feedback.textContent=error.message||'No se pudo restaurar la copia.';
+  }finally{
+    importInput.value='';
+  }
+};
 }
 function renderPersonalCatalog(){
  const form=document.querySelector('#personal-product-form'),grid=document.querySelector('#personal-catalog-grid');if(!form||!grid)return;let photoData=null;
