@@ -1214,3 +1214,21 @@ header{width:100%;min-height:64px;height:auto;gap:14px;padding:12px max(var(--mc
 .purchase-ledger-card .purchase-module,.purchase-ledger-card .personal-pantry,.purchase-ledger-card .spending-dashboard{max-width:100%;min-width:0}
 @media(max-width:760px){.purchase-ledger-card{gap:11px;margin-top:12px;padding:13px;border-radius:14px}.purchase-ledger-card>.account-tools{padding:11px 12px}}
 @media(max-width:480px){.purchase-ledger-card{padding:11px;border-radius:12px}.purchase-ledger-card>.module-intro h2{font-size:22px}}
+
+
+/* Inline edits for quantity and manual price in the shopping list. */
+.guest-cart-item-info{display:grid;gap:4px;min-width:0}
+.guest-cart-item-edit{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:9px;padding-top:9px;border-top:1px solid #edf1ed}
+.guest-cart-item-edit label{display:grid;gap:4px;min-width:0;font-size:10px;font-weight:700;color:#526b5c}
+.guest-cart-item-edit input{width:100%;min-width:0;min-height:38px;padding:8px 9px;border:1px solid #dce5de;border-radius:8px;background:#fff;color:#193329;font:inherit;font-size:13px}
+.guest-cart-item-edit button{min-height:38px;padding:8px 12px;border:1px solid #cfe0d2;border-radius:8px;background:#edf5ef;color:#245b45;font-size:11px;font-weight:800;white-space:nowrap}
+.guest-cart-edit-feedback{grid-column:1/-1;min-height:0;color:#a14b3f;font-size:10px}
+@media(max-width:520px){
+ .guest-cart-item-edit{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px}
+ .guest-cart-item-edit button{grid-column:1/-1;width:100%}
+ .guest-cart-item-edit input{min-height:40px;font-size:16px}
+}
+@media(max-width:360px){
+ .guest-cart-item-edit{grid-template-columns:1fr}
+ .guest-cart-item-edit button{grid-column:auto}
+}
