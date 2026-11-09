@@ -1192,3 +1192,14 @@ header{width:100%;min-height:64px;height:auto;gap:14px;padding:12px max(var(--mc
 .settings-danger-button:disabled{opacity:.55}
 .settings-danger-zone small{font-size:11px;color:#8f3028}
 @media(max-width:520px){.product-image-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.product-image-choice img{height:100px}.settings-danger-zone{padding:11px}}
+
+/* Navegación simplificada y cuenta agrupada */
+.settings-account-details{margin:0 0 16px;padding:0 16px;border:1px solid #e1e9e2;border-radius:14px;background:#fff}
+.settings-account-details>summary{padding:16px 0;color:#244b37;font-weight:800;font-size:14px;cursor:pointer;list-style:none}
+.settings-account-details>summary::-webkit-details-marker{display:none}
+.settings-account-details>summary::after{content:"＋";float:right;color:#668472;font-size:18px;line-height:1}
+.settings-account-details[open]>summary::after{content:"−"}
+.settings-account-details>p{margin:0 0 12px;color:#758278;font-size:12px;line-height:1.5}
+.settings-account-details>.auth{margin:0 0 14px;border:0;padding:0;background:transparent}
+.app-nav-item small{letter-spacing:-.1px}
+@media(max-width:380px){.app-nav-item small{font-size:8px}.app-navigation{gap:2px;padding:5px}.app-nav-item>span{font-size:17px}}
