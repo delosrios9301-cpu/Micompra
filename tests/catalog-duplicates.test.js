@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeCatalogSearchName, findCatalogNameMatches, findDuplicateListItem } from '../src/catalog-duplicates.js';
+import { normalizeCatalogSearchName, findCatalogNameMatches, findDuplicateListItem, findPersonalCatalogDuplicate } from '../src/catalog-duplicates.js';
 
 const catalog = [
   { id: 'coffee-250', canonical_name: 'Café molido', normalized_quantity: 250, normalized_unit_name: 'g' },
@@ -37,4 +37,18 @@ test('same catalog product is detected as an existing list item', () => {
 test('free text duplicates are detected regardless of accents and case', () => {
   const items = [{ id: 'row-1', product_id: null, item_name: 'Café molido', quantity: 1 }];
   assert.equal(findDuplicateListItem(items, null, 'CAFE MOLIDO').id, 'row-1');
+});
+
+test('manual catalog identity ignores accents and extra whitespace', () => {
+  const rows = [{ id: 'a', name: 'Café molido', presentation: 'Bolsa 250 g', store: 'Super 99', unit: 'unidad' }];
+  assert.equal(findPersonalCatalogDuplicate(rows, {
+    name: ' CAFE   MOLIDO ', presentation: ' bolsa 250 g ', store: ' super 99 ', unit: 'unidades'
+  })?.id, 'a');
+});
+
+test('manual catalog identity keeps different package, unit and store records separate', () => {
+  const rows = [{ id: 'a', name: 'Leche', presentation: 'Botella 1 L', store: 'Super 99', unit: 'unidad' }];
+  assert.equal(findPersonalCatalogDuplicate(rows, { name: 'Leche', presentation: 'Botella 2 L', store: 'Super 99', unit: 'unidad' }), null);
+  assert.equal(findPersonalCatalogDuplicate(rows, { name: 'Leche', presentation: 'Botella 1 L', store: 'Super 99', unit: 'litro' }), null);
+  assert.equal(findPersonalCatalogDuplicate(rows, { name: 'Leche', presentation: 'Botella 1 L', store: 'Xtra', unit: 'unidad' }), null);
 });
