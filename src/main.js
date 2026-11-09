@@ -715,7 +715,7 @@ function renderAppSettings(){
  settings.customStores=customStores;
  const defaults={defaultStore:'Super 99',currency:'USD',theme:'light',customStores:customStores.slice(),enabledStores:guestStores.slice()};
  settings={...defaults,...settings};
- const normalizeStoreKey=value=>String(value??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim().toLocaleLowerCase('es-PA');
+ const normalizeStoreKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLocaleLowerCase('es-PA');
  const resolveStore=value=>guestStores.find(name=>normalizeStoreKey(name)===normalizeStoreKey(value));
  if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
  settings.enabledStores=[...new Set(settings.enabledStores.map(resolveStore).filter(Boolean))];
