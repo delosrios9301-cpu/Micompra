@@ -72,7 +72,7 @@ test('concurrent settings edits preserve custom and enabled stores from both dev
   const original = { currency: 'USD', theme: 'light', defaultStore: 'Super 99', customStores: ['Tienda Central'], enabledStores: ['Super 99', 'Tienda Central'] };
   const local = { ...original, currency: 'PAB', defaultStore: 'Mercado Norte', customStores: ['Tienda Central', 'Mercado Norte'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Norte'] };
   const remote = { ...original, theme: 'dark', defaultStore: 'Mercado Sur', customStores: ['Tienda Central', 'Mercado Sur'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Sur'] };
-  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original), original);
   assert.deepEqual(merged.customStores, ['Tienda Central', 'Mercado Sur', 'Mercado Norte']);
   assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Central', 'Mercado Norte']);
   assert.equal(merged.currency, 'PAB');
@@ -84,15 +84,15 @@ test('concurrent store settings merge deduplicates accents and case', () => {
   const original = { customStores: ['Tienda Uno'], enabledStores: ['Tienda Uno'] };
   const local = { customStores: ['Tienda Uno', 'Mercado Ágil'], enabledStores: ['Tienda Uno', 'Mercado Ágil'] };
   const remote = { customStores: ['Tienda Uno', 'mercado agil'], enabledStores: ['Tienda Uno', 'MERCADO AGIL'] };
-  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original), original);
   assert.deepEqual(merged.customStores, ['Tienda Uno', 'mercado agil']);
-  assert.deepEqual(merged.enabledStores, ['Tienda Uno', 'MERCADO AGIL']);
+  assert.deepEqual(merged.enabledStores, ['Tienda Uno', 'Mercado Ágil']);
 });
 
 test('first login on another device keeps cloud preferences and merges custom stores', () => {
   const localDefaults = { currency: 'USD', theme: 'light', defaultStore: 'Super 99', customStores: ['Local Market'], enabledStores: ['Super 99', 'Local Market'] };
   const cloudSettings = { currency: 'PAB', theme: 'dark', defaultStore: 'Tienda Norte', customStores: ['Tienda Norte'], enabledStores: ['Super 99', 'Tienda Norte'] };
-  const merged = mergeWorkspaceSettings(localDefaults, cloudSettings, {});
+  const merged = mergeWorkspaceSettings(localDefaults, cloudSettings, undefined);
   assert.equal(merged.currency, 'PAB');
   assert.equal(merged.theme, 'dark');
   assert.equal(merged.defaultStore, 'Tienda Norte');
@@ -102,7 +102,7 @@ test('first login on another device keeps cloud preferences and merges custom st
 
 test('first sync keeps local settings when cloud has no preference values', () => {
   const local = { currency: 'PAB', theme: 'dark', defaultStore: 'Tienda Local' };
-  const merged = mergeWorkspaceSettings(local, {}, {});
+  const merged = mergeWorkspaceSettings(local, {}, undefined);
   assert.deepEqual(merged, local);
 });
 
