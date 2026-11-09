@@ -125,7 +125,7 @@ function shell() {
   const purchaseLedger=document.createElement('section');
   purchaseLedger.id='purchase-records-ledger';
   purchaseLedger.className='page-card purchase-ledger-card';
-  purchaseLedger.innerHTML='<div class="module-intro"><p class="eyebrow">REGISTRO DETALLADO</p><h2>Mis compras e inventario</h2><p>Registra compras reales, adjunta comprobantes, revisa gastos y actualiza tu inventario. Este registro detallado requiere iniciar sesión.</p></div><div id="purchase-ledger-access" class="empty" role="status">Inicia sesión para consultar tus compras e inventario registrados.</div><div id="purchases-module"></div><details class="account-tools"><summary>Resumen de gastos</summary><div id="spending-module"></div></details><details class="account-tools"><summary>Mi despensa e inventario del hogar</summary><div id="pantry-module"></div></details>';
+  purchaseLedger.innerHTML='<div class="module-intro"><p class="eyebrow">REGISTRO DETALLADO</p><h2>Mis compras e inventario</h2><p>Registra compras reales, adjunta comprobantes, revisa gastos y actualiza tu inventario. Este registro detallado requiere iniciar sesión.</p></div><div id="purchase-ledger-access" class="empty" role="status">Inicia sesión para consultar tus compras e inventario registrados.</div><small id="workspace-sync-status-ledger" class="workspace-sync-status" role="status" aria-live="polite">Inicia sesión para sincronizar tus datos entre dispositivos.</small><div id="purchases-module"></div><details class="account-tools"><summary>Resumen de gastos</summary><div id="spending-module"></div></details><details class="account-tools"><summary>Mi despensa e inventario del hogar</summary><div id="pantry-module"></div></details>';
   panels.comprar.appendChild(purchaseLedger);
   const compareIntro=document.createElement('div');compareIntro.className='module-intro';compareIntro.innerHTML='<p class="eyebrow">ANÁLISIS DE PRECIOS</p><h2>Comparar precios</h2><p>Compara los registros que has guardado para el mismo producto, presentación y unidad.</p>';
   panels.comparar.prepend(compareIntro);
@@ -833,7 +833,9 @@ async function connectPersonalWorkspaceSync() {
     supabase, user,
     onStatus: message => {
       const status = document.querySelector('#workspace-sync-status');
+      const ledgerStatus = document.querySelector('#workspace-sync-status-ledger');
       if (status) status.textContent = message;
+      if (ledgerStatus) ledgerStatus.textContent = message;
     }
   });
 }
