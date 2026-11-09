@@ -74,7 +74,7 @@ test('concurrent settings edits preserve custom and enabled stores from both dev
   const remote = { ...original, theme: 'dark', defaultStore: 'Mercado Sur', customStores: ['Tienda Central', 'Mercado Sur'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Sur'] };
   const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
   assert.deepEqual(merged.customStores, ['Tienda Central', 'Mercado Sur', 'Mercado Norte']);
-  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Central', 'Mercado Sur', 'Mercado Norte']);
+  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Central', 'Mercado Norte']);
   assert.equal(merged.currency, 'PAB');
   assert.equal(merged.theme, 'dark');
   assert.equal(merged.defaultStore, 'Mercado Norte');
@@ -104,4 +104,26 @@ test('first sync keeps local settings when cloud has no preference values', () =
   const local = { currency: 'PAB', theme: 'dark', defaultStore: 'Tienda Local' };
   const merged = mergeWorkspaceSettings(local, {}, {});
   assert.deepEqual(merged, local);
+});
+
+test('three-way settings merge preserves separate currency and theme edits', () => {
+  const original = { currency: 'USD', theme: 'light', defaultStore: 'Super 99', customStores: ['Tienda Central'], enabledStores: ['Super 99', 'Tienda Central'] };
+  const local = { ...original, currency: 'PAB', customStores: ['Tienda Central', 'Mercado Norte'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Norte'] };
+  const remote = { ...original, theme: 'dark', customStores: ['Tienda Central', 'Mercado Sur'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Sur'] };
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original), original);
+  assert.equal(merged.currency, 'PAB');
+  assert.equal(merged.theme, 'dark');
+  assert.deepEqual(merged.customStores, ['Tienda Central', 'Mercado Sur', 'Mercado Norte']);
+  // For conflicting enabled-store selections, the local choice wins; both
+  // custom store names remain available and can be re-enabled in settings.
+  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Central', 'Mercado Norte']);
+});
+
+test('legacy hash-only baselines keep local preference precedence but union custom stores', () => {
+  const original = { currency: 'USD', customStores: ['Tienda Uno'] };
+  const local = { ...original, currency: 'PAB', customStores: ['Tienda Uno', 'Tienda Local'] };
+  const remote = { ...original, currency: 'USD', customStores: ['Tienda Uno', 'Tienda Remota'] };
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
+  assert.equal(merged.currency, 'PAB');
+  assert.deepEqual(merged.customStores, ['Tienda Uno', 'Tienda Remota', 'Tienda Local']);
 });
