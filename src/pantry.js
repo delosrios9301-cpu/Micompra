@@ -88,16 +88,18 @@ export function readGuestPantry() {
   return readStoredArraySafely(GUEST_PANTRY_KEY);
 }
 
-export function addPurchasedItemsToGuestPantry(purchasedItems = []) {
-  const items = readGuestPantry();
+export function mergePurchasedItemsIntoPantry(pantryItems = [], purchasedItems = []) {
+  const items = (pantryItems || []).map(item => ({ ...item }));
   let added = 0, updated = 0, skipped = 0;
   for (const purchased of purchasedItems || []) {
     const name = String(purchased?.name || purchased?.item_name || '').trim();
+    const presentation = String(purchased?.presentation || purchased?.package_description || '').trim();
     const quantity = Number(purchased?.qty ?? purchased?.quantity);
     const unit = String(purchased?.priceUnit || purchased?.unit || 'unidad').trim();
     if (!name || !Number.isFinite(quantity) || quantity <= 0 || !unit) { skipped++; continue; }
     const existing = items.find(row =>
       normalizePantryName(row.item_name) === normalizePantryName(name) &&
+      normalizePantryName(row.presentation) === normalizePantryName(presentation) &&
       normalizeUnit(row.unit) === normalizeUnit(unit)
     );
     if (existing) {
@@ -107,14 +109,19 @@ export function addPurchasedItemsToGuestPantry(purchasedItems = []) {
     } else {
       items.push({
         id: globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2),
-        item_name: name, quantity, unit, minimum_quantity: 1, location: '',
+        item_name: name, presentation, quantity, unit, minimum_quantity: 1, location: '',
         created_at: new Date().toISOString()
       });
       added++;
     }
   }
-  saveGuestPantry(items);
-  return { added, updated, skipped };
+  return { items, added, updated, skipped };
+}
+
+export function addPurchasedItemsToGuestPantry(purchasedItems = []) {
+  const result = mergePurchasedItemsIntoPantry(readGuestPantry(), purchasedItems);
+  saveGuestPantry(result.items);
+  return { added: result.added, updated: result.updated, skipped: result.skipped };
 }
 
 function saveGuestPantry(items) {
@@ -131,7 +138,7 @@ function renderGuestPantry(container, syncEnabled = false) {
     <div class="pantry-summary"><article><small>Artículos registrados</small><b data-pantry-total>0</b></article><article><small>Por reponer</small><b data-pantry-low>0</b></article><article><small>Agotados</small><b data-pantry-empty>0</b></article></div>
     <form class="pantry-form" data-pantry-add>
       <strong>Agregar artículo</strong>
-      <label>Nombre del producto<input name="item_name" maxlength="120" required placeholder="Ej. arroz, leche, papel higiénico"></label>
+      <label>Nombre del producto<input name="item_name" maxlength="120" required placeholder="Ej. arroz, leche, papel higiénico"></label><label>Presentación (opcional)<input name="presentation" maxlength="120" placeholder="Ej. Bolsa 1 kg, botella 2 L"></label>
       <div class="pantry-form-grid">
         <label>Cantidad disponible<input name="quantity" type="number" min="0" max="100000000" step="0.001" value="1" required></label>
         <label>Unidad<select name="unit">${units.map(unit => `<option value="${unit}" ${unit === 'unidad' ? 'selected' : ''}>${unit}</option>`).join('')}</select></label>
@@ -158,9 +165,9 @@ function renderGuestPantry(container, syncEnabled = false) {
     $('[data-pantry-list]').innerHTML = visible.length ? visible.map(item => {
       const low = isPantryLowStock(item), empty = Number(item.quantity) <= 0;
       return `<article class="pantry-item ${low ? 'is-low' : ''} ${empty ? 'is-empty' : ''}" data-pantry-id="${safe(item.id)}">
-        <div class="pantry-item-title"><div><strong>${safe(item.item_name)}</strong><small>${safe(item.location || 'Ubicación no indicada')}</small></div><span class="pantry-state ${empty ? 'state-empty' : low ? 'state-low' : 'state-ok'}">${empty ? 'Agotado' : low ? 'Por reponer' : 'Disponible'}</span></div>
+        <div class="pantry-item-title"><div><strong>${safe(item.item_name)}</strong><small>${safe(item.presentation || 'Presentación no indicada')} · ${safe(item.location || 'Ubicación no indicada')}</small></div><span class="pantry-state ${empty ? 'state-empty' : low ? 'state-low' : 'state-ok'}">${empty ? 'Agotado' : low ? 'Por reponer' : 'Disponible'}</span></div>
         <form class="pantry-item-form" data-pantry-update>
-          <label>Cantidad actual<input name="quantity" type="number" min="0" step="0.001" value="${safe(item.quantity)}" required></label>
+          <label>Presentación<input name="presentation" maxlength="120" value="${safe(item.presentation || '')}" placeholder="Ej. Bolsa 1 kg"></label><label>Cantidad actual<input name="quantity" type="number" min="0" step="0.001" value="${safe(item.quantity)}" required></label>
           <label>Unidad<input name="unit" maxlength="40" value="${safe(item.unit)}" required></label>
           <label>Mínimo<input name="minimum_quantity" type="number" min="0" step="0.001" value="${safe(item.minimum_quantity)}" required></label>
           <div class="pantry-item-actions"><button type="submit">Actualizar</button><button type="button" class="pantry-delete">Eliminar</button></div>
@@ -173,9 +180,9 @@ function renderGuestPantry(container, syncEnabled = false) {
       card.querySelector('[data-pantry-update]').addEventListener('submit', event => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        const quantity = Number(data.get('quantity')), minimum = Number(data.get('minimum_quantity')), unit = String(data.get('unit')||'').trim();
+        const quantity = Number(data.get('quantity')), minimum = Number(data.get('minimum_quantity')), unit = String(data.get('unit')||'').trim(), presentation = String(data.get('presentation')||'').trim();
         if (!Number.isFinite(quantity)||quantity<0||!Number.isFinite(minimum)||minimum<0||!unit) return;
-        try { persist(items.map(row => row.id===id ? {...row,quantity,minimum_quantity:minimum,unit,updated_at:new Date().toISOString()} : row)); }
+        try { persist(items.map(row => row.id===id ? {...row,quantity,minimum_quantity:minimum,unit,presentation,updated_at:new Date().toISOString()} : row)); }
         catch { status('No se pudieron guardar los cambios. Tus existencias anteriores se conservaron.',true); return; }
         render(); status('Existencias actualizadas.');
       });
@@ -202,9 +209,10 @@ function renderGuestPantry(container, syncEnabled = false) {
     const name = String(data.get('item_name')||'').trim(), unit = String(data.get('unit')||'unidad');
     const quantity = Number(data.get('quantity')), minimum = Number(data.get('minimum_quantity'));
     if (!name || !Number.isFinite(quantity)||quantity<0||!Number.isFinite(minimum)||minimum<0) { status('Revisa el nombre y las cantidades.',true); return; }
-    const duplicate = items.find(row => normalizePantryName(row.item_name)===normalizePantryName(name) && normalizeUnit(row.unit)===normalizeUnit(unit));
+    const presentation = String(data.get('presentation')||'').trim();
+    const duplicate = items.find(row => normalizePantryName(row.item_name)===normalizePantryName(name) && normalizePantryName(row.presentation)===normalizePantryName(presentation) && normalizeUnit(row.unit)===normalizeUnit(unit));
     if (duplicate) { status('Ese artículo ya existe. Actualiza su cantidad en la lista.',true); return; }
-    const newItem={id:globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+Math.random().toString(36).slice(2),item_name:name,quantity,unit,minimum_quantity:minimum,location:String(data.get('location')||'').trim(),created_at:new Date().toISOString()};
+    const newItem={id:globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+Math.random().toString(36).slice(2),item_name:name,presentation,quantity,unit,minimum_quantity:minimum,location:String(data.get('location')||'').trim(),created_at:new Date().toISOString()};
     try { persist([...items,newItem]); } catch { status('No hay espacio suficiente para guardar este artículo. Tus datos anteriores se conservaron.',true); return; }
     event.currentTarget.reset(); event.currentTarget.elements.quantity.value='1'; event.currentTarget.elements.minimum_quantity.value='1';
     render(); status('Artículo guardado en tu inventario.');
