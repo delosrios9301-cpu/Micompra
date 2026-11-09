@@ -1,3 +1,5 @@
+import { normalizeComparisonText, normalizeComparisonUnit } from './comparison.js';
+
 export function normalizeCatalogSearchName(value = '') {
   return String(value || '')
     .normalize('NFD')
@@ -30,4 +32,18 @@ export function findDuplicateListItem(items = [], productId = null, customName =
   const normalizedName = normalizeCatalogSearchName(customName);
   if (!normalizedName) return null;
   return items.find(item => !item.product_id && normalizeCatalogSearchName(item.item_name) === normalizedName) || null;
+}
+
+export function findPersonalCatalogDuplicate(items = [], draft = {}) {
+  const name = normalizeComparisonText(draft.name);
+  const store = normalizeComparisonText(draft.store);
+  const presentation = normalizeComparisonText(draft.presentation);
+  const unit = normalizeComparisonUnit(draft.unit);
+  if (!name || !store) return null;
+  return (items || []).find(item =>
+    normalizeComparisonText(item?.name) === name &&
+    normalizeComparisonText(item?.store) === store &&
+    normalizeComparisonText(item?.presentation) === presentation &&
+    normalizeComparisonUnit(item?.unit) === unit
+  ) || null;
 }
