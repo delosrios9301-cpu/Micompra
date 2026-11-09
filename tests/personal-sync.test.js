@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeWorkspaceCollection, hashWorkspaceRecord } from '../src/personal-sync.js';
+import { mergeWorkspaceCollection, mergeWorkspaceSettings, hashWorkspaceRecord } from '../src/personal-sync.js';
 
 test('first sync keeps local and remote records without duplicate IDs', () => {
   const result = mergeWorkspaceCollection([{ id: 'local', name: 'Arroz' }], [{ id: 'cloud', name: 'Leche' }], {});
@@ -66,4 +66,25 @@ test('distinct records with same product name are not deduplicated by name', () 
     {}
   );
   assert.deepEqual(result.items.map(row => row.id), ['a', 'b']);
+});
+
+test('concurrent settings edits preserve custom and enabled stores from both devices', () => {
+  const original = { currency: 'USD', theme: 'light', defaultStore: 'Super 99', customStores: ['Tienda Central'], enabledStores: ['Super 99', 'Tienda Central'] };
+  const local = { ...original, currency: 'PAB', defaultStore: 'Mercado Norte', customStores: ['Tienda Central', 'Mercado Norte'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Norte'] };
+  const remote = { ...original, theme: 'dark', defaultStore: 'Mercado Sur', customStores: ['Tienda Central', 'Mercado Sur'], enabledStores: ['Super 99', 'Tienda Central', 'Mercado Sur'] };
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
+  assert.deepEqual(merged.customStores, ['Tienda Central', 'Mercado Sur', 'Mercado Norte']);
+  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Central', 'Mercado Sur', 'Mercado Norte']);
+  assert.equal(merged.currency, 'PAB');
+  assert.equal(merged.theme, 'dark');
+  assert.equal(merged.defaultStore, 'Mercado Norte');
+});
+
+test('concurrent store settings merge deduplicates accents and case', () => {
+  const original = { customStores: ['Tienda Uno'], enabledStores: ['Tienda Uno'] };
+  const local = { customStores: ['Tienda Uno', 'Mercado Ágil'], enabledStores: ['Tienda Uno', 'Mercado Ágil'] };
+  const remote = { customStores: ['Tienda Uno', 'mercado agil'], enabledStores: ['Tienda Uno', 'MERCADO AGIL'] };
+  const merged = mergeWorkspaceSettings(local, remote, hashWorkspaceRecord(original));
+  assert.deepEqual(merged.customStores, ['Tienda Uno', 'mercado agil']);
+  assert.deepEqual(merged.enabledStores, ['Tienda Uno', 'MERCADO AGIL']);
 });
