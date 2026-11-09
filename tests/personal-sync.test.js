@@ -88,3 +88,20 @@ test('concurrent store settings merge deduplicates accents and case', () => {
   assert.deepEqual(merged.customStores, ['Tienda Uno', 'mercado agil']);
   assert.deepEqual(merged.enabledStores, ['Tienda Uno', 'MERCADO AGIL']);
 });
+
+test('first login on another device keeps cloud preferences and merges custom stores', () => {
+  const localDefaults = { currency: 'USD', theme: 'light', defaultStore: 'Super 99', customStores: ['Local Market'], enabledStores: ['Super 99', 'Local Market'] };
+  const cloudSettings = { currency: 'PAB', theme: 'dark', defaultStore: 'Tienda Norte', customStores: ['Tienda Norte'], enabledStores: ['Super 99', 'Tienda Norte'] };
+  const merged = mergeWorkspaceSettings(localDefaults, cloudSettings, {});
+  assert.equal(merged.currency, 'PAB');
+  assert.equal(merged.theme, 'dark');
+  assert.equal(merged.defaultStore, 'Tienda Norte');
+  assert.deepEqual(merged.customStores, ['Tienda Norte', 'Local Market']);
+  assert.deepEqual(merged.enabledStores, ['Super 99', 'Tienda Norte', 'Local Market']);
+});
+
+test('first sync keeps local settings when cloud has no preference values', () => {
+  const local = { currency: 'PAB', theme: 'dark', defaultStore: 'Tienda Local' };
+  const merged = mergeWorkspaceSettings(local, {}, {});
+  assert.deepEqual(merged, local);
+});
