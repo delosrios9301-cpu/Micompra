@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCartItemEdits } from '../src/cart-items.js';
+import { applyCartItemEdits, summarizeCartItems } from '../src/cart-items.js';
 
 const items = [
   { id: 'one', name: 'Arroz', store: 'Super 99', qty: 1, price: 2.5, priceUnit: 'lb', imageData: 'photo' },
@@ -36,4 +36,26 @@ test('does not mutate the original list', () => {
   const copy = structuredClone(items);
   applyCartItemEdits(items, 'one', { quantity: 2, unitPrice: '4.25' });
   assert.deepEqual(items, copy);
+});
+
+test('cart summary ignores invalid prices and quantities instead of counting them as paid', () => {
+  const summary = summarizeCartItems([
+    { id: 'a', store: 'Super 99', qty: 2, price: 3 },
+    { id: 'b', store: 'Super 99', qty: 1, price: null },
+    { id: 'c', store: 'Xtra', qty: 1, price: 0 },
+    { id: 'd', store: 'Xtra', qty: -1, price: 5 },
+    { id: 'e', store: 'Xtra', qty: 1, price: 'bad' }
+  ]);
+  assert.equal(summary.total, 6);
+  assert.equal(summary.count, 5);
+  assert.equal(summary.priced, 1);
+  assert.equal(summary.pending, 4);
+  assert.deepEqual(summary.stores, [
+    { store: 'Super 99', total: 6, count: 2, priced: 1 },
+    { store: 'Xtra', total: 0, count: 3, priced: 0 }
+  ]);
+});
+
+test('cart summary handles an empty list', () => {
+  assert.deepEqual(summarizeCartItems([]), { total: 0, count: 0, priced: 0, pending: 0, stores: [] });
 });
