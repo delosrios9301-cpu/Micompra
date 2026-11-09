@@ -703,7 +703,7 @@ function renderAppSettings(){
  if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
  settings.enabledStores=settings.enabledStores.filter(name=>guestStores.includes(name));
  if(!settings.enabledStores.length)settings.enabledStores=defaults.enabledStores.slice();
- if(!guestStores.includes(settings.defaultStore))settings.defaultStore=defaults.defaultStore;
+ if(!settings.enabledStores.includes(settings.defaultStore))settings.defaultStore=settings.enabledStores[0]||defaults.defaultStore;
  if(!['USD','PAB'].includes(settings.currency))settings.currency=defaults.currency;
  if(!['light','dark','system'].includes(settings.theme))settings.theme=defaults.theme;
  const store=document.querySelector('#settings-default-store'),currency=document.querySelector('#settings-currency'),theme=document.querySelector('#settings-theme');
