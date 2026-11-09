@@ -136,32 +136,40 @@ function createBaseline(workspace) {
   return result;
 }
 
-export function mergeWorkspaceSettings(local, remote, previousHash) {
-  const localHash = hashWorkspaceRecord(local || {}), remoteHash = hashWorkspaceRecord(remote || {});
-  if (!previousHash) return Object.keys(local || {}).length ? local : remote || {};
-  const localChanged = localHash !== previousHash, remoteChanged = remoteHash !== previousHash;
-  if (localChanged && !remoteChanged) return local || {};
-  if (remoteChanged && !localChanged) return remote || {};
-  if (localChanged && remoteChanged) {
-    const merged = { ...(remote || {}), ...(local || {}) };
-    // Concurrent device preference edits must not discard a store added on the other device.
-    for (const key of ['customStores', 'enabledStores']) {
-      if (!Array.isArray(local?.[key]) && !Array.isArray(remote?.[key])) continue;
-      const values = [...(Array.isArray(remote?.[key]) ? remote[key] : []), ...(Array.isArray(local?.[key]) ? local[key] : [])];
-      const seen = new Set();
-      merged[key] = values.filter(value => {
-        if (typeof value !== 'string' || !value.trim()) return false;
-        const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('es-PA');
-        if (seen.has(normalized)) return false;
-        seen.add(normalized);
-        return true;
-      });
-    }
-    return merged;
+function mergeStorePreferenceArrays(merged, local, remote) {
+  // Preserve store names and enabled selections added on either device.
+  for (const key of ['customStores', 'enabledStores']) {
+    if (!Array.isArray(local?.[key]) && !Array.isArray(remote?.[key])) continue;
+    const values = [...(Array.isArray(remote?.[key]) ? remote[key] : []), ...(Array.isArray(local?.[key]) ? local[key] : [])];
+    const seen = new Set();
+    merged[key] = values.filter(value => {
+      if (typeof value !== 'string' || !value.trim()) return false;
+      const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('es-PA');
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
   }
-  return localChanged ? (local || {}) : remoteChanged ? (remote || {}) : (local || {});
+  return merged;
 }
 
+export function mergeWorkspaceSettings(local, remote, previousHash) {
+  const localValues = local && typeof local === 'object' ? local : {};
+  const remoteValues = remote && typeof remote === 'object' ? remote : {};
+  const localHash = hashWorkspaceRecord(localValues), remoteHash = hashWorkspaceRecord(remoteValues);
+  if (!previousHash) {
+    // First login on a new device: keep established cloud preferences and fill
+    // missing values from local defaults, while preserving store lists on both.
+    return mergeStorePreferenceArrays({ ...localValues, ...remoteValues }, localValues, remoteValues);
+  }
+  const localChanged = localHash !== previousHash, remoteChanged = remoteHash !== previousHash;
+  if (localChanged && !remoteChanged) return localValues;
+  if (remoteChanged && !localChanged) return remoteValues;
+  if (localChanged && remoteChanged) {
+    return mergeStorePreferenceArrays({ ...remoteValues, ...localValues }, localValues, remoteValues);
+  }
+  return localValues;
+}
 function writeLocalWorkspace(storage, workspace) {
   const keys = COLLECTIONS.map(collection => PERSONAL_WORKSPACE_KEYS[collection]).concat(PERSONAL_WORKSPACE_KEYS.settings);
   const values = COLLECTIONS.map(collection => JSON.stringify(workspace[collection])).concat(JSON.stringify(workspace.settings || {}));
