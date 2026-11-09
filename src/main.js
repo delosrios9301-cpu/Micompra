@@ -715,17 +715,20 @@ function renderAppSettings(){
  settings.customStores=customStores;
  const defaults={defaultStore:'Super 99',currency:'USD',theme:'light',customStores:customStores.slice(),enabledStores:guestStores.slice()};
  settings={...defaults,...settings};
+ const normalizeStoreKey=value=>String(value??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim().toLocaleLowerCase('es-PA');
+ const resolveStore=value=>guestStores.find(name=>normalizeStoreKey(name)===normalizeStoreKey(value));
+ if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
+ settings.enabledStores=[...new Set(settings.enabledStores.map(resolveStore).filter(Boolean))];
+ if(!settings.enabledStores.length)settings.enabledStores=defaults.enabledStores.slice();
+ const preferredStore=resolveStore(settings.defaultStore);
+ settings.defaultStore=preferredStore&&settings.enabledStores.includes(preferredStore)?preferredStore:(settings.enabledStores[0]||defaults.defaultStore);
+ if(!['USD','PAB'].includes(settings.currency))settings.currency=defaults.currency;
+ if(!['light','dark','system'].includes(settings.theme))settings.theme=defaults.theme;
  try {
    const settingsJson=JSON.stringify(settings),customStoresJson=JSON.stringify(customStores);
    if(localStorage.getItem(key)!==settingsJson)localStorage.setItem(key,settingsJson);
    if(localStorage.getItem('micompra_custom_stores_v1')!==customStoresJson)localStorage.setItem('micompra_custom_stores_v1',customStoresJson);
  } catch {}
- if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
- settings.enabledStores=settings.enabledStores.filter(name=>guestStores.includes(name));
- if(!settings.enabledStores.length)settings.enabledStores=defaults.enabledStores.slice();
- if(!settings.enabledStores.includes(settings.defaultStore))settings.defaultStore=settings.enabledStores[0]||defaults.defaultStore;
- if(!['USD','PAB'].includes(settings.currency))settings.currency=defaults.currency;
- if(!['light','dark','system'].includes(settings.theme))settings.theme=defaults.theme;
  const store=document.querySelector('#settings-default-store'),currency=document.querySelector('#settings-currency'),theme=document.querySelector('#settings-theme');
  if(!store)return;
  const storeList=document.querySelector('.settings-store-list');
