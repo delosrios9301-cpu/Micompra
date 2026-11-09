@@ -700,6 +700,11 @@ function renderAppSettings(){
  settings.customStores=customStores;
  const defaults={defaultStore:'Super 99',currency:'USD',theme:'light',customStores:customStores.slice(),enabledStores:guestStores.slice()};
  settings={...defaults,...settings};
+ try {
+   const settingsJson=JSON.stringify(settings),customStoresJson=JSON.stringify(customStores);
+   if(localStorage.getItem(key)!==settingsJson)localStorage.setItem(key,settingsJson);
+   if(localStorage.getItem('micompra_custom_stores_v1')!==customStoresJson)localStorage.setItem('micompra_custom_stores_v1',customStoresJson);
+ } catch {}
  if(!Array.isArray(settings.enabledStores))settings.enabledStores=defaults.enabledStores.slice();
  settings.enabledStores=settings.enabledStores.filter(name=>guestStores.includes(name));
  if(!settings.enabledStores.length)settings.enabledStores=defaults.enabledStores.slice();
