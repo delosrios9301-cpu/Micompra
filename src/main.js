@@ -82,33 +82,36 @@ function shell() {
   const main=document.querySelector('main');
   const authPanel=document.querySelector('#auth');
   const views=[
+    {id:'inicio',label:'Inicio',icon:'⌂',nodes:[]},
     {id:'comprar',label:'Comprar',icon:'＋',nodes:['.section-head:not(.list-heading)','#search','.store-filter','.catalog-source-note','.branch-filter','#results','.list-heading','#cart']},
     {id:'comparar',label:'Comparar',icon:'⇄',nodes:['#list-comparison']},
-    {id:'compras',label:'Mis compras',icon:'▤',nodes:[]},
+    {id:'compras',label:'Historial',icon:'▤',nodes:[]},
+    {id:'mas',label:'Más',icon:'⋯',nodes:[]},
     {id:'catalogo',label:'Productos',icon:'▣',nodes:[]},
-    {id:'configuracion',label:'Ajustes',icon:'⚙',nodes:[]}
+    {id:'despensa',label:'Mi despensa',icon:'▦',nodes:[]},
+    {id:'gastos',label:'Gastos y presupuesto',icon:'$',nodes:[]},
+    {id:'configuracion',label:'Configuración',icon:'⚙',nodes:[]}
   ];
   const nav=document.createElement('nav');nav.className='app-navigation';nav.setAttribute('aria-label','Navegación principal');
   const viewHost=document.createElement('div');viewHost.className='app-views';
   const panels={};
   views.forEach(view=>{
-    const panel=document.createElement('section');panel.className='app-view';panel.dataset.view=view.id;panel.hidden=view.id!=='comprar';panels[view.id]=panel;viewHost.appendChild(panel);
+    const panel=document.createElement('section');panel.className='app-view';panel.dataset.view=view.id;panel.hidden=view.id!=='inicio';panels[view.id]=panel;viewHost.appendChild(panel);
     view.nodes.forEach(selector=>{const node=main.querySelector(selector);if(node)panel.appendChild(node);});
   });
   const navItems=[
+    {id:'inicio',label:'Inicio',icon:'⌂',view:'inicio'},
     {id:'comprar',label:'Comprar',icon:'＋',view:'comprar'},
     {id:'comparar',label:'Comparar',icon:'⇄',view:'comparar'},
-    {id:'catalogo',label:'Productos',icon:'▣',view:'catalogo'},
-    {id:'compras',label:'Mis compras',icon:'▤',view:'compras'},
-    {id:'configuracion',label:'Ajustes',icon:'⚙',view:'configuracion'}
+    {id:'historial',label:'Historial',icon:'▤',view:'compras'},
+    {id:'mas',label:'Más',icon:'⋯',view:'mas'}
   ];
   navItems.forEach(item=>{
     const button=document.createElement('button');
     button.type='button';
-    button.className='app-nav-item'+(item.id==='comprar'?' active':'');
+    button.className='app-nav-item'+(item.id==='inicio'?' active':'');
     button.dataset.navKey=item.id;
-    if(item.purchases) button.dataset.openPurchases='true';
-    else button.dataset.openView=item.view;
+    button.dataset.openView=item.view;
     button.innerHTML='<span aria-hidden="true">'+item.icon+'</span><small>'+item.label+'</small>';
     nav.appendChild(button);
   });
