@@ -522,3 +522,107 @@ button { font-family: 'DM Sans',sans-serif; cursor: pointer; }
 [data-theme="dark"] .app-view :is(input,select,textarea) { background: #17251b; color: #e8efe9; border-color: #3b5040; }
 [data-theme="dark"] .shopping-search-card .search, [data-theme="dark"] .shopping-search-card .store-filter select { background: #17251b; }
 [data-theme="dark"] .empty, [data-theme="dark"] .manual-empty-state, [data-theme="dark"] .shopping-cart-card .guest-add-form { background: #17251b; border-color: #344638; color: #b7c8b8; }
+
+
+/* Mi Compra · pantallas principales y navegación de producto */
+.home-welcome {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  overflow: hidden;
+  min-height: 190px;
+  padding: clamp(22px,4vw,34px);
+  border: 1px solid #1d5637;
+  border-radius: 22px;
+  background: linear-gradient(125deg,#19482f 0%,#245b3e 58%,#36734b 100%);
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(25,72,47,.16);
+}
+.home-welcome > div:first-child { position: relative; z-index: 1; display: grid; justify-items: start; gap: 9px; max-width: 650px; }
+.home-welcome .eyebrow { margin: 0; color: #c5ddca; }
+.home-welcome h1 { margin: 0; color: #fff; font: 800 clamp(25px,4vw,37px)/1.1 'Manrope',sans-serif; letter-spacing: -1.1px; }
+.home-welcome p:not(.eyebrow) { max-width: 540px; margin: 0; color: #e0ede2; font-size: 13px; line-height: 1.55; }
+.home-primary-action { display: inline-flex; align-items: center; gap: 15px; min-height: 43px; margin-top: 4px; padding: 10px 15px; border: 0; border-radius: 11px; background: #fff; color: #245b3e; font-size: 12px; font-weight: 800; }
+.home-primary-action span { font-size: 17px; line-height: 1; }
+.home-welcome-mark { display: grid; place-items: center; flex: 0 0 128px; width: 128px; height: 128px; border: 1px solid rgba(255,255,255,.2); border-radius: 38px; background: rgba(255,255,255,.09); color: rgba(255,255,255,.86); font: 800 42px 'Manrope',sans-serif; transform: rotate(8deg); }
+.home-dashboard { margin: 0; }
+.home-quick-access { display: grid; gap: 12px; }
+.home-section-heading { display: flex; align-items: end; justify-content: space-between; }
+.home-section-heading .eyebrow { margin: 0 0 4px; }
+.home-section-heading h2 { margin: 0; color: #1f3829; font: 800 21px 'Manrope',sans-serif; letter-spacing: -.55px; }
+.home-quick-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.home-quick-grid button {
+  display: grid; align-content: start; justify-items: start; gap: 7px; min-width: 0; min-height: 112px; padding: 14px;
+  border: 1px solid #e4ebe4; border-radius: 15px; background: #fff; color: #263d2e; text-align: left;
+  box-shadow: 0 5px 18px rgba(24,51,34,.035); transition: transform .16s ease,border-color .16s ease,box-shadow .16s ease;
+}
+.home-quick-grid button:hover { transform: translateY(-2px); border-color: #c8dbc9; box-shadow: 0 8px 23px rgba(24,51,34,.07); }
+.home-quick-grid button > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: #edf5ed; color: #2f7046; font-size: 19px; font-weight: 800; }
+.home-quick-grid button strong { color: #2a4031; font-size: 12px; }
+.home-quick-grid button small { color: #849087; font-size: 10px; line-height: 1.4; }
+.more-page { display: grid; gap: 19px; width: 100%; max-width: 880px; margin: 0 auto; }
+.more-page .settings-heading { margin-bottom: 2px; }
+.more-group { display: grid; gap: 10px; }
+.more-group > h3 { margin: 0; color: #415c48; font: 800 13px 'Manrope',sans-serif; }
+.more-module-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.more-module-grid button {
+  display: grid; grid-template-columns: 42px minmax(0,1fr) 16px; align-items: center; gap: 12px; min-width: 0; min-height: 75px; padding: 13px;
+  border: 1px solid #e4ebe4; border-radius: 15px; background: #fff; color: #263b2d; text-align: left; box-shadow: 0 4px 15px rgba(24,51,34,.035);
+}
+.more-module-grid button:hover { border-color: #c4d9c7; background: #fbfdfb; }
+.more-module-grid button > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+.more-module-grid button strong { color: #283f30; font-size: 12px; }
+.more-module-grid button small { color: #829087; font-size: 10px; line-height: 1.4; }
+.more-module-grid button > b { color: #849187; font-size: 20px; }
+.more-module-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #edf5ed; color: #2f7046; font-size: 19px; font-weight: 800; }
+.module-back-button {
+  display: inline-flex; align-items: center; gap: 8px; justify-self: start; width: auto; min-height: 36px !important; margin: 0 0 4px; padding: 7px 11px !important;
+  border: 1px solid #e1e9e1 !important; border-radius: 10px; background: #fff !important; color: #54705a !important; font-size: 11px; font-weight: 700;
+}
+.module-back-button span { font-size: 16px; }
+.secondary-module-page { display: grid; gap: 15px; width: 100%; max-width: 930px; margin: 0 auto; }
+.secondary-module-page > .module-intro { margin: 0; }
+.secondary-module-page > #spending-module,.secondary-module-page > #pantry-module { min-width: 0; }
+.local-purchase-history { display: grid; gap: 10px; margin-top: 8px; padding-top: 16px; border-top: 1px solid #e9eee9; }
+.local-purchase-history h3 { margin: 0; color: #314b38; font: 800 15px 'Manrope',sans-serif; }
+.local-purchase-history .saved-purchase { margin: 7px 0; padding: 12px; border: 1px solid #e5ebe5; border-radius: 12px; background: #fbfdfb; }
+.local-purchase-history .saved-purchase > summary { color: #405c46; font-size: 11px; line-height: 1.5; cursor: pointer; }
+.local-purchase-history .receipt-lines { display: grid; gap: 8px; padding-top: 10px; }
+.local-purchase-history .receipt-lines > div { display: flex; justify-content: space-between; align-items: start; gap: 12px; font-size: 11px; }
+.local-purchase-history .receipt-lines > small { color: #7b897e; font-size: 10px; }
+.purchase-ledger-card { gap: 15px; }
+.purchase-ledger-card > .module-intro { margin: 0; }
+.purchase-ledger-card #purchases-module { min-width: 0; }
+.app-navigation { border-color: #e1e9e1; }
+.app-nav-item.active { background: #245b3e; color: #fff; box-shadow: 0 5px 13px rgba(36,91,62,.19); }
+@media (min-width: 900px) {
+  main { display: grid; grid-template-columns: 205px minmax(0,1fr); align-items: start; column-gap: 23px; }
+  .app-navigation { grid-column: 1; grid-row: 1; display: grid; align-content: start; gap: 5px; width: 100%; margin: 3px 0 0; padding: 8px; position: sticky; top: 82px; border-radius: 17px; }
+  .app-nav-item { width: 100%; min-width: 0; min-height: 47px; justify-content: flex-start; padding-inline: 12px; }
+  .app-nav-item > span { width: 22px; text-align: center; }
+  .app-nav-item small { font-size: 12px; }
+  .app-views { grid-column: 2; grid-row: 1; min-width: 0; }
+}
+@media (max-width: 760px) {
+  .home-welcome { min-height: 165px; padding: 21px 18px; border-radius: 18px; }
+  .home-welcome-mark { flex-basis: 76px; width: 76px; height: 76px; border-radius: 24px; font-size: 27px; }
+  .home-welcome h1 { font-size: 25px; }
+  .home-welcome p:not(.eyebrow) { font-size: 11px; }
+  .home-primary-action { min-height: 40px; font-size: 11px; }
+  .home-quick-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .home-quick-grid button { min-height: 100px; padding: 12px; }
+  .more-module-grid { grid-template-columns: minmax(0,1fr); }
+  .local-purchase-history { padding-top: 13px; }
+}
+@media (max-width: 380px) {
+  .home-welcome-mark { display: none; }
+  .home-quick-grid button { min-height: 94px; }
+  .more-module-grid button { min-height: 69px; }
+}
+[data-theme="dark"] .home-welcome { background: linear-gradient(125deg,#153a27,#205438 58%,#2c6240); }
+[data-theme="dark"] .home-section-heading h2,[data-theme="dark"] .home-quick-grid button strong,[data-theme="dark"] .more-module-grid button strong,[data-theme="dark"] .local-purchase-history h3 { color: #e8efe9; }
+[data-theme="dark"] .home-quick-grid button,[data-theme="dark"] .more-module-grid button,[data-theme="dark"] .module-back-button { background: #1b2a20 !important; border-color: #344638 !important; color: #e8efe9 !important; }
+[data-theme="dark"] .home-quick-grid button small,[data-theme="dark"] .more-module-grid button small { color: #b4c3b6; }
+[data-theme="dark"] .local-purchase-history .saved-purchase { background: #17251b; border-color: #344638; }
