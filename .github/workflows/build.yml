@@ -22,7 +22,7 @@ jobs:
       - name: Install Firebase Emulator test dependencies
         run: npm install --no-save --no-package-lock --no-audit --no-fund firebase-tools @firebase/rules-unit-testing
       - name: Run Firestore security integration tests
-        run: npx firebase emulators:exec --only firestore --project demo-mi-compra-rules --non-interactive "node --test src/v2/firestore.rules.test.js"
+        run: npx firebase emulators:exec --only firestore --project demo-mi-compra-rules --non-interactive "node --test src/v2/firestore.rules.integration.js"
       - name: Run application tests
         run: npm test
       - name: Build production bundle
