@@ -1,238 +1,239 @@
 import { createClient } from '@supabase/supabase-js';
-import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
+import {
+  getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut,
+  sendPasswordResetEmail
+} from 'firebase/auth';
+import {
+  doc, getDoc, setDoc, onSnapshot, serverTimestamp
+} from 'firebase/firestore';
+import { app, db } from './firebase.js';
+import { createEmptyWorkspace, normalizeWorkspace } from './model.js';
 
-const CLOUD_TABLE = 'personal_workspace';
-const CLOUD_KEY = 'miCompraV2';
-const URL = import.meta.env.VITE_SUPABASE_URL;
-const KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Supabase is retained only as a one-time legacy data importer. All new reads/writes
+// and authentication use Firebase. Remove the legacy importer after every account migrates.
+const LEGACY_URL = import.meta.env.VITE_SUPABASE_URL;
+const LEGACY_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const legacy = LEGACY_URL && LEGACY_KEY ? createClient(LEGACY_URL, LEGACY_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+}) : null;
+
+const auth = getAuth(app);
+const COLLECTION = 'userWorkspaces';
 
 export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} } = {}) {
-  const configured = Boolean(URL && KEY);
-  const client = configured ? createClient(URL, KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-  }) : null;
   let workspace = createEmptyWorkspace();
   let user = null;
-  let status = configured ? 'Preparando conexión' : 'Solo en este dispositivo';
-  let channel = null;
+  let status = 'Conectando con Firebase';
+  let configured = true;
+  let unsubscribeWorkspace = null;
+  let unsubscribeAuth = null;
   let timer = null;
   let syncing = false;
-  let pendingSync = false;
-  let subscription = null;
+  let pendingCredentials = null;
+  let authBusy = false;
+  let initialized = false;
 
-  const localKey = id => 'mi-compra-v2:' + (id || 'guest');
-  const readLocal = id => {
-    try {
-      const raw = localStorage.getItem(localKey(id));
-      return raw ? normalizeWorkspace(JSON.parse(raw)) : createEmptyWorkspace();
-    } catch {
-      return createEmptyWorkspace();
-    }
-  };
-  const writeLocal = () => {
-    try { localStorage.setItem(localKey(user?.id), JSON.stringify(workspace)); }
-    catch { setStatus('Almacenamiento del dispositivo lleno'); }
-  };
-  const setStatus = value => {
-    status = value;
-    onStatus(status);
-  };
+  const setStatus = value => { status = value; onStatus(status); };
   const notify = () => onChange(workspace, user);
+  const workspaceRef = uid => doc(db, COLLECTION, uid);
 
-  function stopRealtime() {
-    if (channel && client) client.removeChannel(channel);
-    channel = null;
+  async function migrateLegacyWorkspace(firebaseUser, credentials) {
+    if (!legacy || !credentials?.email || !credentials?.password) return false;
+    const target = workspaceRef(firebaseUser.uid);
+    const existing = await getDoc(target);
+    if (existing.exists() && existing.data()?.workspace) return false;
+
+    try {
+      const { data: authData, error: authError } = await legacy.auth.signInWithPassword({
+        email: credentials.email, password: credentials.password
+      });
+      if (authError || !authData?.user) return false;
+      const { data, error } = await legacy.from('personal_workspace')
+        .select('data').eq('user_id', authData.user.id).maybeSingle();
+      if (error) throw error;
+      const oldRoot = data?.data && typeof data.data === 'object' ? data.data : {};
+      const oldWorkspace = oldRoot.miCompraV2;
+      if (!oldWorkspace || typeof oldWorkspace !== 'object') return false;
+      await setDoc(target, {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || credentials.email,
+        workspace: normalizeWorkspace(oldWorkspace),
+        schemaVersion: 2,
+        migratedFrom: 'supabase',
+        migratedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    } catch (error) {
+      console.warn('Legacy workspace migration:', error?.message || error);
+      return false;
+    } finally {
+      await legacy.auth.signOut().catch(() => {});
+    }
   }
 
-  async function readCloud() {
-    if (!client || !user) return null;
-    const { data, error } = await client.from(CLOUD_TABLE)
-      .select('data,updated_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (error) throw error;
-    const root = data?.data && typeof data.data === 'object' && !Array.isArray(data.data) ? data.data : {};
-    return { root, remote: root[CLOUD_KEY] ? normalizeWorkspace(root[CLOUD_KEY]) : null };
+  function stopWorkspaceListener() {
+    if (unsubscribeWorkspace) unsubscribeWorkspace();
+    unsubscribeWorkspace = null;
   }
 
-  async function writeCloud(next) {
-    if (!client || !user) return;
-    const { data, error } = await client.from(CLOUD_TABLE)
-      .select('data')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (error) throw error;
-    const root = data?.data && typeof data.data === 'object' && !Array.isArray(data.data) ? data.data : {};
-    const payload = {
-      user_id: user.id,
-      data: { ...root, [CLOUD_KEY]: next },
-      updated_at: new Date().toISOString()
-    };
-    const result = await client.from(CLOUD_TABLE).upsert(payload, { onConflict: 'user_id' });
-    if (result.error) throw result.error;
+  async function activateUser(nextUser) {
+    const nextId = nextUser?.uid || null;
+    if ((user?.uid || null) === nextId && initialized) return;
+    stopWorkspaceListener();
+    user = nextUser || null;
+    workspace = createEmptyWorkspace();
+    notify();
+
+    if (!user) {
+      initialized = true;
+      setStatus('Inicia sesión para cargar tus datos en la nube');
+      return;
+    }
+
+    setStatus('Cargando tus datos desde Firebase');
+    const ref = workspaceRef(user.uid);
+    await new Promise(resolve => {
+      let firstSnapshot = true;
+      unsubscribeWorkspace = onSnapshot(ref, async snapshot => {
+        if (snapshot.exists() && snapshot.data()?.workspace) {
+          workspace = normalizeWorkspace(snapshot.data().workspace);
+        } else if (firstSnapshot) {
+          workspace = createEmptyWorkspace();
+          try {
+            await setDoc(ref, {
+              uid: user.uid, email: user.email || '',
+              workspace, schemaVersion: 2, updatedAt: serverTimestamp()
+            }, { merge: true });
+          } catch (error) {
+            setStatus('No se pudo crear tu espacio en Firebase');
+            console.error(error);
+          }
+        }
+        firstSnapshot = false;
+        initialized = true;
+        notify();
+        setStatus(navigator.onLine ? 'Sincronizado con Firebase' : 'Esperando conexión');
+        resolve();
+      }, error => {
+        console.error('Firebase workspace listener:', error);
+        initialized = true;
+        setStatus('Error de acceso a Firebase: revisa las reglas de Firestore');
+        resolve();
+      });
+    });
+  }
+
+  async function initialize() {
+    await setPersistence(auth, indexedDBLocalPersistence);
+    await new Promise(resolve => {
+      let first = true;
+      unsubscribeAuth = onAuthStateChanged(auth, async nextUser => {
+        if (authBusy) return;
+        await activateUser(nextUser);
+        if (first) { first = false; resolve(); }
+      }, error => {
+        console.error('Firebase Auth:', error);
+        setStatus('No se pudo comprobar la sesión de Firebase');
+        if (first) { first = false; resolve(); }
+      });
+    });
+    return { workspace, user, configured };
+  }
+
+  function scheduleSync() {
+    if (!user) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => { void syncNow(); }, 450);
   }
 
   async function syncNow() {
-    if (!client || !user) return;
-    if (syncing) { pendingSync = true; return; }
+    if (!user || syncing) return;
     syncing = true;
-    setStatus('Sincronizando');
+    setStatus('Guardando en Firebase');
     try {
-      do {
-        pendingSync = false;
-        const localSnapshot = normalizeWorkspace(workspace);
-        const { root, remote } = await readCloud();
-        const merged = remote ? mergeWorkspaces(localSnapshot, remote) : localSnapshot;
-        const localChanged = JSON.stringify(merged) !== JSON.stringify(workspace);
-        workspace = merged;
-        writeLocal();
-        if (localChanged) notify();
-        if (!remote || JSON.stringify(remote) !== JSON.stringify(merged)) {
-          await writeCloud(merged);
-        }
-      } while (pendingSync);
-      setStatus('Sincronizado');
+      await setDoc(workspaceRef(user.uid), {
+        uid: user.uid,
+        email: user.email || '',
+        workspace: normalizeWorkspace(workspace),
+        schemaVersion: 2,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setStatus('Sincronizado con Firebase');
     } catch (error) {
-      setStatus('Sincronización pendiente');
-      console.warn('Mi Compra 2.0 cloud sync:', error?.message || error);
+      setStatus('Error al guardar en Firebase');
+      console.error('Mi Compra Firebase sync:', error?.message || error);
     } finally {
       syncing = false;
     }
   }
 
-  function scheduleSync() {
-    if (!client || !user) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => { void syncNow(); }, 650);
-  }
-
-  function startRealtime() {
-    stopRealtime();
-    if (!client || !user) return;
-    channel = client.channel('mi-compra-v2-' + user.id)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: CLOUD_TABLE,
-        filter: 'user_id=eq.' + user.id
-      }, payload => {
-        const root = payload.new?.data;
-        const remote = root && typeof root === 'object' ? root[CLOUD_KEY] : null;
-        if (!remote) return;
-        const merged = mergeWorkspaces(workspace, remote);
-        const changed = JSON.stringify(merged) !== JSON.stringify(workspace);
-        if (changed) {
-          workspace = merged;
-          writeLocal();
-          notify();
-          scheduleSync();
-        }
-      })
-      .subscribe();
-  }
-
-  async function activateUser(nextUser) {
-    const nextId = nextUser?.id || null;
-    if ((user?.id || null) === nextId) return;
-    stopRealtime();
-    user = nextUser || null;
-    workspace = readLocal(user?.id);
-    writeLocal();
-    notify();
-    if (user && client) {
-      await syncNow();
-      startRealtime();
-    } else {
-      setStatus(configured ? 'Cuenta desconectada · datos guardados localmente' : 'Solo en este dispositivo');
-    }
-  }
-
-  async function initialize() {
-    if (client) {
-      const { data, error } = await client.auth.getSession();
-      if (!error && data?.session?.user) await activateUser(data.session.user);
-      else {
-        workspace = readLocal(null);
-        setStatus('Inicia sesión para sincronizar');
-      }
-      subscription = client.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
-          void activateUser(null);
-        } else if (session?.user && session.user.id !== user?.id) {
-          void activateUser(session.user);
-        }
-      }).data.subscription;
-    } else {
-      workspace = readLocal(null);
-      setStatus('Solo en este dispositivo');
-    }
-    writeLocal();
-    notify();
-    return { workspace, user, configured };
-  }
-
-  async function resetWorkspace() {
-    clearTimeout(timer);
-    pendingSync = false;
-    while (syncing) await new Promise(resolve => setTimeout(resolve, 40));
-    stopRealtime();
-    const empty = createEmptyWorkspace();
-    try {
-      // Write the empty workspace directly: merging here would resurrect deleted records.
-      if (client && user) await writeCloud(empty);
-      workspace = empty;
-      writeLocal();
-      notify();
-      setStatus(user && client ? 'Sincronizado' : configured ? 'Inicia sesión para sincronizar' : 'Solo en este dispositivo');
-    } finally {
-      if (client && user) startRealtime();
-    }
-  }
-
-  function save(next) {
-    workspace = normalizeWorkspace(next);
-    writeLocal();
-    notify();
-    scheduleSync();
-  }
-
   async function signIn(email, password) {
-    if (!client) throw new Error('La conexión en la nube no está configurada.');
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    await activateUser(data.user);
-    startRealtime();
-    return data.user;
+    authBusy = true;
+    pendingCredentials = { email, password };
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      await migrateLegacyWorkspace(credential.user, pendingCredentials);
+      await activateUser(credential.user);
+      return credential.user;
+    } finally {
+      pendingCredentials = null;
+      authBusy = false;
+    }
   }
 
   async function signUp(email, password) {
-    if (!client) throw new Error('La conexión en la nube no está configurada.');
-    const { data, error } = await client.auth.signUp({ email, password });
-    if (error) throw error;
-    if (data.user && data.session) await activateUser(data.user);
-    return data;
+    authBusy = true;
+    pendingCredentials = { email, password };
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await migrateLegacyWorkspace(credential.user, pendingCredentials);
+      await activateUser(credential.user);
+      // The app's UI uses result.session to distinguish confirmation-required providers.
+      return { ...credential, session: credential.user };
+    } finally {
+      pendingCredentials = null;
+      authBusy = false;
+    }
   }
 
   async function signOut() {
-    if (client) {
-      const { error } = await client.auth.signOut();
-      if (error) throw error;
-    }
+    clearTimeout(timer);
+    await firebaseSignOut(auth);
     await activateUser(null);
   }
 
   async function resetPassword(email) {
-    if (!client) throw new Error('La conexión en la nube no está configurada.');
-    const { error } = await client.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname
-    });
-    if (error) throw error;
+    await sendPasswordResetEmail(auth, email);
+  }
+
+  async function resetWorkspace() {
+    if (!user) throw new Error('Inicia sesión para borrar los datos guardados en la nube.');
+    clearTimeout(timer);
+    workspace = createEmptyWorkspace();
+    await setDoc(workspaceRef(user.uid), {
+      uid: user.uid, email: user.email || '', workspace,
+      schemaVersion: 2, updatedAt: serverTimestamp()
+    }, { merge: true });
+    notify();
+    setStatus('Sincronizado con Firebase');
+  }
+
+  function save(next) {
+    if (!user) {
+      setStatus('Inicia sesión: los datos solo se guardan en la nube');
+      return;
+    }
+    workspace = normalizeWorkspace(next);
+    notify();
+    scheduleSync();
   }
 
   function dispose() {
     clearTimeout(timer);
-    stopRealtime();
-    subscription?.unsubscribe?.();
+    stopWorkspaceListener();
+    unsubscribeAuth?.();
   }
 
   return {
