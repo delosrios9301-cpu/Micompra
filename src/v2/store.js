@@ -89,6 +89,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     notify();
 
     if (!user) {
+      workspaceId = null;
       initialized = true;
       setStatus('Inicia sesión para cargar tus datos en la nube');
       return;
@@ -224,8 +225,17 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   async function createFamilyUser(email, password) {
-    if (!user || !workspaceId) throw new Error('Inicia sesión como propietario para agregar un familiar.');
-    if (workspaceId !== user.uid) throw new Error('Solo el propietario del espacio puede agregar usuarios.');
+    const activeUser = auth.currentUser || user;
+    if (!activeUser || !workspaceId) throw new Error('Tu sesión no está activa. Inicia sesión con tu cuenta administradora para continuar.');
+    const accessSnap = await getDoc(doc(db, 'workspaceAccess', activeUser.uid));
+    const workspaceSnap = await getDoc(workspaceRef(workspaceId));
+    const access = accessSnap.exists() ? accessSnap.data() : {};
+    const workspaceData = workspaceSnap.exists() ? workspaceSnap.data() : {};
+    const isOwner = workspaceId === activeUser.uid
+      || access.role === 'owner'
+      || access.ownerUid === activeUser.uid
+      || workspaceData.ownerUid === activeUser.uid;
+    if (!isOwner) throw new Error('Esta cuenta no tiene permisos de administración para crear usuarios.');
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!normalizedEmail || String(password || '').length < 8) throw new Error('Indica un correo válido y una contraseña de al menos 8 caracteres.');
     let credential;
