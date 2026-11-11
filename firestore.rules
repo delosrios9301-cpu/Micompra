@@ -1,76 +1,72 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
     function isPrimaryOwner() {
-      return signedIn()
-        && request.auth.token.email == 'delosrios9301@gmail.com';
+      return signedIn() && request.auth.token.email == 'delosrios9301@gmail.com';
     }
     function accessDoc(uid) {
       return get(/databases/$(database)/documents/workspaceAccess/$(uid));
     }
     function isWorkspaceMember(workspaceId) {
       return signedIn()
+        && exists(/databases/$(database)/documents/workspaceAccess/$(request.auth.uid))
         && accessDoc(request.auth.uid).data.workspaceId == workspaceId;
     }
     function isWorkspaceOwner(workspaceId) {
       return signedIn()
         && get(/databases/$(database)/documents/userWorkspaces/$(workspaceId)).data.ownerUid == request.auth.uid;
     }
+    function isEmptyWorkspaceReset() {
+      return request.resource.data.workspace is map
+        && request.resource.data.workspace.products.size() == 0
+        && request.resource.data.workspace.stores.size() == 0
+        && request.resource.data.workspace.lists.size() == 0
+        && request.resource.data.workspace.purchases.size() == 0
+        && request.resource.data.workspace.inventory.size() == 0
+        && request.resource.data.workspace.movements.size() == 0
+        && request.resource.data.workspace.expenses.size() == 0
+        && request.resource.data.workspace.budgets.size() == 0
+        && request.resource.data.workspace.activity.size() == 0;
+    }
 
     match /workspaceAccess/{userId} {
       allow read: if signedIn() && (
-        request.auth.uid == userId
-        || resource.data.ownerUid == request.auth.uid
-        || isWorkspaceOwner(resource.data.workspaceId)
+        request.auth.uid == userId || isWorkspaceOwner(resource.data.workspaceId)
       );
-
       allow create: if signedIn() && (
         (request.auth.uid == userId
           && request.resource.data.ownerUid == userId
           && request.resource.data.workspaceId == userId
           && request.resource.data.role == 'owner')
         || (userId != request.auth.uid
-          && request.resource.data.ownerUid == request.auth.uid
           && request.resource.data.role == 'member'
-          && isWorkspaceOwner(request.resource.data.workspaceId))
+          && isWorkspaceOwner(request.resource.data.workspaceId)
+          && request.resource.data.ownerUid == request.auth.uid)
       );
-
       allow update: if signedIn() && (
-        (resource.data.ownerUid == request.auth.uid
+        (isWorkspaceOwner(resource.data.workspaceId)
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.ownerUid == request.auth.uid)
+        || (isPrimaryOwner() && userId == request.auth.uid
+          && request.resource.data.workspaceId == resource.data.workspaceId
           && request.resource.data.ownerUid == request.auth.uid
-          && request.resource.data.workspaceId == resource.data.workspaceId)
-        || (isPrimaryOwner()
-          && userId == request.auth.uid
-          && request.resource.data.ownerUid == request.auth.uid
-          && request.resource.data.role == 'owner'
-          && request.resource.data.workspaceId == resource.data.workspaceId)
+          && request.resource.data.role == 'owner')
       );
-
-      allow delete: if signedIn()
-        && isWorkspaceOwner(resource.data.workspaceId)
-        && userId != request.auth.uid;
+      allow delete: if isWorkspaceOwner(resource.data.workspaceId) && userId != request.auth.uid;
     }
 
     match /userWorkspaces/{workspaceId} {
-      allow read: if signedIn()
-        && (request.auth.uid == workspaceId || isWorkspaceMember(workspaceId));
-
+      allow read: if isWorkspaceMember(workspaceId)
+        || (signedIn() && request.auth.uid == workspaceId);
       allow create: if signedIn() && (
-        (request.auth.uid == workspaceId
-          && request.resource.data.ownerUid == request.auth.uid)
-        || (isPrimaryOwner()
-          && request.resource.data.ownerUid == request.auth.uid)
+        (request.auth.uid == workspaceId && request.resource.data.ownerUid == request.auth.uid)
+        || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
       );
-
       allow update: if isWorkspaceMember(workspaceId)
-        && (
-          request.resource.data.ownerUid == resource.data.ownerUid
-          || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
-        );
-
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.uid == resource.data.uid
+        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
       allow delete: if isWorkspaceOwner(workspaceId);
     }
   }
