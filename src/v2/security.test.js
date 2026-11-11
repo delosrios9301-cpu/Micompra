@@ -14,7 +14,7 @@ test('Firestore impide que un miembro cambie el propietario del espacio', async 
 test('Firestore reserva el restablecimiento total al propietario', async () => {
   const rules = await read('../../firestore.rules');
   assert.match(rules, /function isEmptyWorkspaceReset\(\)/);
-  assert.match(rules, /!isEmptyWorkspaceReset\(\) \|\| isWorkspaceOwner\(workspaceId\) \|\| hasNewDeletionMarkers\(\)/);
+  assert.match(rules, /!isEmptyWorkspaceReset\(\) \|\| isWorkspaceOwner\(workspaceId\)/);
 });
 
 test('el almacén valida que solo el propietario pueda borrar el espacio', async () => {
@@ -105,6 +105,6 @@ test('la sincronización conserva cambios locales pendientes al recibir una inst
 
 test('las reglas permiten propagar borrados individuales sin abrir el restablecimiento total', async () => {
   const rules = await read('../../firestore.rules');
-  assert.match(rules, /function hasNewDeletionMarkers\(\)/);
-  assert.match(rules, /hasNewDeletionMarkers\(\)/);
+  assert.match(rules, /resource\.data\.workspace\.products\.size\(\) > 0/);
+  assert.match(rules, /resource\.data\.workspace\.activity\.size\(\) > 0/);
 });
