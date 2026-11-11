@@ -17,11 +17,13 @@ service cloud.firestore {
     }
     match /workspaceAccess/{userId} {
       allow read: if signedIn() && (request.auth.uid == userId || resource.data.ownerUid == request.auth.uid);
-      allow create, update: if signedIn() && (
-        request.auth.uid == userId
-        || (request.resource.data.ownerUid == request.auth.uid
-          && request.resource.data.workspaceId == request.auth.uid)
+      allow create: if signedIn() && (
+        (request.auth.uid == userId && request.resource.data.ownerUid == userId && request.resource.data.workspaceId == userId)
+        || (request.resource.data.ownerUid == request.auth.uid && request.resource.data.workspaceId == request.auth.uid)
       );
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.workspaceId == request.auth.uid;
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid && userId != request.auth.uid;
     }
     match /userWorkspaces/{workspaceId} {
