@@ -114,7 +114,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     } catch (error) {
       console.error('Workspace membership:', error);
       initialized = true;
-      setStatus('No se pudo cargar el espacio familiar. Revisa las reglas de Firestore.');
+      setStatus('Conexión pendiente: verifica los permisos de acceso.');
       return;
     }
     const ref = workspaceRef(workspaceId);
