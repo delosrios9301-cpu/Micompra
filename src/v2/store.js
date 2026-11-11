@@ -5,7 +5,7 @@ import {
   deleteUser, sendPasswordResetEmail
 } from 'firebase/auth';
 import {
-  doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction
+  doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
@@ -100,6 +100,16 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
     setStatus('Cargando tus datos desde Firebase');
     try {
+      const revokedSnap = await getDoc(doc(db, 'revokedUsers', user.uid));
+      if (revokedSnap.exists()) {
+        await firebaseSignOut(auth).catch(() => {});
+        user = null;
+        workspaceId = null;
+        initialized = true;
+        setStatus('Acceso revocado por el propietario.');
+        notify();
+        return;
+      }
       const accessRef = doc(db, 'workspaceAccess', user.uid);
       const accessSnap = await getDoc(accessRef);
       const access = accessSnap.exists() ? accessSnap.data() : {};
@@ -347,6 +357,32 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
   }
 
+
+  async function listAccessUsers() {
+    if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo el propietario puede consultar los usuarios autorizados.');
+    const accessQuery = query(collection(db, 'workspaceAccess'), where('workspaceId', '==', workspaceId || user.uid));
+    const snapshot = await getDocs(accessQuery);
+    return snapshot.docs.map(row => ({ uid: row.id, ...row.data() }))
+      .filter(row => row.uid !== user.uid)
+      .sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+  }
+
+  async function revokeAccessUser(uid) {
+    if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo el propietario puede revocar accesos.');
+    if (!uid || uid === user.uid) throw new Error('No puedes revocar la cuenta propietaria.');
+    const memberRef = doc(db, 'workspaceAccess', uid);
+    const memberSnap = await getDoc(memberRef);
+    if (!memberSnap.exists() || memberSnap.data()?.workspaceId !== (workspaceId || user.uid)) {
+      throw new Error('El usuario no pertenece a este espacio.');
+    }
+    await setDoc(doc(db, 'revokedUsers', uid), {
+      uid, workspaceId: workspaceId || user.uid, email: memberSnap.data()?.email || '',
+      revokedBy: user.uid, revokedAt: serverTimestamp()
+    });
+    await deleteDoc(memberRef);
+    return { uid, email: memberSnap.data()?.email || '' };
+  }
+
   async function signOut() {
     clearTimeout(timer);
     await firebaseSignOut(auth);
@@ -389,7 +425,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createAccessUser, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createAccessUser, listAccessUsers, revokeAccessUser, dispose,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
