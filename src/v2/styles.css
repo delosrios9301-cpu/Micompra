@@ -55,3 +55,145 @@
 .auth-card .auth-links{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:18px}.auth-card .auth-links button{padding:3px 0;border:0;background:none;color:#3e718b;font-size:10px;font-weight:700}.auth-card .auth-note{margin:22px 0 0;padding-top:15px;border-top:1px solid #edf1f3;color:#91a0a8;font-size:9px;line-height:1.6}.auth-loading{text-align:center}.auth-loading .brand-name{color:#203d4d;font:800 24px Manrope}.auth-loading p{color:#84949d;font-size:11px}
 .side-logout{min-height:30px;padding:0 9px;font-size:9px;white-space:nowrap}
 @media(max-width:760px){.auth-gate{padding:18px}.auth-card{border-radius:18px}.sidebar .side-logout{max-width:100%}}
+
+
+/* Mobile viewport and persistent bottom navigation — Mi Compra 2.0 */
+@media (max-width: 620px) {
+  html, body, #app {
+    width: 100%;
+    min-width: 320px;
+    overflow-x: clip;
+  }
+  .app-shell {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+  .main-workspace {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .topbar {
+    width: 100%;
+    min-width: 0;
+    padding-inline: clamp(11px, 3.5vw, 16px);
+  }
+  .topbar-title { min-width: 0; }
+  .topbar-title strong {
+    max-width: 36vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar-actions { min-width: 0; gap: 6px; }
+  .page-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: clamp(15px, 4vw, 20px) clamp(12px, 3.6vw, 16px) 20px;
+  }
+  .app-view, .welcome-hero, .metric-grid, .dashboard-grid,
+  .surface-panel, .page-heading {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .welcome-hero {
+    width: 100%;
+    min-height: 0;
+    padding: clamp(20px, 5vw, 25px) clamp(16px, 4.5vw, 20px);
+    border-radius: 18px;
+  }
+  .welcome-copy { width: 100%; max-width: 100%; }
+  .welcome-copy h1 {
+    max-width: 100%;
+    font-size: clamp(25px, 7.2vw, 31px);
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+  }
+  .welcome-copy p { max-width: min(100%, 310px); }
+  .hero-art { opacity: .12; pointer-events: none; }
+  .hero-actions { position: relative; z-index: 3; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-card { min-width: 0; overflow: hidden; }
+  .metric-card > strong { min-width: 0; overflow-wrap: anywhere; }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-grid > .surface-panel { min-width: 0; }
+  .mobile-nav {
+    position: fixed !important;
+    inset: auto 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+    z-index: 120 !important;
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    align-items: stretch;
+    gap: 2px !important;
+    width: auto;
+    min-width: 0;
+    min-height: 66px !important;
+    height: 66px;
+    padding: 6px 5px !important;
+    border: 1px solid #dfe8e1 !important;
+    border-radius: 18px !important;
+    background: rgba(255, 255, 255, .97) !important;
+    box-shadow: 0 7px 25px rgba(18, 46, 28, .19), 0 1px 3px rgba(18, 46, 28, .08) !important;
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    isolation: isolate;
+    contain: paint;
+    will-change: transform;
+  }
+  .mobile-nav .nav-link {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    min-height: 52px !important;
+    padding: 4px 1px !important;
+    border-radius: 12px !important;
+    color: #75857a !important;
+    box-shadow: none !important;
+    white-space: nowrap;
+  }
+  .mobile-nav .nav-link .icon {
+    display: block;
+    width: 19px !important;
+    height: 19px !important;
+    flex: 0 0 19px;
+  }
+  .mobile-nav .nav-link span {
+    display: block !important;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(7px, 2vw, 8px) !important;
+    font-weight: 700;
+    line-height: 1.15 !important;
+    text-align: center;
+    text-overflow: ellipsis;
+  }
+  .mobile-nav .nav-link.active {
+    background: #eaf2ec !important;
+    color: #245b3e !important;
+  }
+  .mobile-nav .nav-link:focus-visible {
+    outline-offset: -2px;
+  }
+}
+@media (max-width: 360px) {
+  .metric-grid { grid-template-columns: minmax(0, 1fr); }
+  .welcome-copy h1 { font-size: 25px; }
+  .mobile-nav { left: 7px !important; right: 7px !important; }
+  .mobile-nav .nav-link span { font-size: 7px !important; }
+}
+@supports (height: 100dvh) {
+  @media (max-width: 620px) {
+    .app-shell { min-height: 100dvh; }
+  }
+}
