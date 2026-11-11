@@ -27,6 +27,11 @@ jobs:
           workload_identity_provider: projects/993392968752/locations/global/workloadIdentityPools/github-mi-compra/providers/github
           service_account: github-mi-compra-deploy@mi-compra-d9717.iam.gserviceaccount.com
 
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: mi-compra-d9717
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -38,5 +43,111 @@ jobs:
         env:
           VITE_BASE_PATH: /
 
-      - name: Deploy to Firebase Hosting
-        run: npx --yes firebase-tools@15.22.3 deploy --only hosting --project mi-compra-d9717 --non-interactive
+      - name: Deploy directly through Firebase Hosting REST API
+        env:
+          FIREBASE_SITE_ID: mi-compra-d9717
+          GOOGLE_CLOUD_PROJECT: mi-compra-d9717
+        run: |
+          python3 <<'PY'
+          import gzip
+          import hashlib
+          import json
+          import mimetypes
+          import os
+          import pathlib
+          import subprocess
+          import sys
+          import urllib.error
+          import urllib.request
+
+          project = os.environ["GOOGLE_CLOUD_PROJECT"]
+          site = os.environ["FIREBASE_SITE_ID"]
+          base = f"https://firebasehosting.googleapis.com/v1beta1/sites/{site}"
+          token = subprocess.check_output(
+              ["gcloud", "auth", "print-access-token"], text=True
+          ).strip()
+
+          def request(url, method="GET", body=None, content_type="application/json"):
+              data = None if body is None else (
+                  body if isinstance(body, bytes) else json.dumps(body).encode()
+              )
+              headers = {"Authorization": f"Bearer {token}"}
+              if data is not None:
+                  headers["Content-Type"] = content_type
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=120) as response:
+                      raw = response.read()
+                      return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode("utf-8", "replace")
+                  print(f"Firebase Hosting API error {error.code}: {detail}", file=sys.stderr)
+                  raise
+
+          dist = pathlib.Path("dist")
+          if not dist.is_dir():
+              raise SystemExit("No existe el directorio dist; se cancela la publicación.")
+
+          files = {}
+          compressed = {}
+          for path in sorted(dist.rglob("*")):
+              if not path.is_file():
+                  continue
+              relative = "/" + path.relative_to(dist).as_posix()
+              payload = gzip.compress(path.read_bytes(), mtime=0)
+              digest = hashlib.sha256(payload).hexdigest()
+              files[relative] = digest
+              compressed[digest] = payload
+
+          if not files or "/index.html" not in files:
+              raise SystemExit("La compilación no contiene index.html; se cancela la publicación.")
+
+          print(f"Preparando {len(files)} archivos para Firebase Hosting.")
+          version = request(
+              f"{base}/versions",
+              method="POST",
+              body={"config": {"rewrites": [{"glob": "**", "path": "/index.html"}]}}
+          )
+          version_name = version["name"]
+          version_id = version_name.rsplit("/", 1)[-1]
+          print(f"Versión creada: {version_name}")
+
+          items = list(files.items())
+          required = []
+          for start in range(0, len(items), 1000):
+              batch = dict(items[start:start + 1000])
+              result = request(
+                  f"{base}/versions/{version_id}:populateFiles",
+                  method="POST",
+                  body={"files": batch}
+              )
+              required.extend(result.get("uploadRequiredHashes", []))
+              upload_url = result.get("uploadUrl")
+
+          if required and not upload_url:
+              raise SystemExit("Firebase no devolvió la URL necesaria para subir los archivos.")
+
+          for index, digest in enumerate(required, 1):
+              request(
+                  f"{upload_url}/{digest}",
+                  method="POST",
+                  body=compressed[digest],
+                  content_type="application/octet-stream"
+              )
+              if index % 25 == 0 or index == len(required):
+                  print(f"Archivos subidos: {index}/{len(required)}")
+
+          request(
+              f"{base}/versions/{version_id}?updateMask=status",
+              method="PATCH",
+              body={"status": "FINALIZED"}
+          )
+          print("Versión finalizada correctamente.")
+
+          release = request(
+              f"{base}/releases?versionName={version_name}",
+              method="POST"
+          )
+          print(f"Publicación creada: {release.get('name', 'OK')}")
+          print(f"Firebase Hosting publicado: https://{site}.web.app")
+          PY
