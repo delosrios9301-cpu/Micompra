@@ -16,7 +16,11 @@ Aplicación web progresiva para organizar compras del hogar, registrar precios r
 - Cloud Firestore almacena el documento compartido en `userWorkspaces` y las membresías en `workspaceAccess`.
 - La cuenta propietaria es la única que puede invitar miembros, restablecer el espacio y restaurar respaldos.
 - Los miembros autenticados pueden trabajar con los datos del espacio, pero no cambiar la identidad del propietario ni ejecutar el restablecimiento total.
-- Las escrituras usan transacciones y combinan registros por identificador/fecha para reducir sobrescrituras concurrentes.
+- Las escrituras usan transacciones; los cambios locales pendientes se preservan al recibir instantáneas remotas.
+- Las eliminaciones se propagan mediante tombstones por registro (incluidos artículos dentro de listas), para que un dispositivo atrasado no restaure datos borrados.
+- El restablecimiento completo es transaccional y escribe tombstones antes de vaciar el espacio.
+- La sesión escucha en tiempo real la membresía y la lista de revocaciones; al revocarse el acceso, cierra sesión y limpia el estado cargado.
+- El importador de Supabase se carga de forma diferida y las dependencias Firebase/Supabase se separan en chunks para mejorar caché y carga.
 - Supabase JS permanece únicamente como importador de datos heredados, si las variables antiguas están configuradas.
 
 ## Seguridad
