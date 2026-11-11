@@ -30,6 +30,13 @@ service cloud.firestore {
         && request.resource.data.workspace.activity.size() == 0;
     }
 
+    function hasNewDeletionMarkers() {
+      return request.resource.data.workspace is map
+        && request.resource.data.workspace.deletedRecords is map
+        && resource.data.workspace.deletedRecords is map
+        && request.resource.data.workspace.deletedRecords.size() > resource.data.workspace.deletedRecords.size();
+    }
+
     match /workspaceAccess/{userId} {
       allow read: if signedIn() && (
         request.auth.uid == userId || isWorkspaceOwner(resource.data.workspaceId)
@@ -76,7 +83,7 @@ service cloud.firestore {
       allow update: if isWorkspaceMember(workspaceId)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.uid == resource.data.uid
-        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
+        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId) || hasNewDeletionMarkers());
       allow delete: if isWorkspaceOwner(workspaceId);
     }
   }
