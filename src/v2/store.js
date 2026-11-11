@@ -28,6 +28,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let timer = null;
   let syncing = false;
   let dirty = false;
+  let localRevision = 0;
   let unsubscribeAccess = null;
   let unsubscribeRevoked = null;
   let pendingCredentials = null;
@@ -255,6 +256,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     if (!user) return;
     if (syncing) { scheduleSync(); return; }
     syncing = true;
+    const revisionAtStart = localRevision;
     setStatus('Guardando en Firebase');
     try {
       const ref = workspaceRef(workspaceId || user.uid);
@@ -272,10 +274,17 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         }, { merge: true });
         return safeMerge;
       });
-      workspace = normalizeWorkspace(merged);
-      dirty = false;
+      if (localRevision === revisionAtStart) {
+        workspace = normalizeWorkspace(merged);
+        dirty = false;
+        setStatus('Sincronizado con Firebase');
+      } else {
+        workspace = mergeWorkspaces(workspace, merged);
+        dirty = true;
+        scheduleSync();
+        setStatus('Guardando cambios recientes');
+      }
       notify();
-      setStatus('Sincronizado con Firebase');
     } catch (error) {
       setStatus('Error al guardar en Firebase');
       console.error('Mi Compra Firebase sync:', error?.message || error);
@@ -454,6 +463,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
     workspace = normalizeWorkspace(incoming);
     dirty = true;
+    localRevision += 1;
     notify();
     scheduleSync();
   }
