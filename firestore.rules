@@ -19,6 +19,16 @@ service cloud.firestore {
     }
     function isEmptyWorkspaceReset() {
       return request.resource.data.workspace is map
+        && resource.data.workspace is map
+        && (resource.data.workspace.products.size() > 0
+          || resource.data.workspace.stores.size() > 0
+          || resource.data.workspace.lists.size() > 0
+          || resource.data.workspace.purchases.size() > 0
+          || resource.data.workspace.inventory.size() > 0
+          || resource.data.workspace.movements.size() > 0
+          || resource.data.workspace.expenses.size() > 0
+          || resource.data.workspace.budgets.size() > 0
+          || resource.data.workspace.activity.size() > 0)
         && request.resource.data.workspace.products.size() == 0
         && request.resource.data.workspace.stores.size() == 0
         && request.resource.data.workspace.lists.size() == 0
@@ -28,13 +38,6 @@ service cloud.firestore {
         && request.resource.data.workspace.expenses.size() == 0
         && request.resource.data.workspace.budgets.size() == 0
         && request.resource.data.workspace.activity.size() == 0;
-    }
-
-    function hasNewDeletionMarkers() {
-      return request.resource.data.workspace is map
-        && request.resource.data.workspace.deletedRecords is map
-        && (!('deletedRecords' in resource.data.workspace)
-          || request.resource.data.workspace.deletedRecords.size() > resource.data.workspace.deletedRecords.size());
     }
 
     match /workspaceAccess/{userId} {
@@ -83,7 +86,7 @@ service cloud.firestore {
       allow update: if isWorkspaceMember(workspaceId)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.uid == resource.data.uid
-        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId) || hasNewDeletionMarkers());
+        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
       allow delete: if isWorkspaceOwner(workspaceId);
     }
   }
