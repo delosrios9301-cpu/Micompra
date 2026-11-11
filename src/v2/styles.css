@@ -197,3 +197,42 @@
     .app-shell { min-height: 100dvh; }
   }
 }
+
+/* Header mobile: clean title and controls without a verbose sync/error label */
+@media (max-width: 620px) {
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 60px;
+  }
+  .topbar-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 2px;
+  }
+  .topbar-title .eyebrow {
+    margin: 0;
+    font-size: 7px;
+    letter-spacing: 1.1px;
+  }
+  .topbar-title strong {
+    max-width: 100%;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+  .topbar .sync-status { display: none !important; }
+  .topbar-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .topbar-actions .icon-button,
+  .topbar-actions .account-button {
+    flex: 0 0 auto;
+  }
+}
