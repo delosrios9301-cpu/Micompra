@@ -337,6 +337,7 @@ function modalHtml() {
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="Invitar usuario" data-modal-card><div class="modal-heading"><div><span class="eyebrow">GESTIÓN DE ACCESOS</span><h2>Enviar invitación</h2><p>La persona recibirá un correo para crear su propia contraseña y acceder al espacio compartido.</p></div>' + close + '</div><form data-form="access-user"><label class="field"><span>Correo electrónico</span><input name="email" type="email" required autocomplete="email" placeholder="correo@ejemplo.com"></label><p class="settings-description">No necesitas crear ni compartir una contraseña. El enlace llegará directamente a su correo.</p><button class="btn btn-primary btn-wide" type="submit">Enviar invitación por correo</button></form></section></div>';
   }
   if (modalName === 'reset-workspace') {
+    if (!store.isWorkspaceOwner()) { modalName = null; return ''; }
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar restablecimiento" data-modal-card><div class="modal-heading"><div><span class="eyebrow">BORRADO DEFINITIVO</span><h2>¿Restablecer Mi Compra?</h2><p>Se eliminarán los datos de esta cuenta en la nube y en este dispositivo. Esta acción no se puede deshacer.</p></div>' + close + '</div><div class="modal-description"><strong>Se borrarán:</strong> listas, productos, establecimientos, compras, inventario, movimientos, gastos, presupuestos y actividad.</div><p class="modal-description">Para confirmar, escribe <strong>RESTABLECER</strong> en el campo siguiente. Tu cuenta no será eliminada.</p><form data-form="reset-workspace"><label class="field"><span>Confirmación</span><input name="confirmation" required autocomplete="off" placeholder="Escribe RESTABLECER"></label><button class="btn btn-danger btn-wide" type="submit">Sí, borrar todos los datos</button></form></section></div>';
   }
   if (modalName === 'password-reset') {
@@ -587,6 +588,8 @@ function handleSubmit(event) {
     if (button) button.disabled = true;
     const promise = authMode === 'signup' ? store.signUp(data.email, data.password) : store.signIn(data.email, data.password);
     promise.then(result => {
+      currentView = 'inicio';
+      selectedListId = null;
       closeModal();
       if (authMode === 'signup' && !result.session) showToast('Cuenta creada. Revisa tu correo para confirmar el acceso.');
       else showToast('Sesión iniciada. Tus datos se están sincronizando.');
@@ -605,6 +608,7 @@ function handleSubmit(event) {
       showToast(error.message || 'No se pudo crear el usuario.', 'info');
     });
   } else if (action === 'reset-workspace') {
+    if (!store.isWorkspaceOwner()) { showToast('Solo el propietario puede borrar los datos compartidos.', 'info'); return; }
     if (String(data.confirmation || '').trim() !== 'RESTABLECER') {
       showToast('Escribe RESTABLECER exactamente para confirmar.', 'info');
       return;
@@ -752,14 +756,23 @@ root.addEventListener('input', event => {
 root.addEventListener('change', event => {
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
+    if (!store.isWorkspaceOwner()) {
+      showToast('Solo la cuenta propietaria puede restaurar copias de seguridad.', 'info');
+      event.target.value = '';
+      return;
+    }
     file.text().then(text => {
       const parsed = JSON.parse(text);
-      const restored = normalizeWorkspace(parsed.workspace || parsed);
+      if (!parsed || parsed.app !== 'Mi Compra 2.0' || !parsed.workspace || typeof parsed.workspace !== 'object') {
+        throw new Error('El archivo no corresponde a una copia válida de Mi Compra 2.0.');
+      }
+      const restored = normalizeWorkspace(parsed.workspace);
       if (!window.confirm('¿Restaurar esta copia? Los datos actuales se combinarán con la copia y no se eliminarán registros coincidentes más recientes.')) return;
       workspace = mergeWorkspaces(restored, workspace);
       logActivity('Configuración', 'Respaldo restaurado', 'Se importó una copia de seguridad.');
       persist('Copia restaurada y combinada con los datos actuales.');
-    }).catch(error => showToast('No se pudo leer el respaldo: ' + error.message, 'info'));
+    }).catch(error => showToast('No se pudo leer el respaldo: ' + error.message, 'info'))
+      .finally(() => { event.target.value = ''; });
   }
 });
 window.addEventListener('keydown', event => {
@@ -767,6 +780,7 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('beforeunload', () => store.dispose());
 
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(error => console.warn('PWA service worker:', error)));
 render();
 store.initialize().then(result => {
   workspace = normalizeWorkspace(result.workspace);
