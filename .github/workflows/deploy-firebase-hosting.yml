@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build_and_deploy:
@@ -20,6 +21,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Authenticate to Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/993392968752/locations/global/workloadIdentityPools/github-mi-compra/providers/github
+          service_account: github-mi-compra-deploy@mi-compra-d9717.iam.gserviceaccount.com
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -32,9 +39,4 @@ jobs:
           VITE_BASE_PATH: /
 
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MI_COMPRA }}
-          projectId: mi-compra-d9717
-          channelId: live
+        run: npx --yes firebase-tools@latest deploy --only hosting --project mi-compra-d9717 --non-interactive
