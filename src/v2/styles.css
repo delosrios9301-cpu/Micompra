@@ -44,3 +44,14 @@
 .draft-quantity-control input{width:48px!important;min-width:0!important;padding:4px 3px!important;border:1px solid #dfe5e9;border-radius:7px;background:#fff;color:#304b5b;text-align:center;font-size:10px!important}
 .draft-qty-button{width:25px;height:25px;display:grid;place-items:center;border:1px solid #dfe5e9;border-radius:7px;background:#fff;color:#476e84;font-size:16px;line-height:1}
 .draft-quantity-control small{font-size:8px;color:#8b999f}
+
+
+/* Secure login gate and visible session controls */
+.auth-gate{min-height:100svh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 15% 5%,#dceaf0 0,transparent 35%),linear-gradient(145deg,#f5f8fa,#eaf1f5)}
+.auth-card{width:min(100%,420px);padding:clamp(24px,5vw,38px);border:1px solid #dfe8ed;border-radius:22px;background:#fff;box-shadow:0 22px 70px #1e40521a}
+.auth-brand{display:flex;align-items:center;gap:11px;margin-bottom:30px}.auth-brand .brand-mark{display:grid;place-items:center;width:43px;height:43px;border-radius:13px;background:#e8f0f4;color:#315e76}.auth-brand .brand-name{color:#203d4d;font:800 23px Manrope;letter-spacing:-1px}.auth-brand .brand-name span,.auth-loading .brand-name span{color:#4d819d}
+.auth-card>.eyebrow{margin-bottom:8px}.auth-card h1{margin:0;color:#1d3746;font:800 clamp(25px,6vw,32px)/1.15 Manrope;letter-spacing:-1px}.auth-gate-copy{margin:10px 0 25px;color:#7c8d97;font-size:11px;line-height:1.65}
+.auth-card form{display:grid;gap:14px}.auth-card .field{display:grid;gap:7px}.auth-card .field>span{color:#4a5f6b;font-size:10px;font-weight:700}.auth-card .field input{width:100%;min-height:45px;padding:0 13px;border:1px solid #dce5ea;border-radius:10px;background:#fbfcfd;color:#243d4b;font-size:12px}.auth-card .btn{min-height:46px;margin-top:4px;font-size:11px}
+.auth-card .auth-links{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:18px}.auth-card .auth-links button{padding:3px 0;border:0;background:none;color:#3e718b;font-size:10px;font-weight:700}.auth-card .auth-note{margin:22px 0 0;padding-top:15px;border-top:1px solid #edf1f3;color:#91a0a8;font-size:9px;line-height:1.6}.auth-loading{text-align:center}.auth-loading .brand-name{color:#203d4d;font:800 24px Manrope}.auth-loading p{color:#84949d;font-size:11px}
+.side-logout{min-height:30px;padding:0 9px;font-size:9px;white-space:nowrap}
+@media(max-width:760px){.auth-gate{padding:18px}.auth-card{border-radius:18px}.sidebar .side-logout{max-width:100%}}
