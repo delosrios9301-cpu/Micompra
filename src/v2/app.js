@@ -301,6 +301,7 @@ function renderSettings() {
     '<button class="btn btn-secondary" data-action="open-auth">' + (user ? 'Administrar cuenta' : 'Iniciar sesión o crear cuenta') + '</button></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">PREFERENCIAS</span><h3>Moneda de visualización</h3></div></div><form data-form="currency" class="settings-form"><label class="field"><span>Moneda</span><select name="currency"><option value="USD" ' + (workspace.profile.currency === 'USD' ? 'selected' : '') + '>Dólar estadounidense (USD)</option><option value="PAB" ' + (workspace.profile.currency === 'PAB' ? 'selected' : '') + '>Balboa panameño (PAB)</option></select></label><button class="btn btn-primary" type="submit">Guardar preferencia</button></form></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">TUS DATOS</span><h3>Respaldo y recuperación</h3></div></div><p class="settings-description">Mantén una copia de seguridad antes de cambiar de dispositivo o restaurar información.</p><div class="settings-actions"><button class="btn btn-secondary" data-action="download-backup">' + icon('download', 15) + 'Descargar copia</button><label class="btn btn-secondary file-button">' + icon('upload', 15) + 'Restaurar copia<input id="restore-file" type="file" accept="application/json,.json" hidden></label></div></section>' +
+    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">RESTABLECIMIENTO</span><h3>Restablecer aplicación</h3></div><span class="status-chip chip-open">Acción irreversible</span></div><p class="settings-description">Borra todos los datos de Mi Compra: listas, catálogo, establecimientos, compras, inventario, movimientos, gastos, presupuestos e historial. El borrado también se sincroniza con la nube y los demás dispositivos.</p><div class="settings-actions"><button class="btn btn-danger" data-action="open-reset">Restablecer y borrar todos los datos</button></div><p class="settings-description">Tu cuenta y contraseña seguirán activas. Se eliminará únicamente la información guardada dentro de la aplicación.</p></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">PLATAFORMA</span><h3>Mi Compra 2.0</h3></div><span class="version-tag">v2.0</span></div><p class="settings-description">Nueva estructura de planificación, compras, inventario y finanzas. Las funcionalidades de la versión anterior ya no forman parte de la navegación de esta aplicación.</p><div class="settings-footnote">' + statusLabel() + '</div></section></div>';
 }
 function viewContent() {
@@ -327,6 +328,9 @@ function modalHtml() {
     if (user) return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="Cuenta" data-modal-card><div class="modal-heading"><div><span class="eyebrow">TU ESPACIO PERSONAL</span><h2>Cuenta conectada</h2></div>' + close + '</div><div class="account-summary account-summary-modal"><span class="account-avatar">' + initials(user.email) + '</span><div><strong>' + safe(user.email) + '</strong><small>Sincronización entre tus dispositivos activada.</small></div></div><button class="btn btn-danger btn-wide" data-action="sign-out">Cerrar sesión</button></section></div>';
     const isSignup = authMode === 'signup';
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card auth-modal" role="dialog" aria-modal="true" aria-label="Acceso a Mi Compra" data-modal-card><div class="modal-heading"><div><span class="eyebrow">SINCRONIZA TU ESPACIO</span><h2>' + (isSignup ? 'Crear cuenta' : 'Bienvenido de nuevo') + '</h2><p>' + (isSignup ? 'Crea una cuenta para acceder a tus datos desde todos tus dispositivos.' : 'Inicia sesión para recuperar tus listas, compras e inventario.') + '</p></div>' + close + '</div><form data-form="auth"><label class="field"><span>Correo electrónico</span><input name="email" type="email" required autocomplete="email" placeholder="tu@correo.com"></label><label class="field"><span>Contraseña</span><input name="password" type="password" required minlength="8" autocomplete="' + (isSignup ? 'new-password' : 'current-password') + '" placeholder="Mínimo 8 caracteres"></label><button class="btn btn-primary btn-wide" type="submit">' + (isSignup ? 'Crear cuenta' : 'Iniciar sesión') + ' ' + icon('arrow', 15) + '</button></form><div class="auth-links">' + (!isSignup ? '<button data-action="forgot-password">¿Olvidaste tu contraseña?</button>' : '') + '<button data-action="switch-auth-mode">' + (isSignup ? 'Ya tengo una cuenta · Iniciar sesión' : '¿Primera vez? Crear una cuenta') + '</button></div><p class="auth-note">Tu información está protegida por tu cuenta y las reglas de acceso de la base de datos.</p></section></div>';
+  }
+  if (modalName === 'reset-workspace') {
+    return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar restablecimiento" data-modal-card><div class="modal-heading"><div><span class="eyebrow">BORRADO DEFINITIVO</span><h2>¿Restablecer Mi Compra?</h2><p>Se eliminarán los datos de esta cuenta en la nube y en este dispositivo. Esta acción no se puede deshacer.</p></div>' + close + '</div><div class="modal-description"><strong>Se borrarán:</strong> listas, productos, establecimientos, compras, inventario, movimientos, gastos, presupuestos y actividad.</div><p class="modal-description">Para confirmar, escribe <strong>RESTABLECER</strong> en el campo siguiente. Tu cuenta no será eliminada.</p><form data-form="reset-workspace"><label class="field"><span>Confirmación</span><input name="confirmation" required autocomplete="off" placeholder="Escribe RESTABLECER"></label><button class="btn btn-danger btn-wide" type="submit">Sí, borrar todos los datos</button></form></section></div>';
   }
   if (modalName === 'password-reset') {
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" data-modal-card><div class="modal-heading"><div><span class="eyebrow">RECUPERACIÓN DE ACCESO</span><h2>Restablecer contraseña</h2><p>Te enviaremos un enlace a tu correo.</p></div>' + close + '</div><form data-form="password-reset"><label class="field"><span>Correo electrónico</span><input name="email" type="email" required placeholder="tu@correo.com"></label><button class="btn btn-primary btn-wide" type="submit">Enviar enlace</button></form></section></div>';
@@ -431,6 +435,7 @@ function handleAction(action, target) {
   if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); }
   else if (action === 'open-auth') openModal('auth');
   else if (action === 'close-modal') closeModal();
+  else if (action === 'open-reset') openModal('reset-workspace');
   else if (action === 'new-list') openModal('new-list');
   else if (action === 'new-product') openModal('new-product');
   else if (action === 'new-store') openModal('new-store');
@@ -560,6 +565,24 @@ function handleSubmit(event) {
     }).catch(error => {
       if (button) button.disabled = false;
       showToast(error.message || 'No se pudo completar el acceso.', 'info');
+    });
+  } else if (action === 'reset-workspace') {
+    if (String(data.confirmation || '').trim() !== 'RESTABLECER') {
+      showToast('Escribe RESTABLECER exactamente para confirmar.', 'info');
+      return;
+    }
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    store.resetWorkspace().then(() => {
+      selectedListId = null;
+      purchaseDraft = [];
+      searchValue = '';
+      currentView = 'inicio';
+      closeModal();
+      showToast('Aplicación restablecida. Todos los datos fueron borrados.');
+    }).catch(error => {
+      if (button) button.disabled = false;
+      showToast('No se pudo completar el borrado: ' + (error.message || 'error de sincronización'), 'info');
     });
   } else if (action === 'password-reset') {
     store.resetPassword(data.email).then(() => { closeModal(); showToast('Enlace de recuperación enviado.'); }).catch(error => showToast(error.message, 'info'));
