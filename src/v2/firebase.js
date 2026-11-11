@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: 'AIzaSyAl4V04MCm0l1D8VPY606bl2L3SaAccOOA',
   authDomain: 'mi-compra-d9717.firebaseapp.com',
   projectId: 'mi-compra-d9717',
@@ -13,3 +13,5 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const memberApp = initializeApp(firebaseConfig, 'member-provisioning');
+export const memberAuth = getAuth(memberApp);
