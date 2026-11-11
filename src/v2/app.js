@@ -430,7 +430,7 @@ function handleAction(action, target) {
   const id = target.dataset.id;
   if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); }
   else if (action === 'open-auth') openModal('auth');
-  else if (action === 'close-modal') { if (target.id === 'modal-root' || target.classList.contains('modal-backdrop')) closeModal(); }
+  else if (action === 'close-modal') closeModal();
   else if (action === 'new-list') openModal('new-list');
   else if (action === 'new-product') openModal('new-product');
   else if (action === 'new-store') openModal('new-store');
