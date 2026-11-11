@@ -16,6 +16,8 @@ let authReady = false;
 let purchaseDraft = [];
 let toastTimer = null;
 let searchValue = '';
+let accessUsers = [];
+let accessUsersLoading = false;
 
 const nav = [
   { id: 'inicio', label: 'Inicio', icon: 'home' },
@@ -294,6 +296,20 @@ function renderReports() {
     '<article class="report-card"><span class="report-icon">' + icon('wallet', 21) + '</span><h3>Exportar finanzas</h3><p>Descarga tus gastos adicionales y presupuestos mensuales.</p><button class="btn btn-secondary" data-action="export-finance">Descargar CSV</button></article>' +
     '<article class="report-card report-backup"><span class="report-icon">' + icon('shield', 21) + '</span><h3>Copia completa de seguridad</h3><p>Descarga una copia JSON de todos los datos de Mi Compra 2.0.</p><button class="btn btn-primary" data-action="download-backup">Descargar respaldo</button></article></div>';
 }
+
+async function refreshAccessUsers() {
+  if (!store.isWorkspaceOwner()) { accessUsers = []; return; }
+  accessUsersLoading = true;
+  render();
+  try {
+    accessUsers = await store.listAccessUsers();
+  } catch (error) {
+    showToast(error.message || 'No se pudo cargar la lista de usuarios.', 'info');
+  } finally {
+    accessUsersLoading = false;
+    render();
+  }
+}
 function renderSettings() {
   const user = store.getUser();
   const isOwner = store.isWorkspaceOwner();
@@ -302,7 +318,8 @@ function renderSettings() {
     '<div class="settings-layout"><section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">CUENTA</span><h3>Acceso y sincronización</h3></div><span class="status-chip ' + (user ? 'chip-done' : 'chip-open') + '">' + (user ? 'Conectada' : 'Sin cuenta') + '</span></div>' +
     '<div class="account-summary"><span class="account-avatar">' + initials(user?.email) + '</span><div><strong>' + safe(user?.email || 'Modo local') + '</strong><small>' + (user ? 'Tus datos se sincronizan con esta cuenta.' : 'Inicia sesión para sincronizar entre dispositivos.') + '</small></div></div>' +
     '<button class="btn btn-secondary" data-action="open-auth">' + (user ? 'Administrar cuenta' : 'Iniciar sesión o crear cuenta') + '</button></section>' +
-    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h3>Gestión de usuarios y accesos</h3></div><span class="status-chip ' + (isOwner ? 'chip-done' : 'chip-open') + '">' + accessLabel + '</span></div><p class="settings-description">Administra quién puede ingresar a Mi Compra y compartir la información autorizada. Cada persona utiliza su propia cuenta y contraseña.</p>' + (!isOwner ? '<p class="settings-description">Solo la cuenta propietaria puede enviar invitaciones a nuevos usuarios.</p>' : '') + '<button class="btn btn-primary" data-action="new-access-user" ' + (!isOwner ? 'disabled' : '') + ' >Invitar usuario por correo</button></section>' +
+    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h3>Gestión de usuarios y accesos</h3></div><span class="status-chip ' + (isOwner ? 'chip-done' : 'chip-open') + '">' + accessLabel + '</span></div><p class="settings-description">Administra quién puede ingresar a Mi Compra y compartir la información autorizada. Cada persona utiliza su propia cuenta y contraseña.</p>' + (!isOwner ? '<p class="settings-description">Solo la cuenta propietaria puede enviar invitaciones a nuevos usuarios.</p>' : '') + '<div class="settings-actions"><button class="btn btn-primary" data-action="new-access-user" ' + (!isOwner ? 'disabled' : '') + '>Invitar usuario por correo</button><button class="btn btn-secondary" data-action="refresh-access-users" ' + (!isOwner ? 'disabled' : '') + '>Actualizar lista</button></div>' +
+     (isOwner ? '<div class="access-user-list"><h4>Usuarios con acceso</h4>' + (accessUsersLoading ? '<p class="settings-description">Cargando usuarios…</p>' : accessUsers.length ? accessUsers.map(member => '<div class="access-user-row"><div class="account-avatar">' + initials(member.email) + '</div><div class="access-user-info"><strong>' + safe(member.email || 'Correo no disponible') + '</strong><small>Acceso activo · ' + safe(member.role || 'Miembro') + '</small></div><button class="btn btn-danger btn-small" data-action="revoke-access-user" data-id="' + safe(member.uid) + '">Revocar</button></div>').join('') : '<p class="settings-description">Todavía no hay otros usuarios autorizados en este espacio.</p>') + '</div>' : '<p class="settings-description">La lista de usuarios solo está disponible para el propietario.</p>') + '</section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">PREFERENCIAS</span><h3>Moneda de visualización</h3></div></div><form data-form="currency" class="settings-form"><label class="field"><span>Moneda</span><select name="currency"><option value="USD" ' + (workspace.profile.currency === 'USD' ? 'selected' : '') + '>Dólar estadounidense (USD)</option><option value="PAB" ' + (workspace.profile.currency === 'PAB' ? 'selected' : '') + '>Balboa panameño (PAB)</option></select></label><button class="btn btn-primary" type="submit">Guardar preferencia</button></form></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">TUS DATOS</span><h3>Respaldo y recuperación</h3></div></div><p class="settings-description">Mantén una copia de seguridad antes de cambiar de dispositivo o restaurar información.</p><div class="settings-actions"><button class="btn btn-secondary" data-action="download-backup">' + icon('download', 15) + 'Descargar copia</button><label class="btn btn-secondary file-button">' + icon('upload', 15) + 'Restaurar copia<input id="restore-file" type="file" accept="application/json,.json" hidden></label></div></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">RESTABLECIMIENTO</span><h3>Restablecer aplicación</h3></div><span class="status-chip chip-open">Acción irreversible</span></div><p class="settings-description">Borra todos los datos de Mi Compra: listas, catálogo, establecimientos, compras, inventario, movimientos, gastos, presupuestos e historial. El borrado también se sincroniza con la nube y los demás dispositivos.</p><div class="settings-actions"><button class="btn btn-danger" data-action="open-reset">Restablecer y borrar todos los datos</button></div><p class="settings-description">Tu cuenta y contraseña seguirán activas. Se eliminará únicamente la información guardada dentro de la aplicación.</p></section>' +
@@ -454,10 +471,17 @@ function backupWorkspace() {
 }
 function handleAction(action, target) {
   const id = target.dataset.id;
-  if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); }
+  if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); if (currentView === 'configuracion') void refreshAccessUsers(); }
   else if (action === 'open-auth') openModal('auth');
   else if (action === 'close-modal') closeModal();
   else if (action === 'open-reset') openModal('reset-workspace');
+  else if (action === 'refresh-access-users') { void refreshAccessUsers(); }
+  else if (action === 'revoke-access-user') {
+    if (!store.isWorkspaceOwner()) { showToast('Solo el propietario puede revocar accesos.', 'info'); return; }
+    const member = accessUsers.find(row => row.uid === id);
+    if (!member || !window.confirm('¿Revocar el acceso de ' + (member.email || 'este usuario') + '? Ya no podrá entrar a este espacio ni ver sus datos.')) return;
+    store.revokeAccessUser(id).then(result => { accessUsers = accessUsers.filter(row => row.uid !== id); render(); showToast('Acceso revocado para ' + result.email + '.'); }).catch(error => showToast(error.message || 'No se pudo revocar el acceso.', 'info'));
+  }
   else if (action === 'new-access-user') {
     if (!store.isWorkspaceOwner()) showToast('Solo la cuenta propietaria puede enviar invitaciones.', 'info');
     else openModal('access-user');
@@ -603,6 +627,7 @@ function handleSubmit(event) {
     store.createAccessUser(data.email).then(result => {
       closeModal();
       showToast('Invitación enviada a ' + result.email + '. La persona podrá crear su contraseña desde el correo.');
+      void refreshAccessUsers();
     }).catch(error => {
       if (button) button.disabled = false;
       showToast(error.message || 'No se pudo crear el usuario.', 'info');
