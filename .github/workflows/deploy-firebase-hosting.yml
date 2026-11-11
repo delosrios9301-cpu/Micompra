@@ -39,4 +39,4 @@ jobs:
           VITE_BASE_PATH: /
 
       - name: Deploy to Firebase Hosting
-        run: npx --yes firebase-tools@latest deploy --only hosting --project mi-compra-d9717 --non-interactive
+        run: npx --yes firebase-tools@15.22.1 deploy --only hosting --project mi-compra-d9717 --non-interactive
