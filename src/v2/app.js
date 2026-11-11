@@ -12,6 +12,7 @@ let selectedListId = null;
 let modalName = null;
 let modalData = {};
 let authMode = 'signin';
+let authReady = false;
 let purchaseDraft = [];
 let toastTimer = null;
 let searchValue = '';
@@ -362,8 +363,22 @@ function modalHtml() {
   }
   return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="' + safe(title) + '" data-modal-card><div class="modal-heading"><div><span class="eyebrow">MI COMPRA 2.0</span><h2>' + safe(title) + '</h2></div>' + close + '</div>' + body + '</section></div>';
 }
+
+function authScreen() {
+  const isSignup = authMode === 'signup';
+  return '<main class="auth-gate"><section class="auth-card"><div class="auth-brand"><span class="brand-mark">' + icon('leaf', 25) + '</span><span class="brand-name">mi<span>compra</span></span></div><p class="eyebrow">ACCESO SEGURO</p><h1>' + (isSignup ? 'Crear tu cuenta' : 'Bienvenido de nuevo') + '</h1><p class="auth-gate-copy">' + (isSignup ? 'Registra tu cuenta para guardar y sincronizar tus compras.' : 'Inicia sesión para acceder a tus listas, compras, inventario y finanzas.') + '</p><form data-form="auth"><label class="field"><span>Correo electrónico</span><input name="email" type="email" required autocomplete="email" placeholder="tu@correo.com"></label><label class="field"><span>Contraseña</span><input name="password" type="password" required minlength="8" autocomplete="' + (isSignup ? 'new-password' : 'current-password') + '" placeholder="Mínimo 8 caracteres"></label><button class="btn btn-primary btn-wide" type="submit">' + (isSignup ? 'Crear cuenta' : 'Iniciar sesión') + ' ' + icon('arrow', 15) + '</button></form><div class="auth-links">' + (!isSignup ? '<button data-action="forgot-password">¿Olvidaste tu contraseña?</button>' : '') + '<button data-action="switch-auth-mode">' + (isSignup ? 'Ya tengo una cuenta · Iniciar sesión' : '¿Primera vez? Crear una cuenta') + '</button></div><p class="auth-note">Acceso exclusivo a tu espacio personal. Tu sesión se mantendrá activa hasta que cierres sesión.</p></section><div id="modal-root">' + modalHtml() + '</div><div id="toast-region" aria-live="polite"></div></main>';
+}
+
 function render() {
   if (!root) return;
+  if (!authReady) {
+    root.innerHTML = '<main class="auth-gate"><section class="auth-card auth-loading"><span class="brand-name">mi<span>compra</span></span><p>Comprobando tu sesión segura…</p></section></main>';
+    return;
+  }
+  if (store.isConfigured && !store.getUser()) {
+    root.innerHTML = authScreen();
+    return;
+  }
   const page = viewContent();
   root.innerHTML = '<div class="app-shell">' + sidebar() + '<main class="main-workspace"><header class="topbar"><div class="topbar-title"><span class="eyebrow">MI COMPRA 2.0</span><strong>' + safe(pageTitle()) + '</strong></div><div class="topbar-actions">' + statusLabel() + '<button class="icon-button notification-button" data-action="navigate" data-view="actividad" aria-label="Actividad">' + icon('bell', 19) + (workspace.activity.length ? '<i></i>' : '') + '</button><button class="account-button" data-action="open-auth"><span class="account-mini-avatar">' + initials(store.getUser()?.email) + '</span><span>' + safe(store.getUser()?.email ? store.getUser().email.split('@')[0] : 'Mi cuenta') + '</span>' + icon('chevron', 14) + '</button></div></header><div class="page-container">' + page + '<footer class="app-footer"><span>Mi Compra 2.0</span><span>Planifica · Compra · Controla</span></footer></div></main>' + mobileNav() + '<div id="modal-root">' + modalHtml() + '</div><div id="toast-region" aria-live="polite"></div></div>';
 }
@@ -735,8 +750,11 @@ window.addEventListener('beforeunload', () => store.dispose());
 render();
 store.initialize().then(result => {
   workspace = normalizeWorkspace(result.workspace);
+  authReady = true;
   render();
 }).catch(error => {
   console.error(error);
-  showToast('La aplicación abrió en el dispositivo, pero no pudo consultar la cuenta.', 'info');
+  authReady = true;
+  render();
+  showToast('No se pudo comprobar la sesión. Intenta iniciar sesión de nuevo.', 'info');
 });
