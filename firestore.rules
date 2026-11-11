@@ -56,6 +56,16 @@ service cloud.firestore {
       allow delete: if isWorkspaceOwner(resource.data.workspaceId) && userId != request.auth.uid;
     }
 
+    match /revokedUsers/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId || isWorkspaceOwner(resource.data.workspaceId)
+      );
+      allow create, update: if signedIn()
+        && request.resource.data.uid == userId
+        && isWorkspaceOwner(request.resource.data.workspaceId);
+      allow delete: if isWorkspaceOwner(resource.data.workspaceId);
+    }
+
     match /userWorkspaces/{workspaceId} {
       allow read: if isWorkspaceMember(workspaceId)
         || (signedIn() && request.auth.uid == workspaceId);
