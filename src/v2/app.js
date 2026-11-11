@@ -203,7 +203,7 @@ function storeOptions(selected = '') {
 }
 function renderShopping() {
   const storeSelect = '<select name="storeId">' + storeOptions() + '</select>';
-  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div><strong>' + safe(item.name) + '</strong><small>' + item.quantity + ' ' + safe(item.unit) + ' × ' + money(item.unitPrice) + (item.discount ? ' · Descuento ' + money(item.discount) : '') + '</small></div><strong>' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '">' + icon('close', 15) + '</button></div>').join('');
+  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><small>' + item.quantity + ' ' + safe(item.unit) + '</small><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) || 0) + '"></label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
   const draftTotal = computePurchaseTotal(purchaseDraft);
   const history = workspace.purchases.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(item =>
     '<article class="purchase-history-row"><span class="entity-symbol symbol-green">' + icon('cart', 18) + '</span><div class="entity-copy"><strong>' + safe(item.storeName || 'Compra sin establecimiento') + '</strong><small>' + dateLabel(item.date) + ' · ' + item.items.length + ' productos · ' + (item.paid ? 'Pagada' : 'Pendiente de pago') + '</small></div><strong class="purchase-total">' + money(item.total) + '</strong></article>'
@@ -213,7 +213,7 @@ function renderShopping() {
     '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + today() + '"></label></div>' +
     '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" placeholder="Nombre del producto" maxlength="100" required></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label></div><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
     '<div class="draft-list"><div class="draft-title"><strong>Productos registrados</strong><span>' + purchaseDraft.length + '</span></div>' + (draftRows || '<p class="draft-empty">Aún no has agregado productos a esta compra.</p>') + '</div>' +
-    '<div class="purchase-summary"><div><span>Total de la compra</span><strong>' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length ? 'disabled' : '') + '>Confirmar y guardar compra ' + icon('arrow', 16) + '</button></div></section>' +
+    '<div class="purchase-summary"><div><span>Total de la compra</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length ? 'disabled' : '') + '>Confirmar y guardar compra ' + icon('arrow', 16) + '</button></div></section>' +
     '<aside class="buy-aside"><div class="aside-card"><span class="aside-icon">' + icon('shield', 20) + '</span><strong>Registro transparente</strong><p>Este módulo no consulta tiendas ni descarga precios. Cada importe proviene de lo que introduces.</p></div><div class="aside-card"><span class="aside-icon">' + icon('box', 20) + '</span><strong>Inventario conectado</strong><p>Al confirmar, puedes sumar los productos al inventario con un movimiento registrado.</p></div></aside></div>' +
     '<section class="surface-panel history-panel"><div class="panel-heading"><div><span class="eyebrow">REGISTRO REAL</span><h3>Compras recientes</h3></div><span class="period-chip">' + workspace.purchases.length + ' registros</span></div>' + (history || '<div class="panel-empty"><span>' + icon('cart', 22) + '</span><strong>Aún no tienes compras guardadas</strong><small>Las compras confirmadas se conservarán en tu historial.</small></div>') + '</section>';
 }
@@ -686,6 +686,18 @@ root.addEventListener('click', event => {
 });
 root.addEventListener('submit', handleSubmit);
 root.addEventListener('input', event => {
+  if (event.target.matches('[data-draft-price]')) {
+    const index = Number(event.target.dataset.draftPrice);
+    const item = purchaseDraft[index];
+    if (item) {
+      item.unitPrice = Math.max(0, Number(event.target.value) || 0);
+      const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
+      if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
+      const total = document.getElementById('purchase-draft-total');
+      if (total) total.textContent = money(computePurchaseTotal(purchaseDraft));
+    }
+    return;
+  }
   const id = event.target.id;
   if (['inventory-search', 'catalog-search', 'activity-search'].includes(id)) {
     const position = event.target.selectionStart;
