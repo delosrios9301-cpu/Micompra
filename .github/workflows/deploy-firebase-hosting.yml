@@ -79,7 +79,7 @@ jobs:
               "rulesetName": ruleset_name
           }
           try:
-              call(release_name, "PATCH", release)
+              call(release_name, "PATCH", {"release": release, "updateMask": "rulesetName"})
           except SystemExit as error:
               if "404" not in str(error):
                   raise
