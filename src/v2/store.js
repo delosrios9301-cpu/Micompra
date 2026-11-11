@@ -452,6 +452,26 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     setStatus('Sincronizado con Firebase');
   }
 
+  function restoreBackup(backup) {
+    if (!user) throw new Error('Inicia sesión para restaurar una copia de seguridad.');
+    if (workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede restaurar copias de seguridad.');
+    if (!backup || backup.app !== 'Mi Compra 2.0' || !backup.workspace || typeof backup.workspace !== 'object' || Array.isArray(backup.workspace)) {
+      throw new Error('El archivo no corresponde a una copia válida de Mi Compra 2.0.');
+    }
+    const restored = normalizeWorkspace(backup.workspace);
+    const merged = mergeWorkspaces(restored, workspace);
+    merged.activity.unshift({
+      id: 'act_restore_' + Date.now().toString(36),
+      module: 'Configuración',
+      action: 'Respaldo restaurado',
+      description: 'Se importó una copia de seguridad.',
+      createdAt: new Date().toISOString()
+    });
+    workspace = normalizeWorkspace(merged);
+    save(workspace);
+    return workspace;
+  }
+
   function save(next) {
     if (!user) {
       setStatus('Inicia sesión: los datos solo se guardan en la nube');
@@ -485,7 +505,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createAccessUser, listAccessUsers, revokeAccessUser, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, revokeAccessUser, dispose,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
