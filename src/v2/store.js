@@ -432,12 +432,22 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     if (!user) throw new Error('Inicia sesión para borrar los datos guardados en la nube.');
     if (workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede restablecer y borrar los datos compartidos.');
     clearTimeout(timer);
-    dirty = false;
-    workspace = createEmptyWorkspace();
-    await setDoc(workspaceRef(workspaceId || user.uid), {
-      uid: workspaceId || user.uid, ownerUid: workspaceId || user.uid, email: user.email || '', workspace,
-      schemaVersion: 2, updatedAt: serverTimestamp()
-    }, { merge: true });
+    const ref = workspaceRef(workspaceId || user.uid);
+    const now = new Date().toISOString();
+    const cleared = await runTransaction(db, async transaction => {
+      const latest = await transaction.get(ref);
+      const remote = normalizeWorkspace(latest.data()?.workspace || createEmptyWorkspace());
+      const empty = createEmptyWorkspace();
+      empty.deletedRecords = { ...remote.deletedRecords };
+      const groups = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+      for (const group of groups) for (const row of remote[group]) empty.deletedRecords[group + ':' + row.id] = { deletedAt: now };
+      for (const list of remote.lists) for (const item of list.items || []) empty.deletedRecords['listItems:' + list.id + ':' + item.id] = { deletedAt: now };
+      const result = mergeWorkspaces(empty, remote);
+      transaction.set(ref, { uid: workspaceId || user.uid, ownerUid: workspaceOwnerUid, email: user.email || '', workspace: result, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+      return result;
+    });
+    workspace = normalizeWorkspace(cleared);
+    dirty = false; localRevision += 1;
     notify();
     setStatus('Sincronizado con Firebase');
   }
