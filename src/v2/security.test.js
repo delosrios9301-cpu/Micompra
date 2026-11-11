@@ -40,3 +40,22 @@ test('la aplicación registra el service worker para instalación PWA', async ()
   assert.match(app, /navigator\.serviceWorker\.register\('\/sw\.js'\)/);
   assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
 });
+
+
+test('el propietario puede listar y revocar miembros, y el acceso revocado queda bloqueado', async () => {
+  const store = await read('./store.js');
+  const rules = await read('../../firestore.rules');
+  assert.match(store, /async function listAccessUsers\(\)/);
+  assert.match(store, /async function revokeAccessUser\(uid\)/);
+  assert.match(store, /revokedUsers/);
+  assert.match(store, /Acceso revocado por el propietario/);
+  assert.match(rules, /match \/revokedUsers\/\{userId\}/);
+  assert.match(rules, /allow create, update: if signedIn\(\)[\s\S]*isWorkspaceOwner\(request\.resource\.data\.workspaceId\)/);
+});
+
+test('Configuración muestra usuarios y permite revocar accesos solo al propietario', async () => {
+  const app = await read('./app.js');
+  assert.match(app, /Usuarios con acceso/);
+  assert.match(app, /data-action="revoke-access-user"/);
+  assert.match(app, /Solo el propietario puede revocar accesos/);
+});
