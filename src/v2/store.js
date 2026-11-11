@@ -249,7 +249,6 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
     let credential = null;
     let accessCreated = false;
-    const accessRef = doc(db, 'workspaceAccess', 'pending');
     try {
       credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, bootstrapPassword);
       const memberAccessRef = doc(db, 'workspaceAccess', credential.user.uid);
