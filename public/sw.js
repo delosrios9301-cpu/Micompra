@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mi-compra-shell-v2';
+const CACHE_NAME = 'mi-compra-shell-v3';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', event => {
