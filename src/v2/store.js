@@ -226,17 +226,28 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
   async function createAccessUser(email) {
     const activeUser = auth.currentUser || user;
-    if (!activeUser || !workspaceId) throw new Error('Tu sesión no está activa. Inicia sesión con tu cuenta administradora para continuar.');
+    if (!activeUser) {
+      throw new Error('No se detectó una sesión activa. Vuelve a cargar la aplicación e inténtalo nuevamente.');
+    }
 
+    // Resuelve el espacio desde la membresía persistida; workspaceId puede no estar
+    // listo todavía cuando el usuario abre directamente el panel de invitaciones.
     const accessSnap = await getDoc(doc(db, 'workspaceAccess', activeUser.uid));
-    const workspaceSnap = await getDoc(workspaceRef(workspaceId));
     const access = accessSnap.exists() ? accessSnap.data() : {};
+    const targetWorkspaceId = workspaceId || access.workspaceId || activeUser.uid;
+    if (!targetWorkspaceId) {
+      throw new Error('No se pudo identificar el espacio de trabajo de esta sesión.');
+    }
+
+    const workspaceSnap = await getDoc(workspaceRef(targetWorkspaceId));
     const workspaceData = workspaceSnap.exists() ? workspaceSnap.data() : {};
-    const isOwner = workspaceId === activeUser.uid
+    const isOwner = targetWorkspaceId === activeUser.uid
       || access.role === 'owner'
       || access.ownerUid === activeUser.uid
       || workspaceData.ownerUid === activeUser.uid;
-    if (!isOwner) throw new Error('Esta cuenta no tiene permisos de administración para invitar usuarios.');
+    if (!isOwner) {
+      throw new Error('La cuenta activa no figura como propietaria de este espacio. No necesitas cambiar de sesión: hay que corregir la asignación de propietario en los permisos del espacio.');
+    }
 
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!normalizedEmail) throw new Error('Escribe el correo electrónico de la persona que recibirá la invitación.');
