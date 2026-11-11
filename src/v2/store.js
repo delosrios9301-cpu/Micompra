@@ -58,6 +58,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       if (!oldWorkspace || typeof oldWorkspace !== 'object') return false;
       await setDoc(target, {
         uid: firebaseUser.uid,
+        ownerUid: firebaseUser.uid,
         email: firebaseUser.email || credentials.email,
         workspace: normalizeWorkspace(oldWorkspace),
         schemaVersion: 2,
@@ -257,8 +258,8 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     if (!user) throw new Error('Inicia sesión para borrar los datos guardados en la nube.');
     clearTimeout(timer);
     workspace = createEmptyWorkspace();
-    await setDoc(workspaceRef(user.uid), {
-      uid: user.uid, email: user.email || '', workspace,
+    await setDoc(workspaceRef(workspaceId || user.uid), {
+      uid: workspaceId || user.uid, ownerUid: workspaceId || user.uid, email: user.email || '', workspace,
       schemaVersion: 2, updatedAt: serverTimestamp()
     }, { merge: true });
     notify();
