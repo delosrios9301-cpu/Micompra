@@ -20,6 +20,7 @@ const legacy = LEGACY_URL && LEGACY_KEY ? createClient(LEGACY_URL, LEGACY_KEY, {
 
 const auth = getAuth(app);
 const COLLECTION = 'userWorkspaces';
+const PRIMARY_OWNER_EMAIL = 'delosrios9301@gmail.com';
 
 export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} } = {}) {
   let workspace = createEmptyWorkspace();
@@ -34,6 +35,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let authBusy = false;
   let initialized = false;
   let workspaceId = null;
+  let workspaceOwnerUid = null;
 
   const setStatus = value => { status = value; onStatus(status); };
   const notify = () => onChange(workspace, user);
@@ -86,6 +88,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     stopWorkspaceListener();
     user = nextUser || null;
     workspace = createEmptyWorkspace();
+    workspaceOwnerUid = null;
     notify();
 
     if (!user) {
@@ -99,18 +102,53 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     try {
       const accessRef = doc(db, 'workspaceAccess', user.uid);
       const accessSnap = await getDoc(accessRef);
-      if (accessSnap.exists()) {
-        workspaceId = accessSnap.data().workspaceId;
-      } else {
-        workspaceId = user.uid;
-        const existingWorkspace = await getDoc(workspaceRef(workspaceId));
+      const access = accessSnap.exists() ? accessSnap.data() : {};
+      workspaceId = access.workspaceId || user.uid;
+
+      const ref = workspaceRef(workspaceId);
+      const existingWorkspace = await getDoc(ref);
+
+      if (!accessSnap.exists()) {
         if (!existingWorkspace.exists() || !existingWorkspace.data()?.workspace) {
-          await setDoc(workspaceRef(workspaceId), { uid: user.uid, ownerUid: user.uid, email: user.email || '', workspace: createEmptyWorkspace(), schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(ref, {
+            uid: workspaceId,
+            ownerUid: user.uid,
+            email: user.email || '',
+            workspace: createEmptyWorkspace(),
+            schemaVersion: 2,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
         }
-        await setDoc(accessRef, { workspaceId, ownerUid: user.uid, email: user.email || '', role: 'owner', createdAt: serverTimestamp() });
-        if (existingWorkspace.exists() && !existingWorkspace.data()?.ownerUid) {
-          await setDoc(workspaceRef(workspaceId), { ownerUid: user.uid }, { merge: true });
-        }
+        await setDoc(accessRef, {
+          workspaceId,
+          ownerUid: user.uid,
+          email: user.email || '',
+          role: 'owner',
+          createdAt: serverTimestamp()
+        });
+        workspaceOwnerUid = user.uid;
+      } else if ((user.email || '').trim().toLowerCase() === PRIMARY_OWNER_EMAIL) {
+        // La cuenta principal recupera la propiedad del espacio existente sin
+        // crear otro espacio ni tocar los datos compartidos.
+        await setDoc(accessRef, {
+          workspaceId,
+          ownerUid: user.uid,
+          email: user.email || PRIMARY_OWNER_EMAIL,
+          role: 'owner',
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        await setDoc(ref, {
+          uid: workspaceId,
+          ownerUid: user.uid,
+          email: user.email || PRIMARY_OWNER_EMAIL,
+          schemaVersion: 2,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        workspaceOwnerUid = user.uid;
+      } else {
+        workspaceOwnerUid = existingWorkspace.exists()
+          ? (existingWorkspace.data()?.ownerUid || null)
+          : null;
       }
     } catch (error) {
       console.error('Workspace membership:', error);
@@ -118,19 +156,26 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       setStatus('Conexión pendiente: verifica los permisos de acceso.');
       return;
     }
+
     const ref = workspaceRef(workspaceId);
     await new Promise(resolve => {
       let firstSnapshot = true;
       unsubscribeWorkspace = onSnapshot(ref, async snapshot => {
         if (snapshot.exists() && snapshot.data()?.workspace) {
+          workspaceOwnerUid = snapshot.data()?.ownerUid || null;
           workspace = normalizeWorkspace(snapshot.data().workspace);
         } else if (firstSnapshot) {
           workspace = createEmptyWorkspace();
           try {
             await setDoc(ref, {
-              uid: workspaceId, ownerUid: workspaceId, email: user.email || '',
-              workspace, schemaVersion: 2, updatedAt: serverTimestamp()
+              uid: workspaceId,
+              ownerUid: user.uid,
+              email: user.email || '',
+              workspace,
+              schemaVersion: 2,
+              updatedAt: serverTimestamp()
             }, { merge: true });
+            workspaceOwnerUid = user.uid;
           } catch (error) {
             setStatus('No se pudo crear tu espacio en Firebase');
             console.error(error);
@@ -149,7 +194,6 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       });
     });
   }
-
   async function initialize() {
     await setPersistence(auth, indexedDBLocalPersistence);
     await setPersistence(memberAuth, inMemoryPersistence);
@@ -234,17 +278,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     // listo todavía cuando el usuario abre directamente el panel de invitaciones.
     const accessSnap = await getDoc(doc(db, 'workspaceAccess', activeUser.uid));
     const access = accessSnap.exists() ? accessSnap.data() : {};
-    const targetWorkspaceId = workspaceId || access.workspaceId || activeUser.uid;
+    const targetWorkspaceId = access.workspaceId || workspaceId || activeUser.uid;
     if (!targetWorkspaceId) {
       throw new Error('No se pudo identificar el espacio de trabajo de esta sesión.');
     }
 
     const workspaceSnap = await getDoc(workspaceRef(targetWorkspaceId));
     const workspaceData = workspaceSnap.exists() ? workspaceSnap.data() : {};
-    const isOwner = targetWorkspaceId === activeUser.uid
-      || access.role === 'owner'
-      || access.ownerUid === activeUser.uid
-      || workspaceData.ownerUid === activeUser.uid;
+    const isOwner = workspaceData.ownerUid === activeUser.uid;
     if (!isOwner) {
       throw new Error('La cuenta activa no figura como propietaria de este espacio. No necesitas cambiar de sesión: hay que corregir la asignación de propietario en los permisos del espacio.');
     }
@@ -264,7 +305,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, bootstrapPassword);
       const memberAccessRef = doc(db, 'workspaceAccess', credential.user.uid);
       await setDoc(memberAccessRef, {
-        workspaceId, ownerUid: activeUser.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
+        workspaceId: targetWorkspaceId, ownerUid: activeUser.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
       });
       accessCreated = true;
 
@@ -299,6 +340,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     clearTimeout(timer);
     await firebaseSignOut(auth);
     workspaceId = null;
+    workspaceOwnerUid = null;
     await activateUser(null);
   }
 
@@ -336,6 +378,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
   return {
     initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createAccessUser, dispose,
+    isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
     getStatus: () => status,
