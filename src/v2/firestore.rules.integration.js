@@ -61,14 +61,21 @@ test('miembro no puede cambiar propietario ni borrar la membresía de otro usuar
   await assertFails(deleteDoc(doc(db, 'workspaceAccess/owner')));
 });
 
-test('miembro no puede restablecer el espacio sin marcadores de eliminación', async () => {
+test('miembro no puede restablecer el espacio aunque agregue tombstones falsos', async () => {
   const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
   const current = (await getDoc(doc(db, 'userWorkspaces/owner'))).data();
-  const reset = { ...current, workspace: { ...current.workspace, products: [] } };
+  const reset = { ...current, workspace: { ...current.workspace, products: [], deletedRecords: { 'products:inventado': { deletedAt: '2026-11-11T10:00:00.000Z' } } } };
   await assertFails(setDoc(doc(db, 'userWorkspaces/owner'), reset));
 });
 
-test('miembro puede borrar el último registro cuando adjunta el tombstone correspondiente', async () => {
+test('miembro puede borrar un registro cuando conserva otros datos en el espacio', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    const ref = doc(db, 'userWorkspaces/owner');
+    const current = (await getDoc(ref)).data();
+    current.workspace.products.push({ id: 'p2', name: 'Café', createdAt: '2026-11-10T11:00:00.000Z' });
+    await setDoc(ref, current);
+  });
   const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
   const current = (await getDoc(doc(db, 'userWorkspaces/owner'))).data();
   const next = {
