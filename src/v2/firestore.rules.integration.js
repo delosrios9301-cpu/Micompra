@@ -2,7 +2,8 @@ import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { mergeWorkspaces } from './model.js';
 
 const projectId = 'demo-mi-compra-rules';
 let env;
@@ -33,6 +34,9 @@ beforeEach(async () => {
     });
     await setDoc(doc(db, 'workspaceAccess/member'), {
       workspaceId: 'owner', ownerUid: 'owner', role: 'member', email: 'member@example.com'
+    });
+    await setDoc(doc(db, 'workspaceAccess/member2'), {
+      workspaceId: 'owner', ownerUid: 'owner', role: 'member', email: 'member2@example.com'
     });
   });
 });
@@ -96,4 +100,34 @@ test('una cuenta revocada ya no puede leer el espacio compartido', async () => {
   const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
   await assertFails(getDoc(doc(db, 'userWorkspaces/owner')));
   await assertSucceeds(getDoc(doc(db, 'revokedUsers/member')));
+});
+
+test('dos dispositivos concurrentes conservan la alta nueva y propagan el borrado', async () => {
+  const dbA = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const dbB = env.authenticatedContext('member2', { email: 'member2@example.com' }).firestore();
+  const refA = doc(dbA, 'userWorkspaces/owner');
+  const refB = doc(dbB, 'userWorkspaces/owner');
+  const initial = (await getDoc(refA)).data().workspace;
+  const staleDevice = mergeWorkspaces({
+    ...initial,
+    products: [...initial.products, { id: 'p2', name: 'Café', updatedAt: '2026-11-11T11:00:00.000Z' }]
+  }, initial);
+  const deletingDevice = {
+    ...initial,
+    products: [],
+    deletedRecords: { ...initial.deletedRecords, 'products:p1': { deletedAt: '2026-11-11T12:00:00.000Z' } }
+  };
+  const write = (db, ref, local) => runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(ref);
+    const current = snapshot.data();
+    const merged = mergeWorkspaces(local, current.workspace);
+    transaction.set(ref, { ...current, workspace: merged });
+  });
+  await Promise.all([
+    write(dbA, refA, staleDevice),
+    write(dbB, refB, deletingDevice)
+  ]);
+  const finalWorkspace = (await getDoc(refA)).data().workspace;
+  assert.equal(finalWorkspace.products.some(row => row.id === 'p1'), false);
+  assert.equal(finalWorkspace.products.some(row => row.id === 'p2'), true);
 });
