@@ -12,7 +12,8 @@ export function createEmptyWorkspace() {
     movements: [],
     expenses: [],
     budgets: [],
-    activity: []
+    activity: [],
+    deletedRecords: {}
   };
 }
 
@@ -51,7 +52,8 @@ export function normalizeWorkspace(raw = {}) {
     movements: asArray(source.movements),
     expenses: asArray(source.expenses),
     budgets: asArray(source.budgets),
-    activity: asArray(source.activity)
+    activity: asArray(source.activity),
+    deletedRecords: source.deletedRecords && typeof source.deletedRecords === 'object' && !Array.isArray(source.deletedRecords) ? source.deletedRecords : {}
   };
   workspace.profile.currency = ['USD', 'PAB'].includes(workspace.profile.currency) ? workspace.profile.currency : 'USD';
   workspace.products = workspace.products.map(item => ({ ...item, id: asText(item.id) || createId('prd'), name: asText(item.name), active: item.active !== false }));
@@ -72,39 +74,41 @@ export function normalizeWorkspace(raw = {}) {
   return workspace;
 }
 
-function mergeRecords(left = [], right = []) {
+function mergeRecords(left = [], right = [], deletedRecords = {}, prefix = '') {
   const records = new Map();
   for (const item of [...asArray(left), ...asArray(right)]) {
     if (!item || typeof item !== 'object') continue;
     const id = asText(item.id) || createId('rec');
     const previous = records.get(id);
-    if (!previous || stamp(item.updatedAt || item.createdAt) >= stamp(previous.updatedAt || previous.createdAt)) {
-      records.set(id, { ...item, id });
-    }
+    if (!previous || stamp(item.updatedAt || item.createdAt) >= stamp(previous.updatedAt || previous.createdAt)) records.set(id, { ...item, id });
   }
-  return [...records.values()];
+  return [...records.values()].filter(item => stamp(deletedRecords[prefix + String(item.id)]?.deletedAt) < stamp(item.updatedAt || item.createdAt));
 }
 
 export function mergeWorkspaces(local = {}, remote = {}) {
   const a = normalizeWorkspace(local);
   const b = normalizeWorkspace(remote);
+  const deletedRecords = { ...b.deletedRecords, ...a.deletedRecords };
+  for (const key of Object.keys(deletedRecords)) {
+    const leftStamp = stamp(a.deletedRecords[key]?.deletedAt);
+    const rightStamp = stamp(b.deletedRecords[key]?.deletedAt);
+    deletedRecords[key] = leftStamp >= rightStamp ? a.deletedRecords[key] : b.deletedRecords[key];
+  }
   const merged = {
-    ...b,
-    ...a,
-    profile: { ...b.profile, ...a.profile },
-    products: mergeRecords(a.products, b.products),
-    stores: mergeRecords(a.stores, b.stores),
-    lists: mergeRecords(a.lists, b.lists).map(list => {
+    ...b, ...a, deletedRecords, profile: { ...b.profile, ...a.profile },
+    products: mergeRecords(a.products, b.products, deletedRecords, 'products:'),
+    stores: mergeRecords(a.stores, b.stores, deletedRecords, 'stores:'),
+    lists: mergeRecords(a.lists, b.lists, deletedRecords, 'lists:').map(list => {
       const remoteList = b.lists.find(row => row.id === list.id);
       const localList = a.lists.find(row => row.id === list.id);
-      return { ...list, items: mergeRecords(localList?.items || [], remoteList?.items || []) };
+      return { ...list, items: mergeRecords(localList?.items || [], remoteList?.items || [], deletedRecords, 'listItems:' + list.id + ':') };
     }),
-    purchases: mergeRecords(a.purchases, b.purchases),
-    inventory: mergeRecords(a.inventory, b.inventory),
-    movements: mergeRecords(a.movements, b.movements),
-    expenses: mergeRecords(a.expenses, b.expenses),
-    budgets: mergeRecords(a.budgets, b.budgets),
-    activity: mergeRecords(a.activity, b.activity).sort((x, y) => stamp(y.createdAt) - stamp(x.createdAt)).slice(0, 1000)
+    purchases: mergeRecords(a.purchases, b.purchases, deletedRecords, 'purchases:'),
+    inventory: mergeRecords(a.inventory, b.inventory, deletedRecords, 'inventory:'),
+    movements: mergeRecords(a.movements, b.movements, deletedRecords, 'movements:'),
+    expenses: mergeRecords(a.expenses, b.expenses, deletedRecords, 'expenses:'),
+    budgets: mergeRecords(a.budgets, b.budgets, deletedRecords, 'budgets:'),
+    activity: mergeRecords(a.activity, b.activity, deletedRecords, 'activity:').sort((x, y) => stamp(y.createdAt) - stamp(x.createdAt)).slice(0, 1000)
   };
   return normalizeWorkspace(merged);
 }
