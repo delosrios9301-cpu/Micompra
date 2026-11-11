@@ -5,10 +5,10 @@ import {
   deleteUser, sendPasswordResetEmail
 } from 'firebase/auth';
 import {
-  doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp
+  doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
-import { createEmptyWorkspace, normalizeWorkspace } from './model.js';
+import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -219,17 +219,28 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   async function syncNow() {
-    if (!user || syncing) return;
+    if (!user) return;
+    if (syncing) { scheduleSync(); return; }
     syncing = true;
     setStatus('Guardando en Firebase');
     try {
-      await setDoc(workspaceRef(workspaceId || user.uid), {
-        uid: workspaceId || user.uid,
-        email: user.email || '',
-        workspace: normalizeWorkspace(workspace),
-        schemaVersion: 2,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const ref = workspaceRef(workspaceId || user.uid);
+      const localSnapshot = normalizeWorkspace(workspace);
+      const merged = await runTransaction(db, async transaction => {
+        const latest = await transaction.get(ref);
+        const remote = latest.exists() ? normalizeWorkspace(latest.data()?.workspace) : createEmptyWorkspace();
+        const safeMerge = mergeWorkspaces(localSnapshot, remote);
+        transaction.set(ref, {
+          uid: workspaceId || user.uid,
+          email: user.email || '',
+          workspace: safeMerge,
+          schemaVersion: 2,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        return safeMerge;
+      });
+      workspace = normalizeWorkspace(merged);
+      notify();
       setStatus('Sincronizado con Firebase');
     } catch (error) {
       setStatus('Error al guardar en Firebase');
@@ -350,6 +361,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
   async function resetWorkspace() {
     if (!user) throw new Error('Inicia sesión para borrar los datos guardados en la nube.');
+    if (workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede restablecer y borrar los datos compartidos.');
     clearTimeout(timer);
     workspace = createEmptyWorkspace();
     await setDoc(workspaceRef(workspaceId || user.uid), {
