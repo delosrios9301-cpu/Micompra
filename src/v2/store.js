@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import {
   getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, inMemoryPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut,
@@ -14,9 +13,6 @@ import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './mod
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
 const LEGACY_URL = import.meta.env.VITE_SUPABASE_URL;
 const LEGACY_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const legacy = LEGACY_URL && LEGACY_KEY ? createClient(LEGACY_URL, LEGACY_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-}) : null;
 
 const auth = getAuth(app);
 const COLLECTION = 'userWorkspaces';
@@ -31,6 +27,9 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let unsubscribeAuth = null;
   let timer = null;
   let syncing = false;
+  let dirty = false;
+  let unsubscribeAccess = null;
+  let unsubscribeRevoked = null;
   let pendingCredentials = null;
   let authBusy = false;
   let initialized = false;
@@ -42,17 +41,20 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   const workspaceRef = uid => doc(db, COLLECTION, uid);
 
   async function migrateLegacyWorkspace(firebaseUser, credentials) {
-    if (!legacy || !credentials?.email || !credentials?.password) return false;
+    if (!LEGACY_URL || !LEGACY_KEY || !credentials?.email || !credentials?.password) return false;
+    let legacyClient = null;
     const target = workspaceRef(firebaseUser.uid);
     const existing = await getDoc(target);
     if (existing.exists() && existing.data()?.workspace) return false;
 
     try {
-      const { data: authData, error: authError } = await legacy.auth.signInWithPassword({
+      const { createClient } = await import('@supabase/supabase-js');
+      legacyClient = createClient(LEGACY_URL, LEGACY_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+      const { data: authData, error: authError } = await legacyClient.auth.signInWithPassword({
         email: credentials.email, password: credentials.password
       });
       if (authError || !authData?.user) return false;
-      const { data, error } = await legacy.from('personal_workspace')
+      const { data, error } = await legacyClient.from('personal_workspace')
         .select('data').eq('user_id', authData.user.id).maybeSingle();
       if (error) throw error;
       const oldRoot = data?.data && typeof data.data === 'object' ? data.data : {};
@@ -73,13 +75,17 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       console.warn('Legacy workspace migration:', error?.message || error);
       return false;
     } finally {
-      await legacy.auth.signOut().catch(() => {});
+      await legacyClient?.auth.signOut().catch(() => {});
     }
   }
 
   function stopWorkspaceListener() {
     if (unsubscribeWorkspace) unsubscribeWorkspace();
     unsubscribeWorkspace = null;
+    unsubscribeAccess?.(); unsubscribeAccess = null;
+    unsubscribeRevoked?.(); unsubscribeRevoked = null;
+    unsubscribeAccess?.(); unsubscribeAccess = null;
+    unsubscribeRevoked?.(); unsubscribeRevoked = null;
   }
 
   async function activateUser(nextUser) {
@@ -167,13 +173,30 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       return;
     }
 
+    const accessRef = doc(db, 'workspaceAccess', user.uid);
+    const revokedRef = doc(db, 'revokedUsers', user.uid);
+    const terminateAccess = async reason => {
+      if (!user || user.uid !== nextId) return;
+      clearTimeout(timer); dirty = false; workspace = createEmptyWorkspace(); workspaceId = null; workspaceOwnerUid = null; initialized = false;
+      notify(); setStatus(reason);
+      await firebaseSignOut(auth).catch(() => {});
+    };
+    unsubscribeRevoked = onSnapshot(revokedRef, snapshot => {
+      if (snapshot.exists()) void terminateAccess('El propietario revocó tu acceso. La sesión se cerró.');
+    }, error => console.warn('Revocation listener:', error?.message || error));
+    unsubscribeAccess = onSnapshot(accessRef, snapshot => {
+      if (!snapshot.exists()) void terminateAccess('Tu autorización fue retirada. La sesión se cerró.');
+    }, error => console.warn('Membership listener:', error?.message || error));
+
     const ref = workspaceRef(workspaceId);
     await new Promise(resolve => {
       let firstSnapshot = true;
       unsubscribeWorkspace = onSnapshot(ref, async snapshot => {
         if (snapshot.exists() && snapshot.data()?.workspace) {
           workspaceOwnerUid = snapshot.data()?.ownerUid || null;
-          workspace = normalizeWorkspace(snapshot.data().workspace);
+          const incoming = normalizeWorkspace(snapshot.data().workspace);
+          workspace = dirty ? mergeWorkspaces(workspace, incoming) : incoming;
+          if (dirty) scheduleSync();
         } else if (firstSnapshot) {
           workspace = createEmptyWorkspace();
           try {
@@ -250,6 +273,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         return safeMerge;
       });
       workspace = normalizeWorkspace(merged);
+      dirty = false;
       notify();
       setStatus('Sincronizado con Firebase');
     } catch (error) {
@@ -399,6 +423,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     if (!user) throw new Error('Inicia sesión para borrar los datos guardados en la nube.');
     if (workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede restablecer y borrar los datos compartidos.');
     clearTimeout(timer);
+    dirty = false;
     workspace = createEmptyWorkspace();
     await setDoc(workspaceRef(workspaceId || user.uid), {
       uid: workspaceId || user.uid, ownerUid: workspaceId || user.uid, email: user.email || '', workspace,
@@ -413,7 +438,22 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       setStatus('Inicia sesión: los datos solo se guardan en la nube');
       return;
     }
-    workspace = normalizeWorkspace(next);
+    const previous = normalizeWorkspace(workspace);
+    const incoming = normalizeWorkspace(next);
+    const now = new Date().toISOString();
+    const collections = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+    incoming.deletedRecords = { ...previous.deletedRecords, ...incoming.deletedRecords };
+    for (const collectionName of collections) {
+      const nextIds = new Set(incoming[collectionName].map(row => row.id));
+      for (const row of previous[collectionName]) if (!nextIds.has(row.id)) incoming.deletedRecords[collectionName + ':' + row.id] = { deletedAt: now };
+    }
+    for (const oldList of previous.lists) {
+      const newList = incoming.lists.find(row => row.id === oldList.id);
+      const nextItemIds = new Set((newList?.items || []).map(row => row.id));
+      for (const item of oldList.items || []) if (!nextItemIds.has(item.id)) incoming.deletedRecords['listItems:' + oldList.id + ':' + item.id] = { deletedAt: now };
+    }
+    workspace = normalizeWorkspace(incoming);
+    dirty = true;
     notify();
     scheduleSync();
   }
