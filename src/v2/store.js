@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import {
-  getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence,
+  getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, inMemoryPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import {
   doc, getDoc, setDoc, onSnapshot, serverTimestamp
 } from 'firebase/firestore';
-import { app, db } from './firebase.js';
+import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace } from './model.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
@@ -33,6 +33,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let pendingCredentials = null;
   let authBusy = false;
   let initialized = false;
+  let workspaceId = null;
 
   const setStatus = value => { status = value; onStatus(status); };
   const notify = () => onChange(workspace, user);
@@ -93,7 +94,24 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
 
     setStatus('Cargando tus datos desde Firebase');
-    const ref = workspaceRef(user.uid);
+    try {
+      const accessRef = doc(db, 'workspaceAccess', user.uid);
+      const accessSnap = await getDoc(accessRef);
+      if (accessSnap.exists()) {
+        workspaceId = accessSnap.data().workspaceId;
+      } else {
+        workspaceId = user.uid;
+        const initialWorkspace = createEmptyWorkspace();
+        await setDoc(workspaceRef(workspaceId), { uid: user.uid, ownerUid: user.uid, email: user.email || '', workspace: initialWorkspace, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(accessRef, { workspaceId, ownerUid: user.uid, email: user.email || '', role: 'owner', createdAt: serverTimestamp() });
+      }
+    } catch (error) {
+      console.error('Workspace membership:', error);
+      initialized = true;
+      setStatus('No se pudo cargar el espacio familiar. Revisa las reglas de Firestore.');
+      return;
+    }
+    const ref = workspaceRef(workspaceId);
     await new Promise(resolve => {
       let firstSnapshot = true;
       unsubscribeWorkspace = onSnapshot(ref, async snapshot => {
@@ -103,7 +121,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
           workspace = createEmptyWorkspace();
           try {
             await setDoc(ref, {
-              uid: user.uid, email: user.email || '',
+              uid: workspaceId, ownerUid: workspaceId, email: user.email || '',
               workspace, schemaVersion: 2, updatedAt: serverTimestamp()
             }, { merge: true });
           } catch (error) {
@@ -127,6 +145,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
   async function initialize() {
     await setPersistence(auth, indexedDBLocalPersistence);
+    await setPersistence(memberAuth, inMemoryPersistence);
     await new Promise(resolve => {
       let first = true;
       unsubscribeAuth = onAuthStateChanged(auth, async nextUser => {
@@ -153,8 +172,8 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     syncing = true;
     setStatus('Guardando en Firebase');
     try {
-      await setDoc(workspaceRef(user.uid), {
-        uid: user.uid,
+      await setDoc(workspaceRef(workspaceId || user.uid), {
+        uid: workspaceId || user.uid,
         email: user.email || '',
         workspace: normalizeWorkspace(workspace),
         schemaVersion: 2,
@@ -198,9 +217,30 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
   }
 
+  async function createFamilyUser(email, password) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión como propietario para agregar un familiar.');
+    if (workspaceId !== user.uid) throw new Error('Solo el propietario del espacio puede agregar usuarios.');
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail || String(password || '').length < 8) throw new Error('Indica un correo válido y una contraseña de al menos 8 caracteres.');
+    let credential;
+    try {
+      credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, password);
+      await setDoc(doc(db, 'workspaceAccess', credential.user.uid), {
+        workspaceId, ownerUid: user.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
+      });
+      return { uid: credential.user.uid, email: normalizedEmail };
+    } catch (error) {
+      if (credential?.user) await firebaseSignOut(memberAuth).catch(() => {});
+      throw error;
+    } finally {
+      await firebaseSignOut(memberAuth).catch(() => {});
+    }
+  }
+
   async function signOut() {
     clearTimeout(timer);
     await firebaseSignOut(auth);
+    workspaceId = null;
     await activateUser(null);
   }
 
@@ -237,7 +277,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createFamilyUser, dispose,
     getState: () => workspace,
     getUser: () => user,
     getStatus: () => status,
