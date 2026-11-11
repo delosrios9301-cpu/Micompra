@@ -85,8 +85,6 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     unsubscribeWorkspace = null;
     unsubscribeAccess?.(); unsubscribeAccess = null;
     unsubscribeRevoked?.(); unsubscribeRevoked = null;
-    unsubscribeAccess?.(); unsubscribeAccess = null;
-    unsubscribeRevoked?.(); unsubscribeRevoked = null;
   }
 
   async function activateUser(nextUser) {
