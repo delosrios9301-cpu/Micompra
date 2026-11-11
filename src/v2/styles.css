@@ -27,3 +27,12 @@
 .nav-link,.btn,.tool-card,.account-button,.topbar-title,.panel-heading,.entity-card,.inventory-row,.purchase-history-row,.expense-row{align-items:center;line-height:1.25}
 .btn,.tool-card{text-align:center;justify-content:center}
 .mobile-nav .nav-link{justify-content:center;align-items:center}
+
+/* Compact price entry in the prepared purchase list */
+.draft-line{gap:7px;align-items:center}
+.draft-product-copy{min-width:0;gap:4px!important}
+.draft-price-field{display:flex;align-items:center;gap:7px;width:max-content;max-width:100%;color:#75838b;font-size:9px;font-weight:600}
+.draft-price-field span{white-space:nowrap}
+.draft-price-field input{width:88px!important;max-width:88px;min-width:0!important;padding:5px 7px!important;border:1px solid #dfe5e9;border-radius:7px;background:#fff;color:#304b5b;font-size:11px!important;line-height:1.2}
+.draft-line-total{flex:none;white-space:nowrap}
+@media(max-width:420px){.draft-price-field{gap:5px}.draft-price-field input{width:76px!important;max-width:76px;padding:5px 6px!important}.draft-line{gap:5px}}
