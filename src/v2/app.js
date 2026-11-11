@@ -781,21 +781,15 @@ root.addEventListener('input', event => {
 root.addEventListener('change', event => {
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
-    if (!store.isWorkspaceOwner()) {
-      showToast('Solo la cuenta propietaria puede restaurar copias de seguridad.', 'info');
-      event.target.value = '';
-      return;
-    }
     file.text().then(text => {
       const parsed = JSON.parse(text);
       if (!parsed || parsed.app !== 'Mi Compra 2.0' || !parsed.workspace || typeof parsed.workspace !== 'object') {
         throw new Error('El archivo no corresponde a una copia válida de Mi Compra 2.0.');
       }
-      const restored = normalizeWorkspace(parsed.workspace);
+      if (!store.isWorkspaceOwner()) throw new Error('Solo la cuenta propietaria puede restaurar copias de seguridad.');
       if (!window.confirm('¿Restaurar esta copia? Los datos actuales se combinarán con la copia y no se eliminarán registros coincidentes más recientes.')) return;
-      workspace = mergeWorkspaces(restored, workspace);
-      logActivity('Configuración', 'Respaldo restaurado', 'Se importó una copia de seguridad.');
-      persist('Copia restaurada y combinada con los datos actuales.');
+      store.restoreBackup(parsed);
+      showToast('Copia restaurada y combinada con los datos actuales.');
     }).catch(error => showToast('No se pudo leer el respaldo: ' + error.message, 'info'))
       .finally(() => { event.target.value = ''; });
   }
