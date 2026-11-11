@@ -203,7 +203,7 @@ function storeOptions(selected = '') {
 }
 function renderShopping() {
   const storeSelect = '<select name="storeId">' + storeOptions() + '</select>';
-  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><small>' + item.quantity + ' ' + safe(item.unit) + '</small><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
+  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><div class="draft-quantity-control"><span>Cantidad</span><button type="button" class="draft-qty-button" data-action="draft-qty-minus" data-index="' + index + '" aria-label="Restar una unidad">−</button><input type="number" min="0.01" step="1" inputmode="decimal" aria-label="Cantidad de ' + safe(item.name) + '" data-draft-qty="' + index + '" value="' + item.quantity + '"><button type="button" class="draft-qty-button" data-action="draft-qty-plus" data-index="' + index + '" aria-label="Sumar una unidad">+</button><small>' + safe(item.unit) + '</small></div><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
   const draftTotal = computePurchaseTotal(purchaseDraft);
   const history = workspace.purchases.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(item =>
     '<article class="purchase-history-row"><span class="entity-symbol symbol-green">' + icon('cart', 18) + '</span><div class="entity-copy"><strong>' + safe(item.storeName || 'Compra sin establecimiento') + '</strong><small>' + dateLabel(item.date) + ' · ' + item.items.length + ' productos · ' + (item.paid ? 'Pagada' : 'Pendiente de pago') + '</small></div><strong class="purchase-total">' + money(item.total) + '</strong></article>'
@@ -469,6 +469,9 @@ function handleAction(action, target) {
       render();
       showToast('Lista preparada. Revisa y completa los precios reales.');
     }
+  } else if (action === 'draft-qty-plus' || action === 'draft-qty-minus') {
+    const item = purchaseDraft[Number(target.dataset.index)];
+    if (item) { item.quantity = Math.max(0.01, Math.round((Number(item.quantity || 1) + (action === 'draft-qty-plus' ? 1 : -1)) * 100) / 100); render(); }
   } else if (action === 'remove-draft-line') {
     purchaseDraft.splice(Number(target.dataset.index), 1); render();
   } else if (action === 'confirm-purchase') confirmPurchase();
@@ -686,11 +689,13 @@ root.addEventListener('click', event => {
 });
 root.addEventListener('submit', handleSubmit);
 root.addEventListener('input', event => {
-  if (event.target.matches('[data-draft-price]')) {
-    const index = Number(event.target.dataset.draftPrice);
+  if (event.target.matches('[data-draft-price], [data-draft-qty]')) {
+    const isPrice = event.target.matches('[data-draft-price]');
+    const index = Number(isPrice ? event.target.dataset.draftPrice : event.target.dataset.draftQty);
     const item = purchaseDraft[index];
     if (item) {
-      item.unitPrice = Math.max(0, Number(event.target.value) || 0);
+      if (isPrice) item.unitPrice = Math.max(0, Number(event.target.value) || 0);
+      else item.quantity = Math.max(0.01, Number(event.target.value) || 0.01);
       const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
       if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
       const total = document.getElementById('purchase-draft-total');
