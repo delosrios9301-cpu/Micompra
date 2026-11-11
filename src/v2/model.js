@@ -38,14 +38,21 @@ export function normalizeWorkspace(raw = {}) {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const empty = createEmptyWorkspace();
   const workspace = {
-    ...empty,
-    ...source,
     version: WORKSPACE_VERSION,
-    profile: { ...empty.profile, ...(source.profile || {}) }
+    profile: {
+      name: asText(source.profile?.name) || empty.profile.name,
+      currency: ['USD', 'PAB'].includes(source.profile?.currency) ? source.profile.currency : empty.profile.currency
+    },
+    products: asArray(source.products),
+    stores: asArray(source.stores),
+    lists: asArray(source.lists),
+    purchases: asArray(source.purchases),
+    inventory: asArray(source.inventory),
+    movements: asArray(source.movements),
+    expenses: asArray(source.expenses),
+    budgets: asArray(source.budgets),
+    activity: asArray(source.activity)
   };
-  for (const key of ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity']) {
-    workspace[key] = asArray(source[key]);
-  }
   workspace.profile.currency = ['USD', 'PAB'].includes(workspace.profile.currency) ? workspace.profile.currency : 'USD';
   workspace.products = workspace.products.map(item => ({ ...item, id: asText(item.id) || createId('prd'), name: asText(item.name), active: item.active !== false }));
   workspace.stores = workspace.stores.map(item => ({ ...item, id: asText(item.id) || createId('str'), name: asText(item.name), active: item.active !== false }));
