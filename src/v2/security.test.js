@@ -30,6 +30,18 @@ test('la interfaz protege restauración y muestra la confirmación de borrado so
   assert.match(app, /Solo el propietario puede borrar los datos compartidos/);
 });
 
+test('la restauración de respaldos se centraliza y exige propiedad del espacio', async () => {
+  const store = await read('./store.js');
+  const app = await read('./app.js');
+  assert.match(store, /function restoreBackup\(backup\)/);
+  assert.match(store, /workspaceOwnerUid !== user\.uid/);
+  assert.match(store, /backup\.app !== 'Mi Compra 2\.0'/);
+  assert.match(store, /const merged = mergeWorkspaces\(restored, workspace\)/);
+  assert.match(store, /restoreBackup, createAccessUser/);
+  assert.match(app, /store\.restoreBackup\(parsed\)/);
+  assert.doesNotMatch(app, /workspace = mergeWorkspaces\(restored, workspace\)/);
+});
+
 test('el inicio de sesión devuelve la navegación a Inicio', async () => {
   const app = await read('./app.js');
   assert.match(app, /promise\.then\(result => \{\s*currentView = 'inicio';\s*selectedListId = null;/);
