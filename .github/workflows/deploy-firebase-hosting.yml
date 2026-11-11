@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.18.0
 
       - name: Authenticate to Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@v2
@@ -39,4 +39,4 @@ jobs:
           VITE_BASE_PATH: /
 
       - name: Deploy to Firebase Hosting
-        run: npx --yes firebase-tools@15.22.1 deploy --only hosting --project mi-compra-d9717 --non-interactive
+        run: npx --yes firebase-tools@15.22.3 deploy --only hosting --project mi-compra-d9717 --non-interactive
