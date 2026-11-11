@@ -14,7 +14,8 @@
   "dependencies": {
     "@capacitor/android": "8.6.0",
     "@capacitor/core": "8.6.0",
-    "@supabase/supabase-js": "2.119.0"
+    "@supabase/supabase-js": "2.119.0",
+    "firebase": "^12.5.0"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",
