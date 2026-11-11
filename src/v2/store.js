@@ -104,10 +104,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         const existingWorkspace = await getDoc(workspaceRef(workspaceId));
         if (!existingWorkspace.exists() || !existingWorkspace.data()?.workspace) {
           await setDoc(workspaceRef(workspaceId), { uid: user.uid, ownerUid: user.uid, email: user.email || '', workspace: createEmptyWorkspace(), schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
-        } else if (!existingWorkspace.data()?.ownerUid) {
-          await setDoc(workspaceRef(workspaceId), { ownerUid: user.uid }, { merge: true });
         }
         await setDoc(accessRef, { workspaceId, ownerUid: user.uid, email: user.email || '', role: 'owner', createdAt: serverTimestamp() });
+        if (existingWorkspace.exists() && !existingWorkspace.data()?.ownerUid) {
+          await setDoc(workspaceRef(workspaceId), { ownerUid: user.uid }, { merge: true });
+        }
       }
     } catch (error) {
       console.error('Workspace membership:', error);
