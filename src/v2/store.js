@@ -171,6 +171,24 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     return { workspace, user, configured };
   }
 
+  async function resetWorkspace() {
+    clearTimeout(timer);
+    pendingSync = false;
+    while (syncing) await new Promise(resolve => setTimeout(resolve, 40));
+    stopRealtime();
+    const empty = createEmptyWorkspace();
+    try {
+      // Write the empty workspace directly: merging here would resurrect deleted records.
+      if (client && user) await writeCloud(empty);
+      workspace = empty;
+      writeLocal();
+      notify();
+      setStatus(user && client ? 'Sincronizado' : configured ? 'Inicia sesión para sincronizar' : 'Solo en este dispositivo');
+    } finally {
+      if (client && user) startRealtime();
+    }
+  }
+
   function save(next) {
     workspace = normalizeWorkspace(next);
     writeLocal();
@@ -218,7 +236,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, dispose,
     getState: () => workspace,
     getUser: () => user,
     getStatus: () => status,
