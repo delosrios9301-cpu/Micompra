@@ -82,7 +82,7 @@ test('miembro puede borrar un registro cuando conserva otros datos en el espacio
     ...current,
     workspace: {
       ...current.workspace,
-      products: [],
+      products: current.workspace.products.filter(row => row.id !== 'p1'),
       deletedRecords: { 'products:p1': { deletedAt: '2026-11-11T10:00:00.000Z' } }
     }
   };
@@ -110,6 +110,13 @@ test('una cuenta revocada ya no puede leer el espacio compartido', async () => {
 });
 
 test('dos dispositivos concurrentes conservan la alta nueva y propagan el borrado', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    const ref = doc(db, 'userWorkspaces/owner');
+    const current = (await getDoc(ref)).data();
+    current.workspace.products.push({ id: 'p2', name: 'Arroz', createdAt: '2026-11-10T11:00:00.000Z' });
+    await setDoc(ref, current);
+  });
   const dbA = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
   const dbB = env.authenticatedContext('member2', { email: 'member2@example.com' }).firestore();
   const refA = doc(dbA, 'userWorkspaces/owner');
@@ -117,7 +124,7 @@ test('dos dispositivos concurrentes conservan la alta nueva y propagan el borrad
   const initial = (await getDoc(refA)).data().workspace;
   const staleDevice = mergeWorkspaces({
     ...initial,
-    products: [...initial.products, { id: 'p2', name: 'Café', updatedAt: '2026-11-11T11:00:00.000Z' }]
+    products: [...initial.products, { id: 'p3', name: 'Café', updatedAt: '2026-11-11T11:00:00.000Z' }]
   }, initial);
   const deletingDevice = {
     ...initial,
@@ -137,4 +144,5 @@ test('dos dispositivos concurrentes conservan la alta nueva y propagan el borrad
   const finalWorkspace = (await getDoc(refA)).data().workspace;
   assert.equal(finalWorkspace.products.some(row => row.id === 'p1'), false);
   assert.equal(finalWorkspace.products.some(row => row.id === 'p2'), true);
+  assert.equal(finalWorkspace.products.some(row => row.id === 'p3'), true);
 });
