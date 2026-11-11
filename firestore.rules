@@ -25,7 +25,7 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid && userId != request.auth.uid;
     }
     match /userWorkspaces/{workspaceId} {
-      allow read: if isWorkspaceMember(workspaceId);
+      allow read: if signedIn() && (request.auth.uid == workspaceId || isWorkspaceMember(workspaceId));
       allow create: if signedIn() && request.auth.uid == workspaceId
         && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isWorkspaceMember(workspaceId);
