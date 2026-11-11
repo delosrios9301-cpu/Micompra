@@ -102,3 +102,9 @@ test('la sincronización conserva cambios locales pendientes al recibir una inst
   assert.match(store, /dirty = true/);
   assert.match(store, /dirty = false/);
 });
+
+test('las reglas permiten propagar borrados individuales sin abrir el restablecimiento total', async () => {
+  const rules = await read('../../firestore.rules');
+  assert.match(rules, /function hasNewDeletionMarkers\(\)/);
+  assert.match(rules, /hasNewDeletionMarkers\(\)/);
+});
