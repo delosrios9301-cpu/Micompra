@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
-  // GitHub Pages necesita la ruta del repositorio; Capacitor necesita rutas relativas.
-  base: process.env.CAPACITOR_BUILD === 'true' ? './' : '/Micompra/'
-});
+// GitHub Pages publica en /Micompra/; Firebase Hosting publica en la raíz.
+const base = process.env.VITE_BASE_PATH
+  || (process.env.CAPACITOR_BUILD === 'true' ? './' : '/Micompra/');
+
+export default defineConfig({ base });
