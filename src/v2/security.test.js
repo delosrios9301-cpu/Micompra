@@ -42,6 +42,13 @@ test('la restauración de respaldos se centraliza y exige propiedad del espacio'
   assert.doesNotMatch(app, /workspace = mergeWorkspaces\(restored, workspace\)/);
 });
 
+test('el almacén libera cada listener de acceso y revocación una sola vez', async () => {
+  const store = await read('./store.js');
+  const cleanup = store.slice(store.indexOf('function stopWorkspaceListener()'), store.indexOf('async function activateUser'));
+  assert.equal((cleanup.match(/unsubscribeAccess\?\.\(\)/g) || []).length, 1);
+  assert.equal((cleanup.match(/unsubscribeRevoked\?\.\(\)/g) || []).length, 1);
+});
+
 test('el inicio de sesión devuelve la navegación a Inicio', async () => {
   const app = await read('./app.js');
   assert.match(app, /promise\.then\(result => \{\s*currentView = 'inicio';\s*selectedListId = null;/);
