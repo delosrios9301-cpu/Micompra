@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createEmptyWorkspace, mergeWorkspaces } from './model.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
@@ -58,4 +59,46 @@ test('Configuración muestra usuarios y permite revocar accesos solo al propieta
   assert.match(app, /Usuarios con acceso/);
   assert.match(app, /data-action="revoke-access-user"/);
   assert.match(app, /Solo el propietario puede revocar accesos/);
+});
+
+test('la eliminación de un registro prevalece frente a un dispositivo atrasado', () => {
+  const stale = createEmptyWorkspace();
+  stale.products = [{ id: 'p1', name: 'Leche', updatedAt: '2026-11-10T10:00:00.000Z' }];
+  const deleted = createEmptyWorkspace();
+  deleted.deletedRecords = { 'products:p1': { deletedAt: '2026-11-11T10:00:00.000Z' } };
+  const merged = mergeWorkspaces(stale, deleted);
+  assert.equal(merged.products.some(row => row.id === 'p1'), false);
+});
+
+test('una edición legítima posterior a una eliminación puede recrear el registro', () => {
+  const old = createEmptyWorkspace();
+  old.deletedRecords = { 'products:p1': { deletedAt: '2026-11-10T10:00:00.000Z' } };
+  const recreated = createEmptyWorkspace();
+  recreated.products = [{ id: 'p1', name: 'Leche', updatedAt: '2026-11-11T10:00:00.000Z' }];
+  recreated.deletedRecords = old.deletedRecords;
+  assert.equal(mergeWorkspaces(recreated, old).products.length, 1);
+});
+
+test('los borrados de artículos dentro de listas también se propagan', () => {
+  const stale = createEmptyWorkspace();
+  stale.lists = [{ id: 'l1', name: 'Compra', items: [{ id: 'i1', name: 'Arroz', updatedAt: '2026-11-10T10:00:00.000Z' }] }];
+  const deleted = createEmptyWorkspace();
+  deleted.lists = [{ id: 'l1', name: 'Compra', items: [] }];
+  deleted.deletedRecords = { 'listItems:l1:i1': { deletedAt: '2026-11-11T10:00:00.000Z' } };
+  assert.equal(mergeWorkspaces(stale, deleted).lists[0].items.length, 0);
+});
+
+test('el almacén escucha revocaciones y elimina los datos cargados', async () => {
+  const store = await read('./store.js');
+  assert.match(store, /onSnapshot\(revokedRef/);
+  assert.match(store, /onSnapshot\(accessRef/);
+  assert.match(store, /workspace = createEmptyWorkspace\(\)/);
+  assert.match(store, /firebaseSignOut\(auth\)/);
+});
+
+test('la sincronización conserva cambios locales pendientes al recibir una instantánea remota', async () => {
+  const store = await read('./store.js');
+  assert.match(store, /workspace = dirty \? mergeWorkspaces\(workspace, incoming\) : incoming/);
+  assert.match(store, /dirty = true/);
+  assert.match(store, /dirty = false/);
 });
