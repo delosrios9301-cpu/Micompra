@@ -2,10 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import {
   getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, inMemoryPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut,
-  sendPasswordResetEmail
+  deleteUser, sendPasswordResetEmail
 } from 'firebase/auth';
 import {
-  doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace } from './model.js';
@@ -224,9 +224,10 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
   }
 
-  async function createFamilyUser(email, password) {
+  async function createAccessUser(email) {
     const activeUser = auth.currentUser || user;
     if (!activeUser || !workspaceId) throw new Error('Tu sesión no está activa. Inicia sesión con tu cuenta administradora para continuar.');
+
     const accessSnap = await getDoc(doc(db, 'workspaceAccess', activeUser.uid));
     const workspaceSnap = await getDoc(workspaceRef(workspaceId));
     const access = accessSnap.exists() ? accessSnap.data() : {};
@@ -235,18 +236,49 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       || access.role === 'owner'
       || access.ownerUid === activeUser.uid
       || workspaceData.ownerUid === activeUser.uid;
-    if (!isOwner) throw new Error('Esta cuenta no tiene permisos de administración para crear usuarios.');
+    if (!isOwner) throw new Error('Esta cuenta no tiene permisos de administración para invitar usuarios.');
+
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (!normalizedEmail || String(password || '').length < 8) throw new Error('Indica un correo válido y una contraseña de al menos 8 caracteres.');
-    let credential;
+    if (!normalizedEmail) throw new Error('Escribe el correo electrónico de la persona que recibirá la invitación.');
+
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%*-_';
+    const randomBytes = new Uint8Array(48);
+    if (!globalThis.crypto?.getRandomValues) throw new Error('No se pudo generar una clave segura para preparar la invitación.');
+    globalThis.crypto.getRandomValues(randomBytes);
+    const bootstrapPassword = Array.from(randomBytes, byte => alphabet[byte % alphabet.length]).join('') + 'aA1!';
+
+    let credential = null;
+    let accessCreated = false;
+    const accessRef = doc(db, 'workspaceAccess', 'pending');
     try {
-      credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, password);
-      await setDoc(doc(db, 'workspaceAccess', credential.user.uid), {
-        workspaceId, ownerUid: user.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
+      credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, bootstrapPassword);
+      const memberAccessRef = doc(db, 'workspaceAccess', credential.user.uid);
+      await setDoc(memberAccessRef, {
+        workspaceId, ownerUid: activeUser.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
+      });
+      accessCreated = true;
+
+      auth.languageCode = 'es';
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: 'https://mi-compra-d9717.web.app/'
       });
       return { uid: credential.user.uid, email: normalizedEmail };
     } catch (error) {
-      if (credential?.user) await firebaseSignOut(memberAuth).catch(() => {});
+      if (credential?.user) {
+        if (accessCreated) {
+          await deleteDoc(doc(db, 'workspaceAccess', credential.user.uid)).catch(() => {});
+        }
+        await deleteUser(credential.user).catch(() => {});
+      }
+      if (error?.code === 'auth/email-already-in-use') {
+        throw new Error('Ese correo ya tiene una cuenta en Mi Compra. No se creó otra invitación.');
+      }
+      if (error?.code === 'auth/unauthorized-continue-uri' || error?.code === 'auth/invalid-continue-uri') {
+        throw new Error('Firebase no tiene autorizado el enlace de regreso a Mi Compra para enviar la invitación.');
+      }
+      if (error?.code === 'permission-denied' || error?.code === 'firestore/permission-denied') {
+        throw new Error('Firebase bloqueó la asignación de acceso. Hay que publicar las reglas de Firestore antes de invitar usuarios.');
+      }
       throw error;
     } finally {
       await firebaseSignOut(memberAuth).catch(() => {});
@@ -293,7 +325,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createFamilyUser, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, createAccessUser, dispose,
     getState: () => workspace,
     getUser: () => user,
     getStatus: () => status,
