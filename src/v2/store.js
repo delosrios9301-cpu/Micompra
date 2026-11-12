@@ -478,6 +478,16 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
     const recordsRef = collection(db, COLLECTION, targetWorkspaceId, 'records');
     const batchSize = 350;
+    const expectedKeys = new Set(records.map(record => record.key));
+    const priorCopy = await getDocs(recordsRef);
+    const obsoleteDocs = priorCopy.docs.filter(item => !expectedKeys.has(item.id) && !item.data()?.migrationObsolete);
+    for (let offset = 0; offset < obsoleteDocs.length; offset += batchSize) {
+      const batch = writeBatch(db);
+      obsoleteDocs.slice(offset, offset + batchSize).forEach(item => {
+        batch.set(item.ref, { ...item.data(), migrationObsolete: true, obsoleteAt: new Date().toISOString() });
+      });
+      await batch.commit();
+    }
     for (let offset = 0; offset < records.length; offset += batchSize) {
       const batch = writeBatch(db);
       const part = records.slice(offset, offset + batchSize);
@@ -495,10 +505,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     }
 
     const copied = await getDocs(recordsRef);
-    if (copied.size !== records.length) {
-      throw new Error('La verificación detectó diferencias: se esperaban ' + records.length + ' registros y se encontraron ' + copied.size + '. El origen permanece intacto; puedes volver a ejecutar la copia.');
+    const activeCopied = copied.docs.filter(item => !item.data()?.migrationObsolete);
+    if (activeCopied.length !== records.length) {
+      throw new Error('La verificación detectó diferencias: se esperaban ' + records.length + ' registros activos y se encontraron ' + activeCopied.length + '. El origen permanece intacto; puedes volver a ejecutar la copia.');
     }
-    const copiedById = new Map(copied.docs.map(item => [item.id, item.data()]));
+    const copiedById = new Map(activeCopied.map(item => [item.id, item.data()]));
     for (const record of records) {
       const target = copiedById.get(record.key);
       if (!target || target.type !== record.type || target.recordId !== record.recordId || stableJson(target.data) !== stableJson(record.data)) {
