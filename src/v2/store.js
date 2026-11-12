@@ -151,14 +151,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         notify();
         return;
       }
-      // Registro informativo: nunca bloquea el acceso ni modifica los datos compartidos.
-    try {
-      await registerCompatibleDevice();
-    } catch (error) {
-      console.warn('Registro de dispositivo compatible:', error?.message || error);
-    }
-
-    const accessRef = doc(db, 'workspaceAccess', user.uid);
+      const accessRef = doc(db, 'workspaceAccess', user.uid);
       const accessSnap = await getDoc(accessRef);
       const access = accessSnap.exists() ? accessSnap.data() : {};
       workspaceId = access.workspaceId || user.uid;
@@ -213,6 +206,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       initialized = true;
       setStatus('Conexión pendiente: verifica los permisos de acceso.');
       return;
+    }
+
+    // Registrar después de resolver workspaceId y crear/confirmar la membresía.
+    // El fallo de telemetría nunca bloquea el acceso ni modifica los datos compartidos.
+    try {
+      await registerCompatibleDevice();
+    } catch (error) {
+      console.warn('Registro de dispositivo compatible:', error?.message || error);
     }
 
     const accessRef = doc(db, 'workspaceAccess', user.uid);
