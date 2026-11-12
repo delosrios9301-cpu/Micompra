@@ -248,6 +248,14 @@
 .btn-small{padding:8px 11px;font-size:12px;white-space:nowrap}
 @media(max-width:560px){.access-user-row{gap:8px}.access-user-row .account-avatar{width:34px;height:34px;flex:0 0 34px}.access-user-row .btn-small{padding:7px 8px}}
 
-/* Las listas de planificación admiten gesto horizontal sin bloquear el scroll vertical. */
-.list-card{touch-action:pan-y;user-select:none;-webkit-user-select:none;}
-.list-card .entity-card-main{touch-action:pan-y;}
+/* Las tarjetas de planificación se desplazan visualmente con el dedo para revelar la acción. */
+.list-card{position:relative;display:block;overflow:hidden;padding:0;gap:0;touch-action:pan-y;user-select:none;-webkit-user-select:none;}
+.list-card-front{position:relative;z-index:1;display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:12px 14px;border-radius:inherit;background:#fff;transform:translate3d(0,0,0);transition:transform .18s cubic-bezier(.2,.75,.25,1);will-change:transform;}
+.list-card-front .entity-card-main{touch-action:pan-y;min-width:0;padding:0;}
+.list-card-front>.status-chip{flex:none;}
+.list-card.is-swiping .list-card-front{transition:none;}
+.list-swipe-reveal{position:absolute;inset-block:0;z-index:0;display:flex;align-items:center;width:50%;padding:0 16px;background:#b95e59;color:#fff;opacity:0;pointer-events:none;transition:opacity .1s ease;}
+.list-swipe-reveal span{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;white-space:nowrap;}
+.list-swipe-reveal-left{left:0;justify-content:flex-start;}
+.list-swipe-reveal-right{right:0;justify-content:flex-end;}
+
