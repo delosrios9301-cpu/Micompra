@@ -53,3 +53,35 @@ test('inventario respeta la fecha local para caducidades y próximos siete días
   assert.deepEqual(alerts.expired.map(row => row.id), ['a']);
   assert.deepEqual(alerts.expiring.map(row => row.id), ['b', 'c']);
 });
+
+test('dos dispositivos agregan listas distintas sin perder ninguna', () => {
+  const first = createEmptyWorkspace();
+  const second = createEmptyWorkspace();
+  first.lists = [{ id: 'lista-a', name: 'Mercado', createdAt: '2026-11-12T10:00:00Z', updatedAt: '2026-11-12T10:00:00Z', items: [] }];
+  second.lists = [{ id: 'lista-b', name: 'Farmacia', createdAt: '2026-11-12T10:01:00Z', updatedAt: '2026-11-12T10:01:00Z', items: [] }];
+  for (const result of [mergeWorkspaces(first, second), mergeWorkspaces(second, first)]) {
+    assert.deepEqual(result.lists.map(row => row.id).sort(), ['lista-a', 'lista-b']);
+  }
+});
+
+test('dos dispositivos agregan artículos diferentes a una misma lista', () => {
+  const first = createEmptyWorkspace();
+  const second = createEmptyWorkspace();
+  const base = { id: 'lista', name: 'Hogar', updatedAt: '2026-11-12T10:00:00Z' };
+  first.lists = [{ ...base, items: [{ id: 'arroz', name: 'Arroz', updatedAt: '2026-11-12T10:01:00Z' }] }];
+  second.lists = [{ ...base, items: [{ id: 'pollo', name: 'Pollo', updatedAt: '2026-11-12T10:02:00Z' }] }];
+  for (const result of [mergeWorkspaces(first, second), mergeWorkspaces(second, first)]) {
+    assert.deepEqual(result.lists[0].items.map(row => row.id).sort(), ['arroz', 'pollo']);
+  }
+});
+
+test('una eliminación confirmada no resucita al fusionar un dispositivo desactualizado', () => {
+  const stale = createEmptyWorkspace();
+  stale.products = [{ id: 'p1', name: 'Leche', updatedAt: '2026-11-10T10:00:00Z' }];
+  const deleted = createEmptyWorkspace();
+  deleted.deletedRecords = { 'products:p1': { deletedAt: '2026-11-12T10:00:00Z' } };
+  const merged = mergeWorkspaces(stale, deleted);
+  assert.equal(merged.products.length, 0);
+  assert.ok(merged.deletedRecords['products:p1']);
+  assert.equal(mergeWorkspaces(merged, stale).products.length, 0);
+});
