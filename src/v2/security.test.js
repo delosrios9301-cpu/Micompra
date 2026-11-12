@@ -158,3 +158,14 @@ test('la migración copia registros con verificación y conserva intacto el orig
   assert.match(rules, /match \/userWorkspaces\/\{workspaceId\}\/records\/\{recordId\}/);
   assert.match(rules, /allow delete: if false/);
 });
+
+test('el acceso a Mi Compra es solo por invitación del propietario', async () => {
+  const store = await read('./store.js');
+  const app = await read('./app.js');
+  const rules = await read('../../firestore.rules');
+  assert.match(store, /Esta cuenta no tiene invitación/);
+  assert.doesNotMatch(store, /async function signUp\(/);
+  assert.doesNotMatch(app, /¿Primera vez\? Crear una cuenta|data-action="switch-auth-mode"/);
+  assert.match(app, /El acceso requiere invitación del propietario/);
+  assert.match(rules, /request\.auth\.uid == userId[\s\S]*?isPrimaryOwner\(\)/);
+});
