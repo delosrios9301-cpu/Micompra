@@ -197,7 +197,7 @@ function renderPlanning() {
   }
   const rows = workspace.lists.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(row => {
     const p = itemProgress(row);
-    return '<article class="entity-card list-card"><button class="entity-card-main" data-action="open-list" data-id="' + row.id + '"><span class="entity-symbol symbol-green">' + icon('calendar', 20) + '</span><span class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + dateLabel(row.plannedDate || row.createdAt?.slice(0, 10)) + ' · ' + p.total + ' productos</small><span class="entity-progress"><i style="width:' + p.percent + '%"></i></span></span><span class="entity-side"><strong>' + p.percent + '%</strong><small>' + p.done + '/' + p.total + '</small></span></button><span class="status-chip ' + (row.status === 'completed' ? 'chip-done' : 'chip-open') + '">' + (row.status === 'completed' ? 'Terminada' : 'Pendiente') + '</span></article>';
+    return '<article class="entity-card list-card" data-list-swipe="' + row.id + '"><button class="entity-card-main" data-action="open-list" data-id="' + row.id + '"><span class="entity-symbol symbol-green">' + icon('calendar', 20) + '</span><span class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + dateLabel(row.plannedDate || row.createdAt?.slice(0, 10)) + ' · ' + p.total + ' productos</small><span class="entity-progress"><i style="width:' + p.percent + '%"></i></span></span><span class="entity-side"><strong>' + p.percent + '%</strong><small>' + p.done + '/' + p.total + '</small></span></button><span class="status-chip ' + (row.status === 'completed' ? 'chip-done' : 'chip-open') + '">' + (row.status === 'completed' ? 'Terminada' : 'Pendiente') + '</span><button type="button" class="icon-button danger-ghost list-delete-button" data-action="delete-list" data-id="' + row.id + '" aria-label="Eliminar lista ' + safe(row.name) + '" title="Eliminar lista">' + icon('close', 16) + '</button></article>';
   }).join('');
   return sectionHeading('ORGANIZA ANTES DE SALIR', 'Planificar', 'Convierte tus necesidades en listas claras y prepara cada compra con anticipación.', 'new-list', 'Nueva lista') +
     '<div class="filter-pills"><span class="filter-pill active">Todas las listas · ' + workspace.lists.length + '</span><span class="filter-pill">Pendientes · ' + workspace.lists.filter(row => row.status !== 'completed').length + '</span><span class="filter-pill">Completadas · ' + workspace.lists.filter(row => row.status === 'completed').length + '</span></div>' +
@@ -526,6 +526,15 @@ function handleAction(action, target) {
   else if (action === 'adjust-inventory') openModal('adjust-inventory', { id });
   else if (action === 'open-list') { selectedListId = id; currentView = 'planificar'; render(); }
   else if (action === 'back-lists') { selectedListId = null; render(); }
+  else if (action === 'delete-list') {
+    const list = workspace.lists.find(row => row.id === id);
+    if (!list) return;
+    if (!window.confirm('¿Eliminar la lista «' + list.name + '» y todos sus productos? Esta acción no se puede deshacer.')) return;
+    workspace.lists = workspace.lists.filter(row => row.id !== id);
+    if (selectedListId === id) selectedListId = null;
+    logActivity('Planificar', 'Lista eliminada', list.name);
+    persist('Lista eliminada.');
+  }
   else if (action === 'toggle-list-item') {
     const list = workspace.lists.find(row => row.id === selectedListId);
     const item = list?.items.find(row => row.id === id);
@@ -773,6 +782,26 @@ const store = createWorkspaceStore({
   onChange: next => { workspace = normalizeWorkspace(next); render(); },
   onStatus: () => render()
 });
+
+let listSwipeStart = null;
+root.addEventListener('touchstart', event => {
+  const card = event.target.closest('[data-list-swipe]');
+  if (!card || event.touches.length !== 1 || event.target.closest('button')) { listSwipeStart = null; return; }
+  listSwipeStart = { id: card.dataset.listSwipe, x: event.touches[0].clientX, y: event.touches[0].clientY, card };
+}, { passive: true });
+root.addEventListener('touchend', event => {
+  if (!listSwipeStart || !event.changedTouches.length) return;
+  const end = event.changedTouches[0];
+  const dx = end.clientX - listSwipeStart.x;
+  const dy = end.clientY - listSwipeStart.y;
+  const id = listSwipeStart.id;
+  listSwipeStart = null;
+  if (Math.abs(dx) >= 85 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+    const button = root.querySelector('[data-action="delete-list"][data-id="' + CSS.escape(id) + '"]');
+    if (button) handleAction('delete-list', button);
+  }
+}, { passive: true });
+root.addEventListener('touchcancel', () => { listSwipeStart = null; }, { passive: true });
 
 root.addEventListener('click', event => {
   const target = event.target.closest('[data-action]');
