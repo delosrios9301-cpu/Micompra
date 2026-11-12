@@ -174,3 +174,21 @@ test('un usuario revocado no puede registrar dispositivos compatibles', async ()
     uid: 'member', appVersion: '2.1.0-compat', userAgent: 'Android', firstSeenAt: new Date(), lastSeenAt: new Date()
   }));
 });
+
+
+test('solo el propietario puede leer y escribir la copia de migración', async () => {
+  const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
+  const member = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  await assertSucceeds(setDoc(doc(owner, 'userWorkspaces/owner/records/products__p1'), {
+    type: 'products', recordId: 'p1', data: { id: 'p1', name: 'Leche' }, sourceSchemaVersion: 2, migratedFrom: 'workspace-map-v2'
+  }));
+  await assertSucceeds(getDoc(doc(owner, 'userWorkspaces/owner/records/products__p1')));
+  await assertFails(getDoc(doc(member, 'userWorkspaces/owner/records/products__p1')));
+  await assertFails(setDoc(doc(member, 'userWorkspaces/owner/records/products__p2'), {
+    type: 'products', recordId: 'p2', data: { id: 'p2', name: 'Café' }
+  }));
+  await assertSucceeds(setDoc(doc(owner, 'userWorkspaces/owner/migrations/workspace-map-v2'), {
+    migrationId: 'workspace-map-v2', status: 'copied_and_verified', recordCount: 1
+  }));
+  await assertFails(getDoc(doc(member, 'userWorkspaces/owner/migrations/workspace-map-v2')));
+});
