@@ -394,18 +394,36 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     let credential = null;
     let accessCreated = false;
     try {
+      // Si el propietario revocó antes a esta persona, reutiliza su UID de Firebase
+      // Auth. No se intenta crear una segunda cuenta para el mismo correo.
+      const revokedQuery = query(collection(db, 'revokedUsers'), where('workspaceId', '==', targetWorkspaceId));
+      const revokedSnapshot = await getDocs(revokedQuery);
+      const previousRevocation = revokedSnapshot.docs.find(row =>
+        String(row.data()?.email || '').trim().toLowerCase() === normalizedEmail
+      );
+
+      auth.languageCode = 'es';
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: 'https://mi-compra-d9717.web.app/'
+      });
+
+      if (previousRevocation) {
+        const restoredUid = previousRevocation.id;
+        await setDoc(doc(db, 'workspaceAccess', restoredUid), {
+          workspaceId: targetWorkspaceId, ownerUid: activeUser.uid, email: normalizedEmail,
+          role: 'member', reactivatedAt: serverTimestamp(), createdAt: previousRevocation.data()?.createdAt || serverTimestamp()
+        });
+        await deleteDoc(previousRevocation.ref);
+        return { uid: restoredUid, email: normalizedEmail, reactivated: true };
+      }
+
       credential = await createUserWithEmailAndPassword(memberAuth, normalizedEmail, bootstrapPassword);
       const memberAccessRef = doc(db, 'workspaceAccess', credential.user.uid);
       await setDoc(memberAccessRef, {
         workspaceId: targetWorkspaceId, ownerUid: activeUser.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
       });
       accessCreated = true;
-
-      auth.languageCode = 'es';
-      await sendPasswordResetEmail(auth, normalizedEmail, {
-        url: 'https://mi-compra-d9717.web.app/'
-      });
-      return { uid: credential.user.uid, email: normalizedEmail };
+      return { uid: credential.user.uid, email: normalizedEmail, reactivated: false };
     } catch (error) {
       if (credential?.user) {
         if (accessCreated) {
@@ -414,7 +432,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         await deleteUser(credential.user).catch(() => {});
       }
       if (error?.code === 'auth/email-already-in-use') {
-        throw new Error('Ese correo ya tiene una cuenta en Mi Compra. No se creó otra invitación.');
+        throw new Error('Ese correo ya tiene una cuenta activa. Si fue revocada anteriormente, verifica que siga registrada en la lista de accesos revocados del espacio.');
       }
       if (error?.code === 'auth/unauthorized-continue-uri' || error?.code === 'auth/invalid-continue-uri') {
         throw new Error('Firebase no tiene autorizado el enlace de regreso a Mi Compra para enviar la invitación.');
