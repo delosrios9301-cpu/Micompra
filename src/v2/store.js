@@ -51,6 +51,8 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let dirty = false;
   let localRevision = 0;
   let syncFailures = 0;
+  let disposed = false;
+  const retryOnReconnect = () => { if (user && dirty && !disposed) { syncFailures = 0; scheduleSync(); } };
   let unsubscribeAccess = null;
   let unsubscribeRevoked = null;
   let pendingCredentials = null;
@@ -283,6 +285,8 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     });
   }
   async function initialize() {
+    disposed = false;
+    window.addEventListener('online', retryOnReconnect);
     await setPersistence(auth, indexedDBLocalPersistence);
     await setPersistence(memberAuth, inMemoryPersistence);
     await new Promise(resolve => {
@@ -346,7 +350,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       syncFailures += 1;
       setStatus(navigator.onLine ? 'Cambios pendientes: reintentando guardar' : 'Sin conexión: cambios pendientes');
       console.error('Mi Compra Firebase sync:', error?.message || error);
-      if (navigator.onLine) scheduleSync();
+      scheduleSync();
     } finally {
       syncing = false;
     }
@@ -691,6 +695,8 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   function dispose() {
+    disposed = true;
+    window.removeEventListener('online', retryOnReconnect);
     clearTimeout(timer);
     stopWorkspaceListener();
     unsubscribeAuth?.();
