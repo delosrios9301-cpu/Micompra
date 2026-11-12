@@ -127,3 +127,16 @@ test('las reglas permiten propagar borrados individuales sin abrir el restableci
   assert.match(rules, /resource\.data\.workspace\.products\.size\(\) > 0/);
   assert.match(rules, /resource\.data\.workspace\.activity\.size\(\) > 0/);
 });
+
+test('la fase de compatibilidad registra dispositivos sin cambiar el esquema del espacio', async () => {
+  const store = await read('./store.js');
+  const rules = await read('../../firestore.rules');
+  const app = await read('./app.js');
+  assert.match(store, /CLIENT_COMPAT_VERSION = '2\\.1\\.0-compat'/);
+  assert.match(store, /registerCompatibleDevice/);
+  assert.match(store, /listClientDevices/);
+  assert.match(store, /schemaVersion: 2/);
+  assert.match(rules, /clientDevices/);
+  assert.match(app, /Compatibilidad de dispositivos/);
+  assert.match(app, /Los dispositivos antiguos no aparecerán hasta que se actualicen/);
+});
