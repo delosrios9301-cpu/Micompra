@@ -148,7 +148,8 @@ test('la migración copia registros con verificación y conserva intacto el orig
   const rules = await read('../../firestore.rules');
   assert.match(store, /async function migrateWorkspaceToRecords/);
   assert.match(store, /batch\.commit\(\)/);
-  assert.match(store, /copied\.size !== records\.length/);
+  assert.match(store, /migrationObsolete: true/);
+  assert.match(store, /activeCopied\.length !== records\.length/);
   assert.match(store, /stableJson\(latestWorkspace\) !== stableJson\(originalWorkspace\)/);
   assert.match(store, /status: 'copied_and_verified'/);
   assert.match(store, /migrateWorkspaceToRecords/);
