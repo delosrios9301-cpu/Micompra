@@ -154,6 +154,17 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       const accessRef = doc(db, 'workspaceAccess', user.uid);
       const accessSnap = await getDoc(accessRef);
       const access = accessSnap.exists() ? accessSnap.data() : {};
+      const isPrimaryOwner = (user.email || '').trim().toLowerCase() === PRIMARY_OWNER_EMAIL;
+      if (!accessSnap.exists() && !isPrimaryOwner) {
+        user = null;
+        workspaceId = null;
+        workspaceOwnerUid = null;
+        initialized = true;
+        setStatus('Esta cuenta no tiene invitación. Solicita al propietario que te dé acceso.');
+        notify();
+        await firebaseSignOut(auth).catch(() => {});
+        return;
+      }
       workspaceId = access.workspaceId || user.uid;
 
       const ref = workspaceRef(workspaceId);
@@ -343,21 +354,6 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       await migrateLegacyWorkspace(credential.user, pendingCredentials);
       await activateUser(credential.user);
       return credential.user;
-    } finally {
-      pendingCredentials = null;
-      authBusy = false;
-    }
-  }
-
-  async function signUp(email, password) {
-    authBusy = true;
-    pendingCredentials = { email, password };
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      await migrateLegacyWorkspace(credential.user, pendingCredentials);
-      await activateUser(credential.user);
-      // The app's UI uses result.session to distinguish confirmation-required providers.
-      return { ...credential, session: credential.user };
     } finally {
       pendingCredentials = null;
       authBusy = false;
@@ -673,7 +669,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
+    initialize, save, signIn, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
