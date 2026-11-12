@@ -76,6 +76,21 @@ service cloud.firestore {
       allow delete: if isWorkspaceOwner(resource.data.workspaceId);
     }
 
+    match /userWorkspaces/{workspaceId}/clientDevices/{deviceId} {
+      allow read: if isWorkspaceOwner(workspaceId)
+        || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
+      allow create: if isWorkspaceMember(workspaceId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow update: if isWorkspaceMember(workspaceId)
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+
     match /userWorkspaces/{workspaceId} {
       allow read: if isWorkspaceMember(workspaceId)
         || (signedIn() && request.auth.uid == workspaceId);
