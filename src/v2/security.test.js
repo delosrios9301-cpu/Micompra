@@ -140,3 +140,20 @@ test('la fase de compatibilidad registra dispositivos sin cambiar el esquema del
   assert.match(app, /Compatibilidad de dispositivos/);
   assert.match(app, /Los dispositivos antiguos no aparecerán hasta que se actualicen/);
 });
+
+
+test('la migración copia registros con verificación y conserva intacto el origen', async () => {
+  const store = await read('./store.js');
+  const app = await read('./app.js');
+  const rules = await read('../../firestore.rules');
+  assert.match(store, /async function migrateWorkspaceToRecords/);
+  assert.match(store, /batch\.commit\(\)/);
+  assert.match(store, /copied\.size !== records\.length/);
+  assert.match(store, /stableJson\(latestWorkspace\) !== stableJson\(originalWorkspace\)/);
+  assert.match(store, /status: 'copied_and_verified'/);
+  assert.match(store, /migrateWorkspaceToRecords/);
+  assert.match(app, /data-action="run-workspace-migration"/);
+  assert.match(app, /store\.migrateWorkspaceToRecords/);
+  assert.match(rules, /match \/userWorkspaces\/\{workspaceId\}\/records\/\{recordId\}/);
+  assert.match(rules, /allow delete: if false/);
+});
