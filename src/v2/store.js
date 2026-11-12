@@ -4,7 +4,7 @@ import {
   deleteUser, sendPasswordResetEmail
 } from 'firebase/auth';
 import {
-  doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where
+  doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where, writeBatch
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
@@ -433,6 +433,104 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
 
+  function stableJson(value) {
+    if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+    if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+    return JSON.stringify(value);
+  }
+
+  async function migrateWorkspaceToRecords(onProgress = () => {}) {
+    if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede ejecutar la migración.');
+    if (syncing) throw new Error('Espera a que termine la sincronización actual e inténtalo de nuevo.');
+    if (dirty) {
+      clearTimeout(timer);
+      await syncNow();
+      if (dirty) throw new Error('Hay cambios pendientes que todavía no se han confirmado en Firebase. No se inició la migración.');
+    }
+
+    const targetWorkspaceId = workspaceId || user.uid;
+    const sourceRef = workspaceRef(targetWorkspaceId);
+    const sourceSnapshot = await getDoc(sourceRef);
+    if (!sourceSnapshot.exists() || !sourceSnapshot.data()?.workspace) throw new Error('No se encontró el espacio original en Firebase.');
+    const originalWorkspace = sourceSnapshot.data().workspace;
+    const groups = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+    const records = [];
+    for (const group of groups) {
+      const rows = Array.isArray(originalWorkspace[group]) ? originalWorkspace[group] : [];
+      const used = new Set();
+      rows.forEach((row, index) => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('Se encontró un registro inválido en ' + group + '. No se modificó el origen.');
+        const rawId = String(row.id || '').trim();
+        const baseId = rawId || ('legacy_' + index);
+        let recordId = baseId;
+        if (used.has(recordId)) recordId = baseId + '__duplicate_' + index;
+        used.add(recordId);
+        records.push({
+          key: group + '__' + encodeURIComponent(recordId),
+          type: group,
+          recordId,
+          data: rawId ? row : { ...row, id: recordId }
+        });
+      });
+    }
+    records.push({ key: '__profile', type: 'profile', recordId: 'profile', data: originalWorkspace.profile || {} });
+    records.push({ key: '__deletedRecords', type: 'deletedRecords', recordId: 'deletedRecords', data: originalWorkspace.deletedRecords || {} });
+
+    const recordsRef = collection(db, COLLECTION, targetWorkspaceId, 'records');
+    const batchSize = 350;
+    for (let offset = 0; offset < records.length; offset += batchSize) {
+      const batch = writeBatch(db);
+      const part = records.slice(offset, offset + batchSize);
+      for (const record of part) {
+        batch.set(doc(recordsRef, record.key), {
+          type: record.type,
+          recordId: record.recordId,
+          data: record.data,
+          sourceSchemaVersion: 2,
+          migratedFrom: 'workspace-map-v2'
+        });
+      }
+      await batch.commit();
+      onProgress({ completed: Math.min(offset + part.length, records.length), total: records.length });
+    }
+
+    const copied = await getDocs(recordsRef);
+    if (copied.size !== records.length) {
+      throw new Error('La verificación detectó diferencias: se esperaban ' + records.length + ' registros y se encontraron ' + copied.size + '. El origen permanece intacto; puedes volver a ejecutar la copia.');
+    }
+    const copiedById = new Map(copied.docs.map(item => [item.id, item.data()]));
+    for (const record of records) {
+      const target = copiedById.get(record.key);
+      if (!target || target.type !== record.type || target.recordId !== record.recordId || stableJson(target.data) !== stableJson(record.data)) {
+        throw new Error('La verificación de integridad falló en ' + record.type + ' (' + record.recordId + '). El origen permanece intacto; puedes volver a ejecutar la copia.');
+      }
+    }
+
+    const latestSource = await getDoc(sourceRef);
+    const latestWorkspace = latestSource.exists() ? latestSource.data()?.workspace : null;
+    if (!latestWorkspace || stableJson(latestWorkspace) !== stableJson(originalWorkspace)) {
+      throw new Error('El espacio original cambió mientras se copiaban los datos. La copia no se marcó como completada. Vuelve a ejecutarla para incluir los cambios recientes.');
+    }
+
+    const verifiedAt = new Date().toISOString();
+    await setDoc(doc(db, COLLECTION, targetWorkspaceId, 'migrations', 'workspace-map-v2'), {
+      migrationId: 'workspace-map-v2',
+      status: 'copied_and_verified',
+      sourceSchemaVersion: 2,
+      targetSchemaVersion: 3,
+      recordCount: records.length,
+      countsByType: groups.reduce((result, group) => {
+        result[group] = records.filter(record => record.type === group).length;
+        return result;
+      }, { profile: 1, deletedRecords: 1 }),
+      verifiedAt,
+      verifiedBy: user.uid,
+      sourceUpdatedAt: timestampToIso(sourceSnapshot.data()?.updatedAt),
+      note: 'Copia verificada. El documento original sigue siendo la fuente activa; no se realizó el cambio de lectura/escritura.'
+    });
+    return { recordCount: records.length, verifiedAt, status: 'copied_and_verified' };
+  }
+
   async function listClientDevices() {
     if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo el propietario puede consultar los dispositivos.');
     const devicesQuery = query(collection(db, COLLECTION, workspaceId || user.uid, 'clientDevices'));
@@ -564,7 +662,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, revokeAccessUser, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
