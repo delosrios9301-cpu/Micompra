@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createEmptyWorkspace, mergeWorkspaces } from './model.js';
+import { createEmptyWorkspace, mergeWorkspaces, inventoryAlerts } from './model.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
@@ -40,4 +40,16 @@ test('borrado de listas gana frente a edición anterior desde otro dispositivo',
   newer.deletedRecords = { 'lists:lista': { deletedAt: '2026-11-11T10:00:00.000Z' } };
   assert.equal(mergeWorkspaces(older, newer).lists.length, 0);
   assert.equal(mergeWorkspaces(newer, older).lists.length, 0);
+});
+
+test('inventario respeta la fecha local para caducidades y próximos siete días', () => {
+  const atNight = new Date(2026, 10, 12, 23, 30);
+  const alerts = inventoryAlerts([
+    { id: 'a', quantity: 2, minimum: 0, expiryDate: '2026-11-11' },
+    { id: 'b', quantity: 2, minimum: 0, expiryDate: '2026-11-12' },
+    { id: 'c', quantity: 2, minimum: 0, expiryDate: '2026-11-19' },
+    { id: 'd', quantity: 2, minimum: 0, expiryDate: '2026-11-20' }
+  ], atNight);
+  assert.deepEqual(alerts.expired.map(row => row.id), ['a']);
+  assert.deepEqual(alerts.expiring.map(row => row.id), ['b', 'c']);
 });
