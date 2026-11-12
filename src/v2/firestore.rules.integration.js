@@ -146,3 +146,31 @@ test('dos dispositivos concurrentes conservan la alta nueva y propagan el borrad
   assert.equal(finalWorkspace.products.some(row => row.id === 'p2'), true);
   assert.equal(finalWorkspace.products.some(row => row.id === 'p3'), true);
 });
+
+test('los dispositivos compatibles solo pueden registrarse bajo la identidad autenticada', async () => {
+  const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
+  await assertSucceeds(setDoc(doc(owner, 'userWorkspaces/owner/clientDevices/device-owner'), {
+    uid: 'owner', appVersion: '2.1.0-compat', userAgent: 'Chrome', firstSeenAt: new Date(), lastSeenAt: new Date()
+  }));
+  const member = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  await assertSucceeds(setDoc(doc(member, 'userWorkspaces/owner/clientDevices/device-member'), {
+    uid: 'member', appVersion: '2.1.0-compat', userAgent: 'Android', firstSeenAt: new Date(), lastSeenAt: new Date()
+  }));
+  await assertFails(setDoc(doc(member, 'userWorkspaces/owner/clientDevices/device-forged'), {
+    uid: 'owner', appVersion: '2.1.0-compat', userAgent: 'Android', firstSeenAt: new Date(), lastSeenAt: new Date()
+  }));
+  await assertFails(getDoc(doc(member, 'userWorkspaces/owner/clientDevices/device-owner')));
+  await assertSucceeds(getDoc(doc(owner, 'userWorkspaces/owner/clientDevices/device-member')));
+});
+
+test('un usuario revocado no puede registrar dispositivos compatibles', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'revokedUsers/member'), { uid: 'member', workspaceId: 'owner', revokedBy: 'owner' });
+    await deleteDoc(doc(db, 'workspaceAccess/member'));
+  });
+  const member = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  await assertFails(setDoc(doc(member, 'userWorkspaces/owner/clientDevices/device-member'), {
+    uid: 'member', appVersion: '2.1.0-compat', userAgent: 'Android', firstSeenAt: new Date(), lastSeenAt: new Date()
+  }));
+});
