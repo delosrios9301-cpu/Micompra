@@ -8,7 +8,7 @@ const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 test('las listas disponen de filtros accesibles para todos, pendientes y completadas', async () => {
   const app = await read('./app.js');
   assert.match(app, /planningFilter === 'completed'/);
-  assert.match(app, /data-action=\\"filter-lists\\"/);
+  assert.ok(app.includes('data-action="filter-lists"'));
   assert.match(app, /aria-pressed/);
 });
 
