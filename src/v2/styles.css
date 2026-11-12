@@ -247,3 +247,7 @@
 .access-user-info small{font-size:11px;color:var(--muted,#788078)}
 .btn-small{padding:8px 11px;font-size:12px;white-space:nowrap}
 @media(max-width:560px){.access-user-row{gap:8px}.access-user-row .account-avatar{width:34px;height:34px;flex:0 0 34px}.access-user-row .btn-small{padding:7px 8px}}
+
+/* Las listas de planificación admiten gesto horizontal sin bloquear el scroll vertical. */
+.list-card{touch-action:pan-y;user-select:none;-webkit-user-select:none;}
+.list-card .entity-card-main{touch-action:pan-y;}
