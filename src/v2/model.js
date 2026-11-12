@@ -144,10 +144,11 @@ export function monthSpending(workspace, month = monthKey()) {
 }
 
 export function inventoryAlerts(items = [], today = new Date()) {
-  const todayKey = today.toISOString().slice(0, 10);
+  const localDateKey = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+  const todayKey = localDateKey(today);
   const horizon = new Date(today);
   horizon.setDate(horizon.getDate() + 7);
-  const horizonKey = horizon.toISOString().slice(0, 10);
+  const horizonKey = localDateKey(horizon);
   const rows = asArray(items);
   return {
     low: rows.filter(row => Number(row.quantity || 0) > 0 && Number(row.quantity || 0) <= Number(row.minimum || 0)),
