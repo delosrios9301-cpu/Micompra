@@ -403,12 +403,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       );
 
       auth.languageCode = 'es';
-      await sendPasswordResetEmail(auth, normalizedEmail, {
-        url: 'https://mi-compra-d9717.web.app/'
-      });
-
       if (previousRevocation) {
         const restoredUid = previousRevocation.id;
+        await sendPasswordResetEmail(auth, normalizedEmail, {
+          url: 'https://mi-compra-d9717.web.app/'
+        });
         await setDoc(doc(db, 'workspaceAccess', restoredUid), {
           workspaceId: targetWorkspaceId, ownerUid: activeUser.uid, email: normalizedEmail,
           role: 'member', reactivatedAt: serverTimestamp(), createdAt: previousRevocation.data()?.createdAt || serverTimestamp()
@@ -423,6 +422,9 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         workspaceId: targetWorkspaceId, ownerUid: activeUser.uid, email: normalizedEmail, role: 'member', createdAt: serverTimestamp()
       });
       accessCreated = true;
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: 'https://mi-compra-d9717.web.app/'
+      });
       return { uid: credential.user.uid, email: normalizedEmail, reactivated: false };
     } catch (error) {
       if (credential?.user) {
