@@ -17,6 +17,27 @@ const LEGACY_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const auth = getAuth(app);
 const COLLECTION = 'userWorkspaces';
 const PRIMARY_OWNER_EMAIL = 'delosrios9301@gmail.com';
+const CLIENT_COMPAT_VERSION = '2.1.0-compat';
+const CLIENT_DEVICE_KEY = 'mi-compra-client-device-id';
+
+function getClientDeviceId() {
+  try {
+    let id = localStorage.getItem(CLIENT_DEVICE_KEY);
+    if (!id) {
+      id = globalThis.crypto?.randomUUID?.() || ('device_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2));
+      localStorage.setItem(CLIENT_DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'session_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+  }
+}
+
+function timestampToIso(value) {
+  if (value?.toDate) return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return value ? String(value) : '';
+}
 
 export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} } = {}) {
   let workspace = createEmptyWorkspace();
@@ -87,6 +108,21 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     unsubscribeRevoked?.(); unsubscribeRevoked = null;
   }
 
+  async function registerCompatibleDevice() {
+    if (!user || !workspaceId) return;
+    const deviceId = getClientDeviceId();
+    const ref = doc(db, COLLECTION, workspaceId, 'clientDevices', deviceId);
+    const existing = await getDoc(ref);
+    const now = serverTimestamp();
+    await setDoc(ref, {
+      uid: user.uid,
+      appVersion: CLIENT_COMPAT_VERSION,
+      userAgent: String(globalThis.navigator?.userAgent || 'dispositivo no identificado').slice(0, 240),
+      firstSeenAt: existing.exists() ? existing.data()?.firstSeenAt || now : now,
+      lastSeenAt: now
+    }, { merge: true });
+  }
+
   async function activateUser(nextUser) {
     const nextId = nextUser?.uid || null;
     if ((user?.uid || null) === nextId && initialized) return;
@@ -115,7 +151,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         notify();
         return;
       }
-      const accessRef = doc(db, 'workspaceAccess', user.uid);
+      // Registro informativo: nunca bloquea el acceso ni modifica los datos compartidos.
+    try {
+      await registerCompatibleDevice();
+    } catch (error) {
+      console.warn('Registro de dispositivo compatible:', error?.message || error);
+    }
+
+    const accessRef = doc(db, 'workspaceAccess', user.uid);
       const accessSnap = await getDoc(accessRef);
       const access = accessSnap.exists() ? accessSnap.data() : {};
       workspaceId = access.workspaceId || user.uid;
@@ -389,6 +432,23 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
 
+  async function listClientDevices() {
+    if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo el propietario puede consultar los dispositivos.');
+    const devicesQuery = query(collection(db, COLLECTION, workspaceId || user.uid, 'clientDevices'));
+    const snapshot = await getDocs(devicesQuery);
+    return snapshot.docs.map(row => {
+      const data = row.data();
+      return {
+        deviceId: row.id,
+        uid: data.uid || '',
+        appVersion: data.appVersion || 'versión no identificada',
+        userAgent: data.userAgent || 'Dispositivo no identificado',
+        firstSeenAt: timestampToIso(data.firstSeenAt),
+        lastSeenAt: timestampToIso(data.lastSeenAt)
+      };
+    }).sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)));
+  }
+
   async function listAccessUsers() {
     if (!user || workspaceOwnerUid !== user.uid) throw new Error('Solo el propietario puede consultar los usuarios autorizados.');
     const accessQuery = query(collection(db, 'workspaceAccess'), where('workspaceId', '==', workspaceId || user.uid));
@@ -503,7 +563,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   return {
-    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, revokeAccessUser, dispose,
+    initialize, save, signIn, signUp, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, revokeAccessUser, dispose,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
