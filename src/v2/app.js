@@ -16,6 +16,7 @@ let authReady = false;
 let purchaseDraft = [];
 let toastTimer = null;
 let searchValue = '';
+let planningFilter = 'all';
 let accessUsers = [];
 let accessUsersLoading = false;
 let clientDevices = [];
@@ -69,7 +70,7 @@ function icon(name, size = 20) {
 function safe(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { const date = new Date(); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'); }
 function money(value) { return formatMoney(value, workspace.profile.currency || 'USD'); }
 function dateLabel(value) {
   const parsed = new Date((value || today()) + 'T12:00:00');
@@ -135,7 +136,7 @@ function mobileNav() {
 }
 function statusLabel() {
   const value = store.getStatus();
-  const online = value === 'Sincronizado';
+  const online = value === 'Sincronizado con Firebase' || value === 'Sincronizado';
   return '<span class="sync-status ' + (online ? 'is-online' : 'is-pending') + '"><i></i>' + safe(value) + '</span>';
 }
 function pageTitle() {
@@ -195,7 +196,7 @@ function renderPlanning() {
       '<div class="list-footer-actions"><button class="btn btn-secondary" data-action="duplicate-list">' + icon('grid', 15) + 'Duplicar</button><button class="btn btn-secondary" data-action="make-purchase">' + icon('cart', 15) + 'Preparar compra</button>' +
       (list.status === 'completed' ? '<button class="btn btn-primary" data-action="reopen-list">Reabrir lista</button>' : '<button class="btn btn-primary" data-action="complete-list">' + icon('check', 15) + 'Completar lista</button>') + '</div></section>';
   }
-  const rows = workspace.lists.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(row => {
+  const rows = workspace.lists.filter(row => planningFilter === 'all' || (planningFilter === 'completed' ? row.status === 'completed' : row.status !== 'completed')).slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(row => {
     const p = itemProgress(row);
     return '<article class="entity-card list-card" data-list-swipe="' + row.id + '">' +
       '<div class="list-swipe-reveal list-swipe-reveal-left"><span>' + icon('trash-2', 16) + 'Eliminar</span></div>' +
@@ -203,8 +204,8 @@ function renderPlanning() {
       '<div class="list-card-front"><button class="entity-card-main" data-action="open-list" data-id="' + row.id + '"><span class="entity-symbol symbol-green">' + icon('calendar', 20) + '</span><span class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + dateLabel(row.plannedDate || row.createdAt?.slice(0, 10)) + ' · ' + p.total + ' productos</small><span class="entity-progress"><i style="width:' + p.percent + '%"></i></span></span><span class="entity-side"><strong>' + p.percent + '%</strong><small>' + p.done + '/' + p.total + '</small></span></button><span class="status-chip ' + (row.status === 'completed' ? 'chip-done' : 'chip-open') + ' list-status">' + (row.status === 'completed' ? 'Terminada' : 'Pendiente') + '</span></div></article>';
   }).join('');
   return sectionHeading('ORGANIZA ANTES DE SALIR', 'Planificar', 'Convierte tus necesidades en listas claras y prepara cada compra con anticipación.', 'new-list', 'Nueva lista') +
-    '<div class="filter-pills"><span class="filter-pill active">Todas las listas · ' + workspace.lists.length + '</span><span class="filter-pill">Pendientes · ' + workspace.lists.filter(row => row.status !== 'completed').length + '</span><span class="filter-pill">Completadas · ' + workspace.lists.filter(row => row.status === 'completed').length + '</span></div>' +
-    (rows || emptyState('Todavía no tienes listas', 'Crea tu primera lista y empieza a organizar lo que necesitas para el hogar.', 'new-list', 'Crear primera lista'));
+    '<div class="filter-pills" role="group" aria-label="Filtrar listas"><button type="button" class="filter-pill ' + (planningFilter === 'all' ? 'active' : '') + '" data-action="filter-lists" data-filter="all" aria-pressed="' + (planningFilter === 'all') + '">Todas las listas · ' + workspace.lists.length + '</button><button type="button" class="filter-pill ' + (planningFilter === 'open' ? 'active' : '') + '" data-action="filter-lists" data-filter="open" aria-pressed="' + (planningFilter === 'open') + '">Pendientes · ' + workspace.lists.filter(row => row.status !== 'completed').length + '</button><button type="button" class="filter-pill ' + (planningFilter === 'completed' ? 'active' : '') + '" data-action="filter-lists" data-filter="completed" aria-pressed="' + (planningFilter === 'completed') + '">Completadas · ' + workspace.lists.filter(row => row.status === 'completed').length + '</button></div>' +
+    (rows || (workspace.lists.length ? '<div class="panel-empty">No hay listas en este filtro.</div>' : emptyState('Todavía no tienes listas', 'Crea tu primera lista y empieza a organizar lo que necesitas para el hogar.', 'new-list', 'Crear primera lista')));
 }
 function storeOptions(selected = '') {
   return '<option value="">Sin establecimiento</option>' + workspace.stores.filter(row => row.active !== false).map(row => '<option value="' + row.id + '" ' + (selected === row.id ? 'selected' : '') + '>' + safe(row.name) + '</option>').join('');
@@ -843,6 +844,8 @@ root.addEventListener('touchcancel', () => {
 }, { passive: true });
 
 root.addEventListener('click', event => {
+  const filterButton = event.target.closest('[data-action="filter-lists"]');
+  if (filterButton) { planningFilter = filterButton.dataset.filter || 'all'; render(); return; }
   if (suppressListSwipeClick && event.target.closest('[data-list-swipe]')) {
     suppressListSwipeClick = false;
     event.preventDefault();
