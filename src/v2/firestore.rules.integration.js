@@ -41,6 +41,17 @@ beforeEach(async () => {
   });
 });
 
+test('una cuenta cualquiera no puede darse de alta como propietaria', async () => {
+  const db = env.authenticatedContext('intruso', { email: 'intruso@example.com' }).firestore();
+  await assertFails(setDoc(doc(db, 'workspaceAccess/intruso'), {
+    workspaceId: 'intruso', ownerUid: 'intruso', role: 'owner', email: 'intruso@example.com'
+  }));
+  const primaryDb = env.authenticatedContext('primary', { email: 'delosrios9301@gmail.com' }).firestore();
+  await assertSucceeds(setDoc(doc(primaryDb, 'workspaceAccess/primary'), {
+    workspaceId: 'primary', ownerUid: 'primary', role: 'owner', email: 'delosrios9301@gmail.com'
+  }));
+});
+
 test('propietario puede invitar y revocar miembros', async () => {
   const db = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
   await assertSucceeds(setDoc(doc(db, 'workspaceAccess/new-member'), {
