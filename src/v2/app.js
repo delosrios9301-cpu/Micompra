@@ -197,7 +197,10 @@ function renderPlanning() {
   }
   const rows = workspace.lists.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(row => {
     const p = itemProgress(row);
-    return '<article class="entity-card list-card" data-list-swipe="' + row.id + '"><button class="entity-card-main" data-action="open-list" data-id="' + row.id + '"><span class="entity-symbol symbol-green">' + icon('calendar', 20) + '</span><span class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + dateLabel(row.plannedDate || row.createdAt?.slice(0, 10)) + ' · ' + p.total + ' productos</small><span class="entity-progress"><i style="width:' + p.percent + '%"></i></span></span><span class="entity-side"><strong>' + p.percent + '%</strong><small>' + p.done + '/' + p.total + '</small></span></button><span class="status-chip ' + (row.status === 'completed' ? 'chip-done' : 'chip-open') + ' list-status">' + (row.status === 'completed' ? 'Terminada' : 'Pendiente') + '</span></article>';
+    return '<article class="entity-card list-card" data-list-swipe="' + row.id + '">' +
+      '<div class="list-swipe-reveal list-swipe-reveal-left"><span>' + icon('trash-2', 16) + 'Eliminar</span></div>' +
+      '<div class="list-swipe-reveal list-swipe-reveal-right"><span>' + icon('trash-2', 16) + 'Eliminar</span></div>' +
+      '<div class="list-card-front"><button class="entity-card-main" data-action="open-list" data-id="' + row.id + '"><span class="entity-symbol symbol-green">' + icon('calendar', 20) + '</span><span class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + dateLabel(row.plannedDate || row.createdAt?.slice(0, 10)) + ' · ' + p.total + ' productos</small><span class="entity-progress"><i style="width:' + p.percent + '%"></i></span></span><span class="entity-side"><strong>' + p.percent + '%</strong><small>' + p.done + '/' + p.total + '</small></span></button><span class="status-chip ' + (row.status === 'completed' ? 'chip-done' : 'chip-open') + ' list-status">' + (row.status === 'completed' ? 'Terminada' : 'Pendiente') + '</span></div></article>';
   }).join('');
   return sectionHeading('ORGANIZA ANTES DE SALIR', 'Planificar', 'Convierte tus necesidades en listas claras y prepara cada compra con anticipación.', 'new-list', 'Nueva lista') +
     '<div class="filter-pills"><span class="filter-pill active">Todas las listas · ' + workspace.lists.length + '</span><span class="filter-pill">Pendientes · ' + workspace.lists.filter(row => row.status !== 'completed').length + '</span><span class="filter-pill">Completadas · ' + workspace.lists.filter(row => row.status === 'completed').length + '</span></div>' +
@@ -784,27 +787,68 @@ const store = createWorkspaceStore({
 });
 
 let listSwipeStart = null;
+let suppressListSwipeClick = false;
+function resetListSwipeVisual(swipe) {
+  if (!swipe?.card) return;
+  swipe.card.classList.remove('is-swiping');
+  const front = swipe.card.querySelector('.list-card-front');
+  if (front) front.style.transform = '';
+  swipe.card.querySelectorAll('.list-swipe-reveal').forEach(node => { node.style.opacity = ''; });
+}
 root.addEventListener('touchstart', event => {
   const card = event.target.closest('[data-list-swipe]');
-  if (!card || event.touches.length !== 1 || event.target.closest('[data-action="delete-list"]')) { listSwipeStart = null; return; }
-  listSwipeStart = { id: card.dataset.listSwipe, x: event.touches[0].clientX, y: event.touches[0].clientY, card };
+  if (!card || event.touches.length !== 1) { listSwipeStart = null; return; }
+  const touch = event.touches[0];
+  listSwipeStart = {
+    id: card.dataset.listSwipe,
+    x: touch.clientX,
+    y: touch.clientY,
+    card,
+    horizontal: false
+  };
+  card.classList.add('is-swiping');
+}, { passive: true });
+root.addEventListener('touchmove', event => {
+  if (!listSwipeStart || event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  const dx = touch.clientX - listSwipeStart.x;
+  const dy = touch.clientY - listSwipeStart.y;
+  if (Math.abs(dx) < 7 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
+  listSwipeStart.horizontal = true;
+  const offset = Math.max(-150, Math.min(150, dx));
+  const front = listSwipeStart.card.querySelector('.list-card-front');
+  if (front) front.style.transform = 'translate3d(' + offset + 'px,0,0)';
+  const side = dx > 0 ? '.list-swipe-reveal-left' : '.list-swipe-reveal-right';
+  listSwipeStart.card.querySelectorAll('.list-swipe-reveal').forEach(node => {
+    node.style.opacity = node.matches(side) ? String(Math.min(1, Math.abs(dx) / 48)) : '0';
+  });
 }, { passive: true });
 root.addEventListener('touchend', event => {
   if (!listSwipeStart || !event.changedTouches.length) return;
+  const swipe = listSwipeStart;
   const end = event.changedTouches[0];
-  const dx = end.clientX - listSwipeStart.x;
-  const dy = end.clientY - listSwipeStart.y;
-  const id = listSwipeStart.id;
+  const dx = end.clientX - swipe.x;
+  const dy = end.clientY - swipe.y;
   listSwipeStart = null;
-  if (Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.15) {
-    // La tarjeta no tiene botón de borrado visible: ejecutar la acción directamente
-    // usando el identificador de la lista capturado al iniciar el gesto.
-    handleAction('delete-list', { dataset: { id } });
+  resetListSwipeVisual(swipe);
+  if (swipe.horizontal && Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+    suppressListSwipeClick = true;
+    window.setTimeout(() => { suppressListSwipeClick = false; }, 450);
+    handleAction('delete-list', { dataset: { id: swipe.id } });
   }
 }, { passive: true });
-root.addEventListener('touchcancel', () => { listSwipeStart = null; }, { passive: true });
+root.addEventListener('touchcancel', () => {
+  resetListSwipeVisual(listSwipeStart);
+  listSwipeStart = null;
+}, { passive: true });
 
 root.addEventListener('click', event => {
+  if (suppressListSwipeClick && event.target.closest('[data-list-swipe]')) {
+    suppressListSwipeClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
   const target = event.target.closest('[data-action]');
   if (!target) return;
   if (target.dataset.action === 'close-modal' && target.classList.contains('modal-backdrop') && event.target.closest('[data-modal-card]')) return;
