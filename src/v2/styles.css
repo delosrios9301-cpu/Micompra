@@ -259,3 +259,56 @@
 .list-swipe-reveal-left{left:0;justify-content:flex-start;}
 .list-swipe-reveal-right{right:0;justify-content:flex-end;}
 
+
+
+/* Esmeralda Premium: mejora exclusivamente visual, sin alterar lógica ni distribución. */
+:root {
+  --ink:#123c36;
+  --muted:#627c75;
+  --green:#087f6d;
+  --green2:#16a085;
+  --pale:#e8f5ef;
+  --line:#d4e5df;
+  --surface:#ffffff;
+  --shadow:0 9px 24px rgba(8,82,69,.10);
+  accent-color:#087f6d;
+}
+html,body,#app{background:#f0f6f3;color:var(--ink)}
+.sidebar{background:radial-gradient(circle at 12% 0%,rgba(29,173,141,.36),transparent 44%),linear-gradient(160deg,#064e45,#083a35 65%,#052f2d);box-shadow:6px 0 26px rgba(4,53,45,.17)}
+.brand-mark{background:#ffffff1d;color:#b9f9e2}
+.brand-name span{color:#77e1c0}
+.nav-link.active{background:linear-gradient(105deg,rgba(37,190,148,.34),rgba(255,255,255,.07));box-shadow:inset 3px 0 #50ddb2}
+.nav-link:hover{background:rgba(255,255,255,.13)}
+.topbar{background:rgba(250,255,252,.94);border-bottom-color:#d6e8df}
+.topbar-title strong,.page-heading h1{color:#103e35}
+.sync-status.is-online{color:#087f6d}
+.sync-status.is-online i{background:#11a77f}
+.icon-button{color:#087f6d;border-color:#d2e5dc;background:#fff}
+.btn-primary{background:linear-gradient(135deg,#119b81,#076e5d);box-shadow:0 5px 15px rgba(5,112,89,.22)}
+.btn-secondary{color:#116a5b;border-color:#cde2d8}
+.text-action{color:#087f6d}
+.surface-panel{border-color:#d7e7df;background:#fff;box-shadow:var(--shadow)}
+.panel-heading h3{color:#184d42}
+.eyebrow{color:#438675}
+.page-heading p,.data-note,.settings-description,.modal-description{color:#617c73}
+.account-mini-avatar,.side-avatar,.account-avatar{background:#d7f2e6;color:#086b59}
+.list-card-front{background:#fff}
+.list-swipe-reveal{background:#bf4b4b}
+button,.nav-link,.icon-button,.btn,.entity-card,.filter-pill{
+  -webkit-tap-highlight-color:transparent;
+}
+.btn,.nav-link,.icon-button,.filter-pill{
+  transition:background-color .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+@media (hover:hover) and (pointer:fine){
+  .btn-primary:hover{box-shadow:0 7px 18px rgba(5,112,89,.27);filter:brightness(1.04)}
+  .icon-button:hover{border-color:#81c9af;background:#eaf7f0}
+}
+.btn:active,.icon-button:active{transform:scale(.985)}
+.filter-pill.active{background:#e0f5eb;color:#076c59;border-color:#a6dcc5}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline-color:#20aa88}
+@media (prefers-reduced-motion:reduce){
+  .btn,.nav-link,.icon-button,.filter-pill,.list-card-front,.list-swipe-reveal{transition:none!important}
+}
+/* Animar transformaciones y opacidad evita repintados de disposición durante gestos. */
+.list-card.is-swiping .list-card-front{will-change:transform}
