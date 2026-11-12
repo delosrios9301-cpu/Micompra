@@ -50,6 +50,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let syncing = false;
   let dirty = false;
   let localRevision = 0;
+  let syncFailures = 0;
   let unsubscribeAccess = null;
   let unsubscribeRevoked = null;
   let pendingCredentials = null;
@@ -300,9 +301,10 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   function scheduleSync() {
-    if (!user) return;
+    if (!user || !dirty) return;
     clearTimeout(timer);
-    timer = setTimeout(() => { void syncNow(); }, 450);
+    const delay = syncFailures ? Math.min(30000, 1000 * 2 ** Math.min(syncFailures, 5)) : 450;
+    timer = setTimeout(() => { void syncNow(); }, delay);
   }
 
   async function syncNow() {
@@ -327,6 +329,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         }, { merge: true });
         return safeMerge;
       });
+      syncFailures = 0;
       if (localRevision === revisionAtStart) {
         workspace = normalizeWorkspace(merged);
         dirty = false;
@@ -339,8 +342,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       }
       notify();
     } catch (error) {
-      setStatus('Error al guardar en Firebase');
+      dirty = true;
+      syncFailures += 1;
+      setStatus(navigator.onLine ? 'Cambios pendientes: reintentando guardar' : 'Sin conexión: cambios pendientes');
       console.error('Mi Compra Firebase sync:', error?.message || error);
+      if (navigator.onLine) scheduleSync();
     } finally {
       syncing = false;
     }
@@ -602,6 +608,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
 
   async function signOut() {
     clearTimeout(timer);
+    syncFailures = 0;
     await firebaseSignOut(auth);
     workspaceId = null;
     workspaceOwnerUid = null;
@@ -676,6 +683,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       for (const item of oldList.items || []) if (!nextItemIds.has(item.id)) incoming.deletedRecords['listItems:' + oldList.id + ':' + item.id] = { deletedAt: now };
     }
     workspace = normalizeWorkspace(incoming);
+    syncFailures = 0;
     dirty = true;
     localRevision += 1;
     notify();
