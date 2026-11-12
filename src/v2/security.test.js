@@ -132,7 +132,7 @@ test('la fase de compatibilidad registra dispositivos sin cambiar el esquema del
   const store = await read('./store.js');
   const rules = await read('../../firestore.rules');
   const app = await read('./app.js');
-  assert.match(store, /CLIENT_COMPAT_VERSION = '2\\.1\\.0-compat'/);
+  assert.ok(store.includes("CLIENT_COMPAT_VERSION = '2.1.0-compat'"));
   assert.match(store, /registerCompatibleDevice/);
   assert.match(store, /listClientDevices/);
   assert.match(store, /schemaVersion: 2/);
