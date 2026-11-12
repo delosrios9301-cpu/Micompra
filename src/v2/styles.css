@@ -312,3 +312,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 }
 /* Animar transformaciones y opacidad evita repintados de disposición durante gestos. */
 .list-card.is-swiping .list-card-front{will-change:transform}
+
+/* Evitar capas GPU permanentes en listas largas; activarlas solo durante el gesto. */
+.list-card-front{will-change:auto}
+.list-card.is-swiping .list-card-front{will-change:transform}
