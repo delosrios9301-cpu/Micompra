@@ -91,6 +91,16 @@ service cloud.firestore {
       allow delete: if isWorkspaceOwner(workspaceId);
     }
 
+    match /userWorkspaces/{workspaceId}/records/{recordId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
+    match /userWorkspaces/{workspaceId}/migrations/{migrationId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
     match /userWorkspaces/{workspaceId} {
       allow read: if isWorkspaceMember(workspaceId)
         || (signedIn() && request.auth.uid == workspaceId);
