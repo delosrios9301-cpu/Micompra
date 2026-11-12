@@ -46,6 +46,7 @@ service cloud.firestore {
       );
       allow create: if signedIn() && (
         (request.auth.uid == userId
+          && isPrimaryOwner()
           && request.resource.data.ownerUid == userId
           && request.resource.data.workspaceId == userId
           && request.resource.data.role == 'owner')
