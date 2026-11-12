@@ -796,9 +796,10 @@ root.addEventListener('touchend', event => {
   const dy = end.clientY - listSwipeStart.y;
   const id = listSwipeStart.id;
   listSwipeStart = null;
-  if (Math.abs(dx) >= 85 && Math.abs(dx) > Math.abs(dy) * 1.25) {
-    const button = root.querySelector('[data-action="delete-list"][data-id="' + CSS.escape(id) + '"]');
-    if (button) handleAction('delete-list', button);
+  if (Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+    // La tarjeta no tiene botón de borrado visible: ejecutar la acción directamente
+    // usando el identificador de la lista capturado al iniciar el gesto.
+    handleAction('delete-list', { dataset: { id } });
   }
 }, { passive: true });
 root.addEventListener('touchcancel', () => { listSwipeStart = null; }, { passive: true });
