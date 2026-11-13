@@ -242,6 +242,14 @@ function renderInventory() {
     (rows || emptyState('Inventario vacío', 'Añade productos y registra entradas o consumos para conocer tus existencias.', 'new-inventory', 'Añadir primer producto')) + '</section>' +
     '<p class="data-note">Cada entrada, consumo o ajuste queda registrado en los movimientos de inventario.</p>';
 }
+const DEFAULT_FINANCE_CATEGORIES = ['Hogar', 'Servicios', 'Transporte', 'Salud', 'Educación', 'Otros'];
+function financeCategoryNames() {
+  const names = [...DEFAULT_FINANCE_CATEGORIES, ...workspace.financeCategories.map(row => row.name), ...workspace.expenses.map(row => row.category).filter(Boolean)];
+  return [...new Map(names.map(name => [String(name).trim().toLocaleLowerCase('es'), String(name).trim()])).values()].filter(Boolean);
+}
+function financeCategoryOptions() {
+  return financeCategoryNames().map(name => '<option value="' + safe(name) + '">' + safe(name) + '</option>').join('');
+}
 function renderFinance() {
   const month = monthKey();
   const spend = monthSpending(workspace, month);
@@ -256,6 +264,7 @@ function renderFinance() {
     '<article class="finance-number"><span>Disponible</span><strong class="' + (budget && spend.total > budget ? 'negative-value' : '') + '">' + (budget ? money(budget - spend.total) : '—') + '</strong><small>Presupuesto menos gasto registrado</small></article></div>' +
     '<section class="surface-panel finance-table"><div class="panel-heading"><div><span class="eyebrow">OTROS GASTOS</span><h3>Registros adicionales</h3></div><button class="btn btn-secondary btn-small" data-action="new-expense">' + icon('plus', 15) + 'Añadir gasto</button></div>' +
     (expenses || '<div class="panel-empty"><span>' + icon('wallet', 22) + '</span><strong>No hay gastos adicionales</strong><small>Las compras se contabilizan desde el módulo Comprar; registra aquí otros gastos del hogar.</small></div>') + '</section>' +
+    '<section class="surface-panel finance-table"><div class="panel-heading"><div><span class="eyebrow">ORGANIZACIÓN</span><h3>Categorías de gastos</h3></div><button class="btn btn-secondary btn-small" data-action="new-finance-category">' + icon('plus', 15) + 'Nueva categoría</button></div><p class="settings-description">' + financeCategoryNames().map(name => safe(name)).join(' · ') + '</p></section>' +
     '<div class="finance-note">' + icon('shield', 17) + '<span>Las compras se contabilizan una sola vez. Los gastos adicionales se registran por separado para evitar duplicar importes.</span></div>';
 }
 function renderActivity() {
@@ -398,9 +407,12 @@ function modalHtml() {
   } else if (modalName === 'edit-budget') {
     title = 'Presupuesto mensual';
     body = '<form data-form="update-budget"><p class="modal-description">Define cuánto deseas destinar a tus compras y gastos durante ' + safe(monthLabel()) + '.</p><label class="field"><span>Presupuesto del mes</span><input name="amount" type="number" min="0" step="0.01" value="' + currentBudget(workspace) + '" required></label><button class="btn btn-primary btn-wide" type="submit">Guardar presupuesto</button></form>';
+  } else if (modalName === 'new-finance-category') {
+    title = 'Nueva categoría de finanzas';
+    body = '<form data-form="create-finance-category"><label class="field"><span>Nombre de la categoría</span><input name="name" required maxlength="50" placeholder="Ej. Mascotas" autocomplete="off"></label><button class="btn btn-primary btn-wide" type="submit">Guardar categoría</button></form>';
   } else if (modalName === 'new-expense') {
     title = 'Registrar gasto adicional';
-    body = '<form data-form="create-expense"><label class="field"><span>Descripción</span><input name="title" required maxlength="90" placeholder="Ej. Gas doméstico"></label><div class="form-grid"><label class="field"><span>Importe</span><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label class="field"><span>Fecha</span><input name="date" type="date" value="' + today() + '"></label></div><label class="field"><span>Categoría</span><select name="category"><option>Hogar</option><option>Servicios</option><option>Transporte</option><option>Salud</option><option>Educación</option><option>Otros</option></select></label><label class="check-option"><input name="paid" type="checkbox" checked><span>Gasto pagado</span></label><label class="field"><span>Notas (opcional)</span><textarea name="notes" rows="2"></textarea></label><button class="btn btn-primary btn-wide" type="submit">Guardar gasto</button></form>';
+    body = '<form data-form="create-expense"><label class="field"><span>Descripción</span><input name="title" required maxlength="90" placeholder="Ej. Gas doméstico"></label><div class="form-grid"><label class="field"><span>Importe</span><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label class="field"><span>Fecha</span><input name="date" type="date" value="' + today() + '"></label></div><label class="field"><span>Categoría</span><select name="category">' + financeCategoryOptions() + '</select></label><label class="check-option"><input name="paid" type="checkbox" checked><span>Gasto pagado</span></label><label class="field"><span>Notas (opcional)</span><textarea name="notes" rows="2"></textarea></label><button class="btn btn-primary btn-wide" type="submit">Guardar gasto</button></form>';
   } else if (modalName === 'adjust-inventory') {
     const row = workspace.inventory.find(item => item.id === modalData.id);
     title = 'Ajustar existencias';
@@ -526,6 +538,7 @@ function handleAction(action, target) {
   else if (action === 'new-store') openModal('new-store');
   else if (action === 'new-inventory') openModal('new-inventory');
   else if (action === 'new-expense') openModal('new-expense');
+  else if (action === 'new-finance-category') openModal('new-finance-category');
   else if (action === 'edit-budget') openModal('edit-budget');
   else if (action === 'adjust-inventory') openModal('adjust-inventory', { id });
   else if (action === 'open-list') { selectedListId = id; currentView = 'planificar'; render(); }
@@ -764,6 +777,13 @@ function handleSubmit(event) {
     else workspace.budgets.unshift({ id: month, month, amount, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     logActivity('Finanzas', 'Presupuesto actualizado', money(amount) + ' · ' + monthLabel(month));
     closeModal(); persist('Presupuesto mensual guardado.');
+  } else if (action === 'create-finance-category') {
+    const name = String(data.name || '').trim().replace(/\s+/g, ' ');
+    if (!name || name.length > 50) { showToast('Escribe un nombre válido de hasta 50 caracteres.', 'info'); return; }
+    if (financeCategoryNames().some(existing => existing.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) { showToast('Esa categoría ya existe.', 'info'); return; }
+    workspace.financeCategories.push({ id: createId('fcat'), name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    logActivity('Finanzas', 'Categoría creada', name);
+    closeModal(); persist('Categoría guardada.');
   } else if (action === 'create-expense') {
     if (!Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0) { showToast('El importe debe ser mayor que cero.', 'info'); return; }
     saveExpense({ ...data, paid: form.querySelector('[name="paid"]').checked });
