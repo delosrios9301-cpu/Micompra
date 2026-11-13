@@ -11,6 +11,7 @@ export function createEmptyWorkspace() {
     inventory: [],
     movements: [],
     expenses: [],
+    financeCategories: [],
     budgets: [],
     activity: [],
     deletedRecords: {}
@@ -51,6 +52,7 @@ export function normalizeWorkspace(raw = {}) {
     inventory: asArray(source.inventory),
     movements: asArray(source.movements),
     expenses: asArray(source.expenses),
+    financeCategories: asArray(source.financeCategories),
     budgets: asArray(source.budgets),
     activity: asArray(source.activity),
     deletedRecords: source.deletedRecords && typeof source.deletedRecords === 'object' && !Array.isArray(source.deletedRecords) ? source.deletedRecords : {}
@@ -69,6 +71,7 @@ export function normalizeWorkspace(raw = {}) {
   workspace.inventory = workspace.inventory.map(item => ({ ...item, id: asText(item.id) || createId('inv'), name: asText(item.name) }));
   workspace.movements = asArray(workspace.movements);
   workspace.expenses = asArray(workspace.expenses);
+  workspace.financeCategories = asArray(workspace.financeCategories).filter(row => row && typeof row === 'object' && asText(row.name));
   workspace.budgets = asArray(workspace.budgets);
   workspace.activity = asArray(workspace.activity).slice(0, 1000);
   return workspace;
@@ -107,6 +110,7 @@ export function mergeWorkspaces(local = {}, remote = {}) {
     inventory: mergeRecords(a.inventory, b.inventory, deletedRecords, 'inventory:'),
     movements: mergeRecords(a.movements, b.movements, deletedRecords, 'movements:'),
     expenses: mergeRecords(a.expenses, b.expenses, deletedRecords, 'expenses:'),
+    financeCategories: mergeRecords(a.financeCategories, b.financeCategories, deletedRecords, 'financeCategories:'),
     budgets: mergeRecords(a.budgets, b.budgets, deletedRecords, 'budgets:'),
     activity: mergeRecords(a.activity, b.activity, deletedRecords, 'activity:').sort((x, y) => stamp(y.createdAt) - stamp(x.createdAt)).slice(0, 1000)
   };
