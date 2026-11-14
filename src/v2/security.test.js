@@ -89,13 +89,17 @@ test('la eliminación de un registro prevalece frente a un dispositivo atrasado'
   assert.equal(merged.products.some(row => row.id === 'p1'), false);
 });
 
-test('una edición legítima posterior a una eliminación puede recrear el registro', () => {
+test('una edición posterior mantiene el borrado y un identificador nuevo permite recrear', () => {
   const old = createEmptyWorkspace();
   old.deletedRecords = { 'products:p1': { deletedAt: '2026-11-10T10:00:00.000Z' } };
   const recreated = createEmptyWorkspace();
   recreated.products = [{ id: 'p1', name: 'Leche', updatedAt: '2026-11-11T10:00:00.000Z' }];
   recreated.deletedRecords = old.deletedRecords;
-  assert.equal(mergeWorkspaces(recreated, old).products.length, 1);
+  for (const merged of [mergeWorkspaces(recreated, old), mergeWorkspaces(old, recreated)]) {
+    assert.equal(merged.products.length, 0);
+  }
+  recreated.products[0].id = 'p2';
+  assert.deepEqual(mergeWorkspaces(recreated, old).products.map(row => row.id), ['p2']);
 });
 
 test('los borrados de artículos dentro de listas también se propagan', () => {
