@@ -7,7 +7,7 @@ import {
   doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where, writeBatch
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
-import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
+import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, WORKSPACE_COLLECTIONS } from './model.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -50,6 +50,9 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let syncing = false;
   let dirty = false;
   let localRevision = 0;
+  let sessionRevision = 0;
+  const writerId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+  const pendingWrites = new Map();
   let syncFailures = 0;
   let disposed = false;
   const retryOnReconnect = () => { if (user && dirty && !disposed) { syncFailures = 0; scheduleSync(); } };
@@ -65,14 +68,67 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   const notify = () => onChange(workspace, user);
   const workspaceRef = uid => doc(db, COLLECTION, uid);
 
+  function pendingPrefix() {
+    return 'mi-compra-pending:' + user.uid + ':' + workspaceId + ':';
+  }
+
+  function persistPending() {
+    const key = pendingPrefix() + writerId;
+    const serialized = JSON.stringify(workspace);
+    try {
+      localStorage.setItem(key, serialized);
+      pendingWrites.set(key, serialized);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function recoverPending() {
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (!key.startsWith(pendingPrefix())) continue;
+        const serialized = localStorage.getItem(key);
+        if (!serialized) continue;
+        try {
+          const saved = JSON.parse(serialized);
+          if (saved?.version !== workspace.version) continue;
+          workspace = dirty ? mergeWorkspaces(workspace, saved) : normalizeWorkspace(saved);
+          pendingWrites.set(key, serialized);
+          dirty = true;
+        } catch (error) {
+          console.warn('No se pudo recuperar un guardado pendiente:', error);
+        }
+      }
+    } catch (error) {
+      console.warn('Almacenamiento local no disponible:', error);
+    }
+  }
+
+  function clearPending(writes = pendingWrites) {
+    for (const [key, serialized] of writes) {
+      try {
+        if (localStorage.getItem(key) === serialized) localStorage.removeItem(key);
+        if (pendingWrites.get(key) === serialized) pendingWrites.delete(key);
+      } catch (error) {
+        console.warn('No se pudo limpiar un guardado confirmado:', error);
+      }
+    }
+  }
+
   async function migrateLegacyWorkspace(firebaseUser, credentials) {
     if (!LEGACY_URL || !LEGACY_KEY || !credentials?.email || !credentials?.password) return false;
     let legacyClient = null;
     const target = workspaceRef(firebaseUser.uid);
-    const existing = await getDoc(target);
-    if (existing.exists() && existing.data()?.workspace) return false;
+    const canImport = snapshot => {
+      const data = snapshot.data();
+      if (data?.migratedFrom || data?.resetAt || (data?.ownerUid && data.ownerUid !== firebaseUser.uid)) return false;
+      if (!data?.workspace) return true;
+      return stableJson(normalizeWorkspace(data.workspace)) === stableJson(createEmptyWorkspace());
+    };
 
     try {
+      if (!canImport(await getDoc(target))) return false;
       const { createClient } = await import('@supabase/supabase-js');
       legacyClient = createClient(LEGACY_URL, LEGACY_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
       const { data: authData, error: authError } = await legacyClient.auth.signInWithPassword({
@@ -85,17 +141,20 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       const oldRoot = data?.data && typeof data.data === 'object' ? data.data : {};
       const oldWorkspace = oldRoot.miCompraV2;
       if (!oldWorkspace || typeof oldWorkspace !== 'object') return false;
-      await setDoc(target, {
-        uid: firebaseUser.uid,
-        ownerUid: firebaseUser.uid,
-        email: firebaseUser.email || credentials.email,
-        workspace: normalizeWorkspace(oldWorkspace),
-        schemaVersion: 2,
-        migratedFrom: 'supabase',
-        migratedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+      return await runTransaction(db, async transaction => {
+        if (!canImport(await transaction.get(target))) return false;
+        transaction.set(target, {
+          uid: firebaseUser.uid,
+          ownerUid: firebaseUser.uid,
+          email: firebaseUser.email || credentials.email,
+          workspace: normalizeWorkspace(oldWorkspace),
+          schemaVersion: 2,
+          migratedFrom: 'supabase',
+          migratedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        return true;
       });
-      return true;
     } catch (error) {
       console.warn('Legacy workspace migration:', error?.message || error);
       return false;
@@ -130,6 +189,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     const nextId = nextUser?.uid || null;
     if ((user?.uid || null) === nextId && initialized) return;
     stopWorkspaceListener();
+    clearTimeout(timer);
+    sessionRevision += 1;
+    dirty = false;
+    syncFailures = 0;
+    pendingWrites.clear();
     user = nextUser || null;
     workspace = createEmptyWorkspace();
     workspaceOwnerUid = null;
@@ -234,7 +298,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     const revokedRef = doc(db, 'revokedUsers', user.uid);
     const terminateAccess = async reason => {
       if (!user || user.uid !== nextId) return;
-      clearTimeout(timer); dirty = false; workspace = createEmptyWorkspace(); workspaceId = null; workspaceOwnerUid = null; initialized = false;
+      clearTimeout(timer); clearPending(); sessionRevision += 1; dirty = false; workspace = createEmptyWorkspace(); workspaceId = null; workspaceOwnerUid = null; initialized = false;
       notify(); setStatus(reason);
       await firebaseSignOut(auth).catch(() => {});
     };
@@ -245,6 +309,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       if (!snapshot.exists()) void terminateAccess('Tu autorización fue retirada. La sesión se cerró.');
     }, error => console.warn('Membership listener:', error?.message || error));
 
+    recoverPending();
     const ref = workspaceRef(workspaceId);
     await new Promise(resolve => {
       let firstSnapshot = true;
@@ -255,7 +320,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
           workspace = dirty ? mergeWorkspaces(workspace, incoming) : incoming;
           if (dirty) scheduleSync();
         } else if (firstSnapshot) {
-          workspace = createEmptyWorkspace();
+          if (!dirty) workspace = createEmptyWorkspace();
           try {
             await setDoc(ref, {
               uid: workspaceId,
@@ -274,7 +339,12 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         firstSnapshot = false;
         initialized = true;
         notify();
-        setStatus(navigator.onLine ? 'Sincronizado con Firebase' : 'Esperando conexión');
+        if (dirty) {
+          setStatus('Cambios pendientes de guardar');
+          scheduleSync();
+        } else {
+          setStatus(navigator.onLine ? 'Sincronizado con Firebase' : 'Esperando conexión');
+        }
         resolve();
       }, error => {
         console.error('Firebase workspace listener:', error);
@@ -305,34 +375,41 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   function scheduleSync() {
-    if (!user || !dirty) return;
+    if (!user || !workspaceId || !dirty || disposed) return;
     clearTimeout(timer);
     const delay = syncFailures ? Math.min(30000, 1000 * 2 ** Math.min(syncFailures, 5)) : 450;
     timer = setTimeout(() => { void syncNow(); }, delay);
   }
 
   async function syncNow() {
-    if (!user) return;
+    if (!user || !workspaceId || !dirty || disposed) return;
     if (syncing) { scheduleSync(); return; }
     syncing = true;
     const revisionAtStart = localRevision;
+    const sessionAtStart = sessionRevision;
+    const uid = workspaceId;
+    const email = user.email || '';
+    const writesAtStart = new Map(pendingWrites);
     setStatus('Guardando en Firebase');
     try {
-      const ref = workspaceRef(workspaceId || user.uid);
+      const ref = workspaceRef(uid);
       const localSnapshot = normalizeWorkspace(workspace);
       const merged = await runTransaction(db, async transaction => {
         const latest = await transaction.get(ref);
         const remote = latest.exists() ? normalizeWorkspace(latest.data()?.workspace) : createEmptyWorkspace();
+        if (sessionAtStart !== sessionRevision || disposed) throw new Error('La sesión cambió durante el guardado.');
         const safeMerge = mergeWorkspaces(localSnapshot, remote);
         transaction.set(ref, {
-          uid: workspaceId || user.uid,
-          email: user.email || '',
+          uid,
+          email,
           workspace: safeMerge,
           schemaVersion: 2,
           updatedAt: serverTimestamp()
         }, { merge: true });
         return safeMerge;
       });
+      if (sessionAtStart !== sessionRevision || disposed) return;
+      clearPending(writesAtStart);
       syncFailures = 0;
       if (localRevision === revisionAtStart) {
         workspace = normalizeWorkspace(merged);
@@ -346,6 +423,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       }
       notify();
     } catch (error) {
+      if (sessionAtStart !== sessionRevision || disposed) return;
       dirty = true;
       syncFailures += 1;
       setStatus(navigator.onLine ? 'Cambios pendientes: reintentando guardar' : 'Sin conexión: cambios pendientes');
@@ -479,7 +557,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     const sourceSnapshot = await getDoc(sourceRef);
     if (!sourceSnapshot.exists() || !sourceSnapshot.data()?.workspace) throw new Error('No se encontró el espacio original en Firebase.');
     const originalWorkspace = sourceSnapshot.data().workspace;
-    const groups = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+    const groups = WORKSPACE_COLLECTIONS;
     const records = [];
     for (const group of groups) {
       const rows = Array.isArray(originalWorkspace[group]) ? originalWorkspace[group] : [];
@@ -543,27 +621,29 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       }
     }
 
-    const latestSource = await getDoc(sourceRef);
-    const latestWorkspace = latestSource.exists() ? latestSource.data()?.workspace : null;
-    if (!latestWorkspace || stableJson(latestWorkspace) !== stableJson(originalWorkspace)) {
-      throw new Error('El espacio original cambió mientras se copiaban los datos. La copia no se marcó como completada. Vuelve a ejecutarla para incluir los cambios recientes.');
-    }
-
     const verifiedAt = new Date().toISOString();
-    await setDoc(doc(db, COLLECTION, targetWorkspaceId, 'migrations', 'workspace-map-v2'), {
-      migrationId: 'workspace-map-v2',
-      status: 'copied_and_verified',
-      sourceSchemaVersion: 2,
-      targetSchemaVersion: 3,
-      recordCount: records.length,
-      countsByType: groups.reduce((result, group) => {
-        result[group] = records.filter(record => record.type === group).length;
-        return result;
-      }, { profile: 1, deletedRecords: 1 }),
-      verifiedAt,
-      verifiedBy: user.uid,
-      sourceUpdatedAt: timestampToIso(sourceSnapshot.data()?.updatedAt),
-      note: 'Copia verificada. El documento original sigue siendo la fuente activa; no se realizó el cambio de lectura/escritura.'
+    const migrationRef = doc(db, COLLECTION, targetWorkspaceId, 'migrations', 'workspace-map-v2');
+    await runTransaction(db, async transaction => {
+      const latestSource = await transaction.get(sourceRef);
+      const latestWorkspace = latestSource.data()?.workspace;
+      if (!latestWorkspace || stableJson(latestWorkspace) !== stableJson(originalWorkspace)) {
+        throw new Error('El espacio original cambió mientras se copiaban los datos. Vuelve a ejecutar la copia.');
+      }
+      transaction.set(migrationRef, {
+        migrationId: 'workspace-map-v2',
+        status: 'copied_and_verified',
+        sourceSchemaVersion: 2,
+        targetSchemaVersion: 3,
+        recordCount: records.length,
+        countsByType: groups.reduce((result, group) => {
+          result[group] = records.filter(record => record.type === group).length;
+          return result;
+        }, { profile: 1, deletedRecords: 1 }),
+        verifiedAt,
+        verifiedBy: user.uid,
+        sourceUpdatedAt: timestampToIso(sourceSnapshot.data()?.updatedAt),
+        note: 'Copia verificada. El documento original sigue siendo la fuente activa; no se realizó el cambio de lectura/escritura.'
+      });
     });
     return { recordCount: records.length, verifiedAt, status: 'copied_and_verified' };
   }
@@ -629,22 +709,35 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     clearTimeout(timer);
     const ref = workspaceRef(workspaceId || user.uid);
     const now = new Date().toISOString();
+    const writesAtStart = new Map(pendingWrites);
+    const revisionAtStart = localRevision;
+    const sessionAtStart = sessionRevision;
     const cleared = await runTransaction(db, async transaction => {
       const latest = await transaction.get(ref);
       const remote = normalizeWorkspace(latest.data()?.workspace || createEmptyWorkspace());
       const empty = createEmptyWorkspace();
       empty.deletedRecords = { ...remote.deletedRecords };
-      const groups = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+      const groups = WORKSPACE_COLLECTIONS;
       for (const group of groups) for (const row of remote[group]) empty.deletedRecords[group + ':' + row.id] = { deletedAt: now };
       for (const list of remote.lists) for (const item of list.items || []) empty.deletedRecords['listItems:' + list.id + ':' + item.id] = { deletedAt: now };
       const result = mergeWorkspaces(empty, remote);
-      transaction.set(ref, { uid: workspaceId || user.uid, ownerUid: workspaceOwnerUid, email: user.email || '', workspace: result, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+      transaction.set(ref, { uid: workspaceId || user.uid, ownerUid: workspaceOwnerUid, email: user.email || '', workspace: result, schemaVersion: 2, resetAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
       return result;
     });
-    workspace = normalizeWorkspace(cleared);
-    dirty = false; localRevision += 1;
+    if (sessionAtStart !== sessionRevision || disposed) return;
+    clearPending(writesAtStart);
+    if (localRevision === revisionAtStart) {
+      workspace = normalizeWorkspace(cleared);
+      dirty = false;
+      clearTimeout(timer);
+      setStatus('Sincronizado con Firebase');
+    } else {
+      workspace = mergeWorkspaces(workspace, cleared);
+      persistPending();
+      scheduleSync();
+    }
+    localRevision += 1;
     notify();
-    setStatus('Sincronizado con Firebase');
   }
 
   function restoreBackup(backup) {
@@ -668,14 +761,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   }
 
   function save(next) {
-    if (!user) {
-      setStatus('Inicia sesión: los datos solo se guardan en la nube');
+    if (!user || !workspaceId || !initialized) {
+      setStatus('Espera a que se conecte tu espacio de trabajo');
       return;
     }
     const previous = normalizeWorkspace(workspace);
     const incoming = normalizeWorkspace(next);
     const now = new Date().toISOString();
-    const collections = ['products', 'stores', 'lists', 'purchases', 'inventory', 'movements', 'expenses', 'budgets', 'activity'];
+    const collections = WORKSPACE_COLLECTIONS;
     incoming.deletedRecords = { ...previous.deletedRecords, ...incoming.deletedRecords };
     for (const collectionName of collections) {
       const nextIds = new Set(incoming[collectionName].map(row => row.id));
@@ -690,6 +783,9 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     syncFailures = 0;
     dirty = true;
     localRevision += 1;
+    if (!persistPending()) {
+      setStatus('No se pudo guardar el cambio en este dispositivo. Mantén la aplicación abierta hasta sincronizar.');
+    }
     notify();
     scheduleSync();
   }
