@@ -85,3 +85,19 @@ test('una eliminación confirmada no resucita al fusionar un dispositivo desactu
   assert.ok(merged.deletedRecords['products:p1']);
   assert.equal(mergeWorkspaces(merged, stale).products.length, 0);
 });
+
+test('un dispositivo con reloj adelantado no puede recuperar registros ni artículos borrados', () => {
+  const older = createEmptyWorkspace();
+  const deleted = createEmptyWorkspace();
+  const updatedAt = '2026-11-13T12:00:01Z';
+  older.financeCategories = [{ id: 'mascotas', name: 'Mascotas', updatedAt }];
+  older.lists = [{ id: 'hogar', items: [{ id: 'arroz', updatedAt }] }];
+  deleted.deletedRecords = {
+    'financeCategories:mascotas': { deletedAt: '2026-11-13T12:00:00Z' },
+    'listItems:hogar:arroz': { deletedAt: '2026-11-13T12:00:00Z' }
+  };
+  for (const merged of [mergeWorkspaces(older, deleted), mergeWorkspaces(deleted, older)]) {
+    assert.equal(merged.financeCategories.length, 0);
+    assert.equal(merged.lists[0].items.length, 0);
+  }
+});
