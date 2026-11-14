@@ -1,4 +1,8 @@
 export const WORKSPACE_VERSION = 2;
+export const WORKSPACE_COLLECTIONS = Object.freeze([
+  'products', 'stores', 'lists', 'purchases', 'inventory', 'movements',
+  'expenses', 'financeCategories', 'budgets', 'activity'
+]);
 
 export function createEmptyWorkspace() {
   return {
@@ -85,7 +89,7 @@ function mergeRecords(left = [], right = [], deletedRecords = {}, prefix = '') {
     const previous = records.get(id);
     if (!previous || stamp(item.updatedAt || item.createdAt) >= stamp(previous.updatedAt || previous.createdAt)) records.set(id, { ...item, id });
   }
-  return [...records.values()].filter(item => { const tombstone = deletedRecords[prefix + String(item.id)]; return !tombstone || stamp(tombstone.deletedAt) < stamp(item.updatedAt || item.createdAt); });
+  return [...records.values()].filter(item => !deletedRecords[prefix + item.id]);
 }
 
 export function mergeWorkspaces(local = {}, remote = {}) {
