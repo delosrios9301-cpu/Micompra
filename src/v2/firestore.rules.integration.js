@@ -2,7 +2,7 @@ import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction, writeBatch, getDocs, collection } from 'firebase/firestore';
 import { mergeWorkspaces, applySharedDraftOperation, normalizeSharedDraft } from './model.js';
 
 const projectId = 'demo-mi-compra-rules';
@@ -242,4 +242,87 @@ test('una cuenta sin acceso no puede leer ni modificar el borrador compartido', 
   const ref = doc(intruder, 'userWorkspaces/owner');
   await assertFails(getDoc(ref));
   await assertFails(setDoc(ref, { activePurchaseDraft: { id: 'robo', items: [], updatedAt: 'T1' } }, { merge: true }));
+});
+
+
+const validInvoiceMeta = (uid = 'member') => ({
+  purchaseId: 'buy_2026_11_15',
+  name: 'Factura prueba.pdf',
+  mimeType: 'application/pdf',
+  size: 23,
+  partCount: 1,
+  sha256: 'a'.repeat(64),
+  uploadedByUid: uid,
+  uploadedByEmail: uid + '@example.com',
+  uploadedAt: '2026-11-15T10:00:00.000Z'
+});
+
+test('miembro autorizado adjunta comprobante y puede verlo después desde otra cuenta del mismo espacio', async () => {
+  const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const receipt = doc(db, 'userWorkspaces/owner/receiptFiles/invoice-test');
+  const chunk = doc(db, 'userWorkspaces/owner/receiptFiles/invoice-test/parts/000');
+  const batch = writeBatch(db);
+  batch.set(receipt, validInvoiceMeta());
+  batch.set(chunk, { data: 'JVBERi0xLjY=', index: 0, uploadedByUid: 'member' });
+  await assertSucceeds(batch.commit());
+
+  const otherDevice = env.authenticatedContext('member2', { email: 'member2@example.com' }).firestore();
+  assert.equal((await assertSucceeds(getDoc(doc(otherDevice, receipt.path)))).data().name, 'Factura prueba.pdf');
+  assert.equal((await assertSucceeds(getDoc(doc(otherDevice, chunk.path)))).data().index, 0);
+  const found = await assertSucceeds(getDocs(collection(otherDevice, 'userWorkspaces/owner/receiptFiles')));
+  assert.equal(found.size, 1);
+});
+
+test('intrusos y no autenticados no leen ni agregan facturas de la familia', async () => {
+  const outsider = env.authenticatedContext('intruder', { email: 'intruder@example.com' }).firestore();
+  const anonymous = env.unauthenticatedContext().firestore();
+  const path = 'userWorkspaces/owner/receiptFiles/blocked';
+  await assertFails(getDoc(doc(outsider, path)));
+  await assertFails(getDoc(doc(anonymous, path)));
+  await assertFails(setDoc(doc(outsider, path), validInvoiceMeta('intruder')));
+  await assertFails(setDoc(doc(outsider, path + '/parts/000'), { data: 'JVBERi0=', index: 0, uploadedByUid: 'intruder' }));
+});
+
+test('no permite cambiar facturas ni subir archivos de tipos no permitidos o superar límites', async () => {
+  const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const meta = doc(db, 'userWorkspaces/owner/receiptFiles/immutable');
+  await assertSucceeds(setDoc(meta, validInvoiceMeta()));
+  await assertFails(setDoc(meta, {...validInvoiceMeta(),name:'Facturas cambiadas.pdf'}));
+  await assertFails(setDoc(doc(db, 'userWorkspaces/owner/receiptFiles/evil'), { ...validInvoiceMeta(), mimeType: 'text/html' }));
+  await assertFails(setDoc(doc(db, 'userWorkspaces/owner/receiptFiles/large'), { ...validInvoiceMeta(), size: 5000000 }));
+  await assertFails(setDoc(doc(db, 'userWorkspaces/owner/receiptFiles/forged'), { ...validInvoiceMeta(), uploadedByUid: 'owner' }));
+  await assertFails(setDoc(doc(db, 'userWorkspaces/owner/receiptFiles/immutable/parts/000'), {data: 'AAAA', index: 0, uploadedByUid: 'member'}));
+  await assertFails(deleteDoc(meta));
+});
+
+test('propietario puede retirar comprobante y partes, mientras que los demás no', async () => {
+  const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const receipt = doc(db, 'userWorkspaces/owner/receiptFiles/owned');
+  const chunk = doc(db, 'userWorkspaces/owner/receiptFiles/owned/parts/000');
+  const created = writeBatch(db);
+  created.set(receipt, validInvoiceMeta());
+  created.set(chunk, { data: 'JVBERi0=', index: 0, uploadedByUid: 'member' });
+  await assertSucceeds(created.commit());
+  await assertFails(deleteDoc(chunk));
+  const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
+  const deleted = writeBatch(owner);
+  deleted.delete(doc(owner, chunk.path));
+  deleted.delete(doc(owner, receipt.path));
+  await assertSucceeds(deleted.commit());
+});
+
+
+test('permite la carga atómica de los 17 fragmentos del tamaño máximo autorizado', async () => {
+  const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const metadata = doc(db, 'userWorkspaces/owner/receiptFiles/seventeen-part-invoice');
+  const batch = writeBatch(db);
+  batch.set(metadata, {...validInvoiceMeta(),size:3145728,partCount:17});
+  for(let index=0;index<17;index++){
+    const partId=String(index).padStart(3,'0');
+    batch.set(doc(metadata,'parts',partId),{data:'AAAA',index,uploadedByUid:'member'});
+  }
+  await assertSucceeds(batch.commit());
+  const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
+  const parts = await assertSucceeds(getDocs(collection(owner, metadata.path, 'parts')));
+  assert.equal(parts.size,17);
 });
