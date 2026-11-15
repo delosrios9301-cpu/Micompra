@@ -10,7 +10,7 @@ import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, normalizeSharedDraft, applySharedDraftOperation, createId } from './model.js';
 import { createWorkspaceBackup, validateWorkspaceBackup, shouldRecoverBackupDraft } from './backup.js';
 import { applySavedPurchaseChange } from './purchase-corrections.js';
-import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, validateReceiptFile, encodeReceiptParts, decodeReceiptParts, canAttachToPurchase } from './receipts.js';
+import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, validateReceiptFile, encodeReceiptParts, decodeReceiptParts, canAttachToPurchase, deterministicReceiptId, groupDistinctReceipts } from './receipts.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -888,18 +888,25 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     if (!purchaseSnapshot.exists() || !canAttachToPurchase(purchaseSnapshot.data()?.workspace, purchaseId)) {
       throw new Error('La compra ya no está finalizada o fue eliminada desde otro dispositivo.');
     }
-    const existing = await listPurchaseReceipts(purchaseId);
-    if (existing.length >= MAX_RECEIPTS_PER_PURCHASE) {
-      throw new Error('La compra ya tiene 5 comprobantes. No se sobrescribió ninguno.');
-    }
     const digest = Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)))
       .map(n => n.toString(16).padStart(2, '0')).join('');
+    const existing = await listPurchaseReceipts(purchaseId);
+    // Bloquear copias idénticas aunque tengan distinto nombre.
     if (existing.some(row => row.sha256 === digest)) {
-      throw new Error('La misma factura ya fue adjuntada.');
+      throw new Error('Esta factura ya está adjunta a la compra. No se creó otra copia.');
+    }
+    if (groupDistinctReceipts(existing).unique.length >= MAX_RECEIPTS_PER_PURCHASE) {
+      throw new Error('La compra ya tiene 5 comprobantes diferentes. No se sobrescribió ninguno.');
     }
     const parts = encodeReceiptParts(bytes);
-    const receiptId = createId('receipt');
+    const receiptId = await deterministicReceiptId(purchaseId, digest);
     const receiptRef = doc(receiptCollection(), receiptId);
+    // Protección interdispositivo: el nombre del documento depende del archivo
+    // y de la compra, nunca de un ID aleatorio. El servidor deniega updates.
+    const alreadyStored = await getDocFromServer(receiptRef);
+    if (alreadyStored.exists()) {
+      throw new Error('Esta factura ya está adjunta a la compra. No se creó otra copia.');
+    }
     const createdAt = new Date().toISOString();
     const batch = writeBatch(db);
     batch.set(receiptRef, {
@@ -920,7 +927,24 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     });
     // Metadatos y TODOS los fragmentos en una única escritura atómica:
     // o queda la factura completa, o no se guarda nada.
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (error) {
+      // La misma factura pudo haberse subido simultáneamente desde otro
+      // teléfono/PC entre la consulta y el commit: entonces Firestore rechaza
+      // el overwrite; informar duplicado en vez de un error de permisos.
+      if (error?.code === 'permission-denied' || error?.code === 'already-exists') {
+        try {
+          const concurrent = await getDocFromServer(receiptRef);
+          if (concurrent.exists() && concurrent.data()?.purchaseId === purchaseId && concurrent.data()?.sha256 === digest) {
+            throw new Error('Esta factura ya está adjunta a la compra desde otro dispositivo. No se creó otra copia.');
+          }
+        } catch (lookupError) {
+          if (lookupError.message?.includes('No se creó otra copia')) throw lookupError;
+        }
+      }
+      throw error;
+    }
     return { id: receiptId, name: verified.name, size: verified.size, mimeType: verified.mimeType };
   }
 
