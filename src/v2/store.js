@@ -871,6 +871,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
       mimeType: snapshot.data().mimeType,
       size: snapshot.data().size,
       uploadedByEmail: snapshot.data().uploadedByEmail || '',
+      sha256: snapshot.data().sha256 || '',
       uploadedAt: snapshot.data().uploadedAt || '',
       purchaseId: snapshot.data().purchaseId
     })).sort((left, right) => String(right.uploadedAt).localeCompare(String(left.uploadedAt)));
