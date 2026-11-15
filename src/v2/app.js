@@ -16,8 +16,12 @@ let authMode = 'signin';
 let authReady = false;
 let purchaseDraft = [];
 let purchaseSaving = false;
+let savedPurchaseBusy = false;
 let backupBusy = false;
 function renderUnlessDraftEditing() {
+  // No recrear los campos del diálogo mientras se escribe una corrección.
+  // Si otro dispositivo cambia la compra, la transacción detecta el conflicto.
+  if (modalName === 'saved-purchase' && modalData.mode === 'edit') return;
   if (!document.activeElement?.matches?.('[data-draft-price], [data-draft-qty]')) render();
 }
 
@@ -222,7 +226,7 @@ function renderShopping() {
   const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><div class="draft-quantity-control"><span>Cantidad</span><button type="button" class="draft-qty-button" data-action="draft-qty-minus" data-index="' + index + '" aria-label="Restar una unidad">−</button><input type="number" min="0.01" step="1" inputmode="decimal" aria-label="Cantidad de ' + safe(item.name) + '" data-draft-qty="' + index + '" value="' + item.quantity + '"><button type="button" class="draft-qty-button" data-action="draft-qty-plus" data-index="' + index + '" aria-label="Sumar una unidad">+</button><small>' + safe(item.unit) + '</small></div><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
   const draftTotal = computePurchaseTotal(purchaseDraft);
   const history = workspace.purchases.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(item =>
-    '<article class="purchase-history-row"><span class="entity-symbol symbol-green">' + icon('cart', 18) + '</span><div class="entity-copy"><strong>' + safe(item.storeName || 'Compra sin establecimiento') + '</strong><small>' + dateLabel(item.date) + ' · ' + item.items.length + ' productos · ' + (item.paid ? 'Pagada' : 'Pendiente de pago') + '</small></div><strong class="purchase-total">' + money(item.total) + '</strong></article>'
+    '<article class="purchase-history-row"><span class="entity-symbol symbol-green">' + icon('cart', 18) + '</span><div class="entity-copy"><strong>' + safe(item.storeName || 'Compra sin establecimiento') + '</strong><small>' + dateLabel(item.date) + ' · ' + item.items.length + ' productos · ' + (item.paid ? 'Pagada' : 'Pendiente de pago') + '</small></div><strong class="purchase-total">' + money(item.total) + '</strong><button class="btn btn-secondary btn-small purchase-open-button" data-action="open-saved-purchase" data-id="' + safe(item.id) + '" type="button" aria-label="Abrir la compra de ' + safe(item.storeName || 'sin establecimiento') + '">Ver y editar</button></article>'
   ).join('');
   return sectionHeading('REGISTRA LO QUE REALMENTE COMPRASTE', 'Comprar', 'Introduce los importes de tu recibo. Los precios siempre los escribes tú.', null, '') +
     '<div class="buy-layout"><section class="surface-panel purchase-builder"><div class="panel-heading"><div><span class="eyebrow">NUEVA OPERACIÓN</span><h3>Detalle de compra</h3></div><span class="step-chip">01 · Registro</span></div>' +
@@ -397,6 +401,53 @@ function modalHtml() {
   if (modalName === 'password-reset') {
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" data-modal-card><div class="modal-heading"><div><span class="eyebrow">RECUPERACIÓN DE ACCESO</span><h2>Restablecer contraseña</h2><p>Te enviaremos un enlace a tu correo.</p></div>' + close + '</div><form data-form="password-reset"><label class="field"><span>Correo electrónico</span><input name="email" type="email" required placeholder="tu@correo.com"></label><button class="btn btn-primary btn-wide" type="submit">Enviar enlace</button></form></section></div>';
   }
+  if (modalName === 'saved-purchase') {
+    const purchase = workspace.purchases.find(row => row.id === modalData.id);
+    if (!purchase) {
+      return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card" data-modal-card><div class="modal-heading"><h2>Compra no disponible</h2>' + close + '</div><p>La compra se eliminó desde otro dispositivo.</p></section></div>';
+    }
+    const editing = modalData.mode === 'edit';
+    let inner = '';
+    if (!editing) {
+      const lines = (purchase.items || []).map(item =>
+        '<div class="saved-purchase-view-row"><div><strong>' + safe(item.name) + '</strong><small>' +
+        safe(item.quantity) + ' ' + safe(item.unit || 'unidad') + ' × ' + money(item.unitPrice) +
+        (Number(item.discount) ? ' · descuento ' + money(item.discount) : '') + '</small></div><strong>' +
+        money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong></div>'
+      ).join('');
+      inner = '<div class="saved-purchase-summary"><div><span>Establecimiento</span><strong>' + safe(purchase.storeName || 'Sin establecimiento') + '</strong></div><div><span>Fecha</span><strong>' + safe(purchase.date || 'Sin fecha') + '</strong></div><div><span>Estado</span><strong>' + (purchase.paid ? 'Pagada' : 'Pendiente de pago') + '</strong></div></div>' +
+        '<div class="saved-purchase-list">' + lines + '</div><div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
+        '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' +
+        '<div class="saved-purchase-actions"><button class="btn btn-primary" type="button" data-action="edit-saved-purchase">' + icon('grid', 16) + 'Modificar compra</button>' +
+        (store.isWorkspaceOwner() ? '<button class="btn btn-danger" type="button" data-action="delete-saved-purchase">Eliminar compra</button>' : '') + '</div>';
+    } else {
+      const edited = modalData.editForm;
+      if (!edited) return '';
+      const savedStore = edited.storeId && !workspace.stores.some(row => row.id === edited.storeId)
+        ? '<option value="' + safe(edited.storeId) + '" selected>' + safe(purchase.storeName || 'Establecimiento anterior') + ' (archivado)</option>' : '';
+      const lines = edited.items.map((item, index) =>
+        '<div class="saved-purchase-edit-row">' +
+        '<input type="hidden" name="savedItemId" value="' + safe(item.id) + '">' +
+        '<label class="field saved-field-name"><span>Producto ' + (index + 1) + '</span><input name="savedItemName" required maxlength="100" value="' + safe(item.name) + '" placeholder="Nombre del producto"></label>' +
+        '<label class="field"><span>Cantidad</span><input name="savedItemQty" type="number" min="0.01" step="0.01" required value="' + safe(item.quantity) + '"></label>' +
+        '<label class="field"><span>Unidad</span><input name="savedItemUnit" maxlength="24" required value="' + safe(item.unit || 'unidad') + '"></label>' +
+        '<label class="field"><span>Precio unitario</span><input name="savedItemPrice" type="number" min="0" step="0.01" required value="' + safe(item.unitPrice) + '"></label>' +
+        '<label class="field"><span>Descuento</span><input name="savedItemDiscount" type="number" min="0" step="0.01" required value="' + safe(item.discount || 0) + '"></label>' +
+        '<div class="saved-item-actions"><strong data-saved-line-total="' + index + '">' + money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong><button class="icon-button danger-ghost" type="button" data-action="remove-saved-purchase-item" data-index="' + index + '" aria-label="Quitar producto ' + (index + 1) + '">' + icon('close', 17) + '</button></div></div>'
+      ).join('');
+      inner = '<form data-form="edit-saved-purchase" class="saved-purchase-form"><div class="saved-purchase-fields"><label class="field"><span>Establecimiento</span><select name="purchaseStoreId">' + storeOptions(edited.storeId) + savedStore + '</select></label>' +
+        '<label class="field"><span>Fecha de compra</span><input type="date" name="purchaseDate" value="' + safe(edited.date) + '" required></label></div>' +
+        '<label class="check-option saved-paid"><input type="checkbox" name="purchasePaid" ' + (edited.paid ? 'checked' : '') + '><span>Compra pagada</span></label>' +
+        '<div class="saved-purchase-list saved-purchase-editor">' + lines + '</div>' +
+        '<button type="button" class="btn btn-secondary" data-action="add-saved-purchase-item">' + icon('plus', 16) + 'Agregar producto</button>' +
+        '<div class="saved-purchase-grand"><span>Total corregido</span><strong id="saved-purchase-total">' + money(computePurchaseTotal(edited.items)) + '</strong></div>' +
+        '<p class="saved-purchase-note">' + (purchase.inventoryLinked || workspace.movements.some(row => row.reason === 'Compra ' + purchase.id) ?
+          'Se ajustarán las existencias vinculadas a esta compra. Los movimientos anteriores quedarán registrados; si faltan existencias para descontar, se solicitará revisar el inventario.' :
+          'Esta compra no sumó productos al inventario; su corrección modificará el historial y las finanzas, sin agregar existencias.') + '</p>' +
+        '<div class="saved-purchase-actions"><button type="button" class="btn btn-secondary" data-action="cancel-edit-saved-purchase">Cancelar edición</button><button type="submit" class="btn btn-primary" ' + (savedPurchaseBusy || !edited.items.length ? 'disabled' : '') + '>' + (savedPurchaseBusy ? 'Guardando…' : 'Guardar corrección') + '</button></div></form>';
+    }
+    return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card saved-purchase-modal" role="dialog" aria-modal="true" aria-label="' + (editing ? 'Modificar compra guardada' : 'Detalle de compra guardada') + '" data-modal-card><div class="modal-heading"><div><span class="eyebrow">COMPRA GUARDADA</span><h2>' + (editing ? 'Modificar compra' : 'Detalle de compra') + '</h2></div>' + close + '</div>' + inner + '</section></div>';
+  }
   let title = '';
   let body = '';
   if (modalName === 'new-list') {
@@ -514,9 +565,89 @@ async function backupWorkspace() {
     backupBusy = false;
   }
 }
+function readSavedPurchaseEditForm(form) {
+  const data = new FormData(form);
+  const ids = data.getAll('savedItemId');
+  const names = data.getAll('savedItemName');
+  const quantities = data.getAll('savedItemQty');
+  const units = data.getAll('savedItemUnit');
+  const prices = data.getAll('savedItemPrice');
+  const discounts = data.getAll('savedItemDiscount');
+  return {
+    storeId: String(data.get('purchaseStoreId') || ''),
+    date: String(data.get('purchaseDate') || ''),
+    paid: data.has('purchasePaid'),
+    items: ids.map((id, index) => ({
+      id: String(id), name: String(names[index] || ''),
+      quantity: String(quantities[index] || ''),
+      unit: String(units[index] || 'unidad'),
+      unitPrice: String(prices[index] || '0'), discount: String(discounts[index] || '0')
+    }))
+  };
+}
+function captureSavedPurchaseEditForm() {
+  const form = document.querySelector('form[data-form="edit-saved-purchase"]');
+  if (form && modalName === 'saved-purchase' && modalData.mode === 'edit') {
+    modalData.editForm = readSavedPurchaseEditForm(form);
+  }
+}
+function updateSavedPurchaseEditTotals(form) {
+  const current = readSavedPurchaseEditForm(form);
+  const total = form.querySelector('#saved-purchase-total');
+  if (total) total.textContent = money(computePurchaseTotal(current.items));
+  current.items.forEach((item, index) => {
+    const element = form.querySelector('[data-saved-line-total="' + index + '"]');
+    if (element) element.textContent = money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)));
+  });
+}
 function handleAction(action, target) {
   const id = target.dataset.id;
-  if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); if (currentView === 'configuracion') void refreshAccessUsers(); }
+  if (action === 'open-saved-purchase') {
+    const saved = workspace.purchases.find(row => row.id === id);
+    if (!saved) { showToast('Esa compra ya no está disponible.', 'info'); return; }
+    modalName = 'saved-purchase';
+    modalData = { id: saved.id, mode: 'view' };
+    render();
+  }
+  else if (action === 'edit-saved-purchase') {
+    const saved = workspace.purchases.find(row => row.id === modalData.id);
+    if (!saved || modalName !== 'saved-purchase') return;
+    modalData.mode = 'edit';
+    modalData.expectedUpdatedAt = saved.updatedAt || saved.createdAt || '';
+    modalData.editForm = {
+      date: saved.date || today(), storeId: saved.storeId || '', paid: Boolean(saved.paid),
+      items: (saved.items || []).map(item => ({ ...item, id: item.id || createId('pit') }))
+    };
+    render();
+  }
+  else if (action === 'cancel-edit-saved-purchase') {
+    modalData.mode = 'view';
+    delete modalData.editForm;
+    render();
+  }
+  else if (action === 'add-saved-purchase-item' || action === 'remove-saved-purchase-item') {
+    if (modalName !== 'saved-purchase' || modalData.mode !== 'edit' || savedPurchaseBusy) return;
+    captureSavedPurchaseEditForm();
+    if (action === 'add-saved-purchase-item') {
+      modalData.editForm.items.push({ id: createId('pit'), name: '', quantity: 1, unit: 'unidad', unitPrice: 0, discount: 0 });
+    } else {
+      modalData.editForm.items.splice(Number(target.dataset.index), 1);
+    }
+    render();
+    if (action === 'add-saved-purchase-item') document.querySelector('.saved-purchase-edit-row:last-child [name="savedItemName"]')?.focus();
+  }
+  else if (action === 'delete-saved-purchase') {
+    if (savedPurchaseBusy) return;
+    if (!store.isWorkspaceOwner()) { showToast('Solo el propietario puede eliminar compras guardadas.', 'info'); return; }
+    const saved = workspace.purchases.find(row => row.id === modalData.id);
+    if (!saved) return;
+    if (!window.confirm('¿Eliminar definitivamente la compra de ' + saved.storeName + ' del ' + saved.date + ' por ' + money(saved.total) + '?\n\nSe descontarán las existencias que procedan y quedará constancia en Actividad. Esta acción no elimina otras compras.')) return;
+    savedPurchaseBusy = true;
+    store.changeSavedPurchase({ kind: 'delete', id: saved.id, expectedUpdatedAt: saved.updatedAt || saved.createdAt || '' })
+      .then(() => { savedPurchaseBusy = false; closeModal(); showToast('Compra eliminada en Firebase, con historial de auditoría.'); })
+      .catch(error => { savedPurchaseBusy = false; showToast(error.message || 'No se pudo eliminar la compra.', 'info'); });
+  }
+  else if (action === 'navigate') { currentView = target.dataset.view || 'inicio'; selectedListId = null; searchValue = ''; render(); if (currentView === 'configuracion') void refreshAccessUsers(); }
   else if (action === 'open-auth') openModal('auth');
   else if (action === 'close-modal') closeModal();
   else if (action === 'open-reset') openModal('reset-workspace');
@@ -665,7 +796,7 @@ function confirmPurchase() {
   const total = computePurchaseTotal(items);
   const purchase = {
     id: createId('buy'), date, storeId, storeName: store?.name || 'Compra sin establecimiento',
-    items, total, paid, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    items, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   workspace.purchases.unshift(purchase);
   if (addInventory) {
@@ -676,6 +807,7 @@ function confirmPurchase() {
         row = { id: createId('inv'), productId: product.id, name: item.name, category: product.category || '', quantity: 0, unit: item.unit, minimum: 1, location: '', expiryDate: '', createdAt: new Date().toISOString() };
         workspace.inventory.unshift(row);
       }
+      item.inventoryId = row.id;
       row.quantity = Math.round((Number(row.quantity || 0) + item.quantity) * 100) / 100;
       row.updatedAt = new Date().toISOString();
       workspace.movements.unshift({ id: createId('mov'), inventoryId: row.id, productName: row.name, type: 'entrada', quantity: item.quantity, reason: 'Compra ' + purchase.id, createdAt: new Date().toISOString() });
@@ -703,7 +835,26 @@ function handleSubmit(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
   const action = form.dataset.form;
-  if (action === 'auth') {
+  if (action === 'edit-saved-purchase') {
+    if (savedPurchaseBusy || modalName !== 'saved-purchase' || modalData.mode !== 'edit') return;
+    const changes = readSavedPurchaseEditForm(form);
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    savedPurchaseBusy = true;
+    store.changeSavedPurchase({
+      kind: 'edit', id: modalData.id,
+      expectedUpdatedAt: modalData.expectedUpdatedAt,
+      changes
+    }).then(() => {
+      savedPurchaseBusy = false;
+      closeModal();
+      showToast('Compra corregida y sincronizada. Inventario, finanzas y auditoría actualizados.');
+    }).catch(error => {
+      savedPurchaseBusy = false;
+      if (button) button.disabled = false;
+      showToast(error.message || 'No se pudo guardar la corrección.', 'info');
+    });
+  } else if (action === 'auth') {
     const button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     const promise = store.signIn(data.email, data.password);
@@ -929,6 +1080,10 @@ root.addEventListener('click', event => {
 });
 root.addEventListener('submit', handleSubmit);
 root.addEventListener('input', event => {
+  if (event.target.closest('form[data-form="edit-saved-purchase"]')) {
+    updateSavedPurchaseEditTotals(event.target.closest('form'));
+    return;
+  }
   if (event.target.matches('[data-draft-price], [data-draft-qty]')) {
     const isPrice = event.target.matches('[data-draft-price]');
     const index = Number(isPrice ? event.target.dataset.draftPrice : event.target.dataset.draftQty);
