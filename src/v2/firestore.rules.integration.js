@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, deleteDoc, runTransaction, writeBatch, getDocs, collection } from 'firebase/firestore';
 import { mergeWorkspaces, applySharedDraftOperation, normalizeSharedDraft } from './model.js';
+import { deterministicReceiptId } from './receipts.js';
 
 const projectId = 'demo-mi-compra-rules';
 let env;
@@ -325,4 +326,38 @@ test('permite la carga atómica de los 17 fragmentos del tamaño máximo autoriz
   const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
   const parts = await assertSucceeds(getDocs(collection(owner, metadata.path, 'parts')));
   assert.equal(parts.size,17);
+});
+
+
+test('dos dispositivos no pueden crear dos copias con el mismo identificador de factura', async () => {
+  const digest = 'f'.repeat(64);
+  const id = await deterministicReceiptId('buy_2026_11_15', digest);
+  const writer = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const otherWriter = env.authenticatedContext('member2', { email: 'member2@example.com' }).firestore();
+  const receiptPath = 'userWorkspaces/owner/receiptFiles/' + id;
+  const original = doc(writer, receiptPath);
+  const batch = writeBatch(writer);
+  batch.set(original, { ...validInvoiceMeta('member'), sha256: digest });
+  batch.set(doc(original, 'parts', '000'), {data:'JVBERi0xLjY=',index:0,uploadedByUid:'member'});
+  await assertSucceeds(batch.commit());
+
+  const duplicate = writeBatch(otherWriter);
+  duplicate.set(doc(otherWriter, receiptPath), {
+    ...validInvoiceMeta('member2'), sha256: digest,
+    name: 'La misma factura con otro nombre.pdf'
+  });
+  duplicate.set(doc(otherWriter, receiptPath, 'parts', '000'), {data:'JVBERi0xLjY=',index:0,uploadedByUid:'member2'});
+  await assertFails(duplicate.commit());
+
+  const saved = (await assertSucceeds(getDoc(original))).data();
+  assert.equal(saved.name, 'Factura prueba.pdf');
+  const allReceipts = await assertSucceeds(getDocs(collection(writer, 'userWorkspaces/owner/receiptFiles')));
+  assert.equal(allReceipts.size,1);
+  // Otro contenido conserva un SHA diferente y permite otra factura distinta.
+  const another = doc(otherWriter, 'userWorkspaces/owner/receiptFiles/' + await deterministicReceiptId('buy_2026_11_15', 'e'.repeat(64)));
+  const second = writeBatch(otherWriter);
+  second.set(another, { ...validInvoiceMeta('member2'), sha256:'e'.repeat(64),name:'Factura diferente.pdf' });
+  second.set(doc(another,'parts','000'), {data:'JVBERi0yLjY=',index:0,uploadedByUid:'member2'});
+  await assertSucceeds(second.commit());
+  assert.equal((await assertSucceeds(getDocs(collection(writer, 'userWorkspaces/owner/receiptFiles')))).size,2);
 });
