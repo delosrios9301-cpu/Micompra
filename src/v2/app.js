@@ -560,7 +560,7 @@ function findOrCreateProduct(name, unit, category = '') {
   const normalized = normalizeText(name);
   let product = workspace.products.find(row => normalizeText(row.name) === normalized);
   if (!product) {
-    product = { id: createId('prd'), name: String(name).trim(), category, unit: unit || 'unidad', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    product = { id: createId('prd'), name: String(name).trim(), category, unit: unit || 'unidad', taxRate: taxRateForNewItem({ name, category }, []), active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     workspace.products.unshift(product);
   }
   return product;
@@ -589,10 +589,11 @@ function exportCsv(name, rows) {
   showToast('Archivo CSV preparado.');
 }
 function exportPurchases() {
-  const rows = [['Fecha', 'Establecimiento', 'Producto', 'Cantidad', 'Unidad', 'Precio unitario', 'Descuento', 'Total de línea', 'Total de compra', 'Pagada']];
+  const rows = [['Fecha', 'Establecimiento', 'Producto', 'Cantidad', 'Unidad', 'Precio unitario', 'Descuento', 'ITBMS %', 'Precio incluye ITBMS', 'Base imponible/exenta', 'ITBMS de línea', 'Total de línea', 'Total de compra', 'Pagada']];
   workspace.purchases.forEach(purchase => purchase.items.forEach(item => rows.push([
     purchase.date, purchase.storeName, item.name, item.quantity, item.unit, item.unitPrice, item.discount,
-    Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)), purchase.total, purchase.paid ? 'Sí' : 'No'
+    item.taxRate === undefined ? 'No desglosado' : item.taxRate, item.taxIncluded ? 'Sí' : 'No',
+    purchaseLineBreakdown(item).base, purchaseLineBreakdown(item).tax, purchaseLineBreakdown(item).total, purchase.total, purchase.paid ? 'Sí' : 'No'
   ])));
   exportCsv('mi-compra-compras.csv', rows);
 }
@@ -906,7 +907,7 @@ function handleAction(action, target) {
     const list = workspace.lists.find(row => row.id === selectedListId);
     if (list) {
       if (purchaseDraft.length && !window.confirm('Ya existe una compra en curso con precios registrados. ¿Reemplazar ese borrador por esta lista? Los precios del borrador anterior se perderán. Pulsa Cancelar para conservarlo.')) return;
-      const prepared = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
+      const prepared = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0, taxRate: taxForDraftName(item.name), taxIncluded: false }));
       try { store.replaceSharedDraft(prepared); }
       catch (error) { showToast(error.message, 'info'); return; }
       currentView = 'comprar';
@@ -983,12 +984,14 @@ function confirmPurchase() {
   const addInventory = Boolean(document.querySelector('#purchase-to-inventory')?.checked);
   const items = purchaseDraft.map(item => ({
     id: createId('pit'), name: item.name, quantity: Number(item.quantity), unit: item.unit,
-    unitPrice: Number(item.unitPrice), discount: Number(item.discount) || 0
+    unitPrice: Number(item.unitPrice), discount: Number(item.discount) || 0,
+    taxRate: validTaxRate(item.taxRate) ? Number(item.taxRate) : taxForDraftName(item.name),
+    taxIncluded: item.taxIncluded === true
   }));
-  const total = computePurchaseTotal(items);
+  const { subtotal, itbms, total } = computePurchaseBreakdown(items);
   const purchase = {
     id: createId('buy'), date, storeId, storeName: store?.name || 'Compra sin establecimiento',
-    items, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    items, subtotal, itbms, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   workspace.purchases.unshift(purchase);
   if (addInventory) {
@@ -1186,7 +1189,9 @@ function handleSubmit(event) {
       showToast('Revisa el producto, cantidad, precio y descuento.', 'info'); return;
     }
     try {
-      store.addSharedDraftLine({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
+      const taxRate = data.taxRate === 'auto' ? taxForDraftName(data.name) : Number(data.taxRate);
+      if (!validTaxRate(taxRate)) { showToast('Selecciona un ITBMS válido.', 'info'); return; }
+      store.addSharedDraftLine({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount, taxRate, taxIncluded: form.querySelector('[name="taxIncluded"]')?.checked === true });
       render();
     } catch (error) { showToast(error.message, 'info'); return; }
     showToast('Producto añadido a la compra.');
