@@ -10,6 +10,7 @@ import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, normalizeSharedDraft, applySharedDraftOperation, createId } from './model.js';
 import { createWorkspaceBackup, validateWorkspaceBackup, shouldRecoverBackupDraft } from './backup.js';
 import { applySavedPurchaseChange } from './purchase-corrections.js';
+import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, validateReceiptFile, encodeReceiptParts, decodeReceiptParts, canAttachToPurchase } from './receipts.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -855,6 +856,112 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     setStatus('Sincronizado con Firebase');
   }
 
+  function receiptCollection() {
+    if (!user || !workspaceId) throw new Error('Debes iniciar sesión para acceder a los comprobantes.');
+    return collection(db, COLLECTION, workspaceId, 'receiptFiles');
+  }
+
+  async function listPurchaseReceipts(purchaseId) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para ver los comprobantes.');
+    if (!purchaseId) return [];
+    const results = await getDocs(query(receiptCollection(), where('purchaseId', '==', purchaseId)));
+    return results.docs.map(snapshot => ({
+      id: snapshot.id,
+      name: snapshot.data().name,
+      mimeType: snapshot.data().mimeType,
+      size: snapshot.data().size,
+      uploadedByEmail: snapshot.data().uploadedByEmail || '',
+      uploadedAt: snapshot.data().uploadedAt || '',
+      purchaseId: snapshot.data().purchaseId
+    })).sort((left, right) => String(right.uploadedAt).localeCompare(String(left.uploadedAt)));
+  }
+
+  async function attachPurchaseReceipt(purchaseId, file) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para adjuntar una factura.');
+    if (!file || typeof file.arrayBuffer !== 'function') throw new Error('Selecciona una foto o un archivo válido.');
+    // Límite local ANTES de leer archivos grandes del dispositivo.
+    if (file.size > MAX_RECEIPT_BYTES) throw new Error('El archivo supera 3 MB. Comprime el PDF o la foto antes de adjuntarlo.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const verified = validateReceiptFile(file.name, bytes);
+    const purchaseSnapshot = await getDocFromServer(workspaceRef(workspaceId));
+    if (!purchaseSnapshot.exists() || !canAttachToPurchase(purchaseSnapshot.data()?.workspace, purchaseId)) {
+      throw new Error('La compra ya no está finalizada o fue eliminada desde otro dispositivo.');
+    }
+    const existing = await listPurchaseReceipts(purchaseId);
+    if (existing.length >= MAX_RECEIPTS_PER_PURCHASE) {
+      throw new Error('La compra ya tiene 5 comprobantes. No se sobrescribió ninguno.');
+    }
+    const digest = Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)))
+      .map(n => n.toString(16).padStart(2, '0')).join('');
+    if (existing.some(row => row.sha256 === digest)) {
+      throw new Error('La misma factura ya fue adjuntada.');
+    }
+    const parts = encodeReceiptParts(bytes);
+    const receiptId = createId('receipt');
+    const receiptRef = doc(receiptCollection(), receiptId);
+    const createdAt = new Date().toISOString();
+    const batch = writeBatch(db);
+    batch.set(receiptRef, {
+      purchaseId,
+      name: verified.name,
+      mimeType: verified.mimeType,
+      size: verified.size,
+      partCount: parts.length,
+      sha256: digest,
+      uploadedByUid: user.uid,
+      uploadedByEmail: user.email || '',
+      uploadedAt: createdAt
+    });
+    parts.forEach((part, index) => {
+      batch.set(doc(receiptRef, 'parts', String(index).padStart(3, '0')), {
+        data: part, index, uploadedByUid: user.uid
+      });
+    });
+    // Metadatos y TODOS los fragmentos en una única escritura atómica:
+    // o queda la factura completa, o no se guarda nada.
+    await batch.commit();
+    return { id: receiptId, name: verified.name, size: verified.size, mimeType: verified.mimeType };
+  }
+
+  async function loadPurchaseReceipt(receiptId, purchaseId) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para abrir un comprobante.');
+    if (!receiptId || !purchaseId) throw new Error('Comprobante no identificado.');
+    const receiptRef = doc(receiptCollection(), receiptId);
+    const receipt = await getDocFromServer(receiptRef);
+    if (!receipt.exists() || receipt.data()?.purchaseId !== purchaseId) {
+      throw new Error('No se encontró ese comprobante en la compra solicitada.');
+    }
+    const metadata = receipt.data();
+    const chunks = await getDocs(collection(receiptRef, 'parts'));
+    const parts = chunks.docs.sort((a, b) => a.id.localeCompare(b.id));
+    if (parts.length !== metadata.partCount ||
+        parts.some((row, index) => row.id !== String(index).padStart(3, '0') || row.data().index !== index)) {
+      throw new Error('El comprobante está incompleto. No se descargará un archivo dañado.');
+    }
+    const bytes = decodeReceiptParts(parts.map(row => row.data().data));
+    if (bytes.byteLength !== metadata.size) throw new Error('El tamaño de la factura no coincide con el original.');
+    const actualHash = Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)))
+      .map(n => n.toString(16).padStart(2, '0')).join('');
+    if (actualHash !== metadata.sha256) throw new Error('La comprobación de integridad del archivo falló.');
+    return { bytes, name: metadata.name, mimeType: metadata.mimeType };
+  }
+
+  async function deletePurchaseReceipt(receiptId, purchaseId) {
+    if (!user || !workspaceId || workspaceOwnerUid !== user.uid) {
+      throw new Error('Solo el propietario puede retirar comprobantes de una compra.');
+    }
+    const receiptRef = doc(receiptCollection(), receiptId);
+    const metadata = await getDocFromServer(receiptRef);
+    if (!metadata.exists() || metadata.data().purchaseId !== purchaseId) {
+      throw new Error('La factura ya no está disponible.');
+    }
+    const rows = await getDocs(collection(receiptRef, 'parts'));
+    const batch = writeBatch(db);
+    for (const row of rows.docs) batch.delete(row.ref);
+    batch.delete(receiptRef);
+    await batch.commit();
+  }
+
   async function exportBackup() {
     if (!user || !workspaceId) throw new Error('Inicia sesión para descargar una copia.');
     if (dirty || syncing || pendingDraftOps.length || draftSyncing) {
@@ -963,6 +1070,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
 
   return {
     initialize, save, signIn, signOut, resetPassword, resetWorkspace, exportBackup, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
+    listPurchaseReceipts, attachPurchaseReceipt, loadPurchaseReceipt, deletePurchaseReceipt,
     getSharedDraft: () => normalizeSharedDraft(sharedDraft), replaceSharedDraft, addSharedDraftLine, patchSharedDraftLine, removeSharedDraftLine, confirmSharedPurchase, flushDraft, changeSavedPurchase,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
