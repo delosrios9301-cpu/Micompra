@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, deleteDoc, runTransaction } from 'firebase/firestore';
-import { mergeWorkspaces } from './model.js';
+import { mergeWorkspaces, applySharedDraftOperation, normalizeSharedDraft } from './model.js';
 
 const projectId = 'demo-mi-compra-rules';
 let env;
@@ -202,4 +202,44 @@ test('solo el propietario puede leer y escribir la copia de migración', async (
     migrationId: 'workspace-map-v2', status: 'copied_and_verified', recordCount: 1
   }));
   await assertFails(getDoc(doc(member, 'userWorkspaces/owner/migrations/workspace-map-v2')));
+});
+
+test('ambas cuentas actualizan precios y las escrituras antiguas conservan el borrador independiente', async () => {
+  const dbA = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const dbB = env.authenticatedContext('member2', { email: 'member2@example.com' }).firestore();
+  const refA = doc(dbA, 'userWorkspaces/owner');
+  const refB = doc(dbB, 'userWorkspaces/owner');
+  const initial = {
+    id: 'familia-1', updatedAt: 'T1',
+    items: [{ id: 'arroz', name: 'Arroz', quantity: 1, unitPrice: 0 },
+            { id: 'pollo', name: 'Pollo', quantity: 1, unitPrice: 0 }]
+  };
+  await assertSucceeds(setDoc(refA, { activePurchaseDraft: initial }, { merge: true }));
+  const beforeLegacy = (await getDoc(refB)).data();
+  // Una versión anterior escribe solo workspace, sin conocer el campo nuevo.
+  await assertSucceeds(setDoc(refB, { workspace: beforeLegacy.workspace }, { merge: true }));
+  assert.deepEqual((await getDoc(refA)).data().activePurchaseDraft.items.map(item => item.id), ['arroz', 'pollo']);
+
+  const change = (db, ref, itemId, price) => runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const next = applySharedDraftOperation(snap.data().activePurchaseDraft, {
+      type: 'patch', draftId: 'familia-1', itemId,
+      changes: { unitPrice: price }, at: 'T2'
+    }, true);
+    tx.set(ref, { activePurchaseDraft: next }, { merge: true });
+  });
+  await assertSucceeds(Promise.all([
+    change(dbA, refA, 'arroz', 1.5),
+    change(dbB, refB, 'pollo', 6.25)
+  ]));
+  const final = normalizeSharedDraft((await getDoc(refA)).data().activePurchaseDraft);
+  assert.equal(final.items.find(item => item.id === 'arroz').unitPrice, 1.5);
+  assert.equal(final.items.find(item => item.id === 'pollo').unitPrice, 6.25);
+});
+
+test('una cuenta sin acceso no puede leer ni modificar el borrador compartido', async () => {
+  const intruder = env.authenticatedContext('intruso', { email: 'intruso@example.com' }).firestore();
+  const ref = doc(intruder, 'userWorkspaces/owner');
+  await assertFails(getDoc(ref));
+  await assertFails(setDoc(ref, { activePurchaseDraft: { id: 'robo', items: [], updatedAt: 'T1' } }, { merge: true }));
 });
