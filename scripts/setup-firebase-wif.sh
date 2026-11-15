@@ -65,6 +65,7 @@ if gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
   gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID" \
     --project="$PROJECT_ID" --location=global \
     --workload-identity-pool="$POOL_ID" \
+    --issuer-uri="https://token.actions.githubusercontent.com" \
     --attribute-mapping="$MAPPING" \
     --attribute-condition="$CONDITION" --quiet
 else
