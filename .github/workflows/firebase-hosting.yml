@@ -1,15 +1,22 @@
-name: Deploy Mi Compra to Firebase Hosting
+name: Deploy Mi Compra to Firebase Hosting (keyless)
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: firebase-hosting-live
+  cancel-in-progress: false
+
 jobs:
-  firebase-hosting:
+  verify:
+    if: github.repository == 'delosrios9301-cpu/Micompra' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -17,21 +24,56 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Install Firestore emulator test dependencies
+        run: npm install --no-save --no-package-lock --no-audit --no-fund firebase-tools@15.36.0 @firebase/rules-unit-testing@5.0.0
+      - name: Verify Firestore security rules in emulator
+        run: npx firebase emulators:exec --only firestore --project demo-mi-compra-rules --non-interactive "node --test src/v2/firestore.rules.integration.js"
       - name: Run application tests
         run: npm test
-      - name: Build production bundle
+      - name: Build Vite for production
         run: npm run build
-      - name: Check Firebase deployment credentials
+      - name: Upload build for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-compra-hosting-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: verify
+    if: github.repository == 'delosrios9301-cpu/Micompra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Firebase hosting configuration
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download verified build
+        uses: actions/download-artifact@v4
+        with:
+          name: mi-compra-hosting-dist
+          path: dist
+      - name: Check one-time Workload Identity Federation setup
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 }}
+          GCP_PROJECT_NUMBER: ${{ vars.FIREBASE_GCP_PROJECT_NUMBER }}
         run: |
-          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "::error::Configure FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 en los secretos de GitHub para habilitar la publicación de Firebase Hosting."
+          if ! [[ "$GCP_PROJECT_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Falta la variable FIREBASE_GCP_PROJECT_NUMBER. Ejecuta scripts/setup-firebase-wif.sh en Google Cloud Shell y guarda el número en Settings > Secrets and variables > Actions > Variables."
             exit 1
           fi
-      - name: Deploy hosting only (never touch Firestore data or rules)
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Authenticate with Google Cloud (OIDC, no private keys)
+        uses: google-github-actions/auth@v3
         with:
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 }}
-          channelId: live
-          projectId: mi-compra-d9717
+          project_id: mi-compra-d9717
+          workload_identity_provider: projects/${{ vars.FIREBASE_GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/mi-compra-github/providers/mi-compra-main
+          service_account: mi-compra-hosting-gh@mi-compra-d9717.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Deploy ONLY Firebase Hosting (never Firestore)
+        run: npx --yes firebase-tools@15.36.0 deploy --only hosting --project mi-compra-d9717 --non-interactive
