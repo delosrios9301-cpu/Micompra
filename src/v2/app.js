@@ -428,9 +428,9 @@ function modalHtml() {
     if (!editing) {
       const lines = (purchase.items || []).map(item =>
         '<div class="saved-purchase-view-row"><div><strong>' + safe(item.name) + '</strong><small>' +
-        safe(item.quantity) + ' ' + safe(item.unit || 'unidad') + ' × ' + money(item.unitPrice) +
+        safe(item.quantity) + ' ' + safe(item.unit || 'unidad') + ' × ' + money(item.unitPrice) + ' · ITBMS ' + (item.taxRate === undefined ? 'no desglosado' : (item.taxRate + '%')) + (item.taxIncluded ? ' incluido' : '') +
         (Number(item.discount) ? ' · descuento ' + money(item.discount) : '') + '</small></div><strong>' +
-        money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong></div>'
+        money(purchaseLineBreakdown(item).total) + '</strong></div>'
       ).join('');
       const receipts = purchaseReceiptState.purchaseId === purchase.id ? purchaseReceiptState : { loading: true, items: [], error: '' };
       const receiptGroups = groupDistinctReceipts(receipts.items);
@@ -468,7 +468,8 @@ function modalHtml() {
         (purchaseReceiptBusy ? 'disabled' : '') + '>Actualizar</button></div>' +
         '<p class="saved-purchase-note">Hasta 5 archivos diferentes por compra, máximo 3 MB cada uno. Puedes seleccionar varios PDF a la vez; los archivos idénticos no se duplican. Compartidos de forma privada, sin cambiar el total.</p></section>';
       inner = '<div class="saved-purchase-summary"><div><span>Establecimiento</span><strong>' + safe(purchase.storeName || 'Sin establecimiento') + '</strong></div><div><span>Fecha</span><strong>' + safe(purchase.date || 'Sin fecha') + '</strong></div><div><span>Estado</span><strong>' + (purchase.paid ? 'Pagada' : 'Pendiente de pago') + '</strong></div></div>' +
-        '<div class="saved-purchase-list">' + lines + '</div><div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
+        '<div class="saved-purchase-list">' + lines + '</div>' + (purchase.items.some(row => row.taxRate !== undefined) ? purchaseTaxSummary(purchase.items) : '<p class="saved-purchase-note">Compra anterior: sin desglose fiscal registrado. Se conserva su total original.</p>') +
+        '<div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
         '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' + receiptPanel +
         '<div class="saved-purchase-actions"><button class="btn btn-primary" type="button" data-action="edit-saved-purchase">' + icon('grid', 16) + 'Modificar compra</button>' +
         (store.isWorkspaceOwner() ? '<button class="btn btn-danger" type="button" data-action="delete-saved-purchase">Eliminar compra</button>' : '') + '</div>';
@@ -484,15 +485,15 @@ function modalHtml() {
         '<label class="field"><span>Cantidad</span><input name="savedItemQty" type="number" min="0.01" step="0.01" required value="' + safe(item.quantity) + '"></label>' +
         '<label class="field"><span>Unidad</span><input name="savedItemUnit" maxlength="24" required value="' + safe(item.unit || 'unidad') + '"></label>' +
         '<label class="field"><span>Precio unitario</span><input name="savedItemPrice" type="number" min="0" step="0.01" required value="' + safe(item.unitPrice) + '"></label>' +
-        '<label class="field"><span>Descuento</span><input name="savedItemDiscount" type="number" min="0" step="0.01" required value="' + safe(item.discount || 0) + '"></label>' +
-        '<div class="saved-item-actions"><strong data-saved-line-total="' + index + '">' + money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong><button class="icon-button danger-ghost" type="button" data-action="remove-saved-purchase-item" data-index="' + index + '" aria-label="Quitar producto ' + (index + 1) + '">' + icon('close', 17) + '</button></div></div>'
+        '<label class="field"><span>Descuento</span><input name="savedItemDiscount" type="number" min="0" step="0.01" required value="' + safe(item.discount || 0) + '"></label><label class="field"><span>ITBMS</span><select name="savedItemTax">' + itbmsOptions(item.taxRate ?? 0) + '</select></label><label class="check-option saved-tax-included"><input type="checkbox" name="savedItemTaxIncluded" ' + (item.taxIncluded ? 'checked' : '') + '><span>Precio incluye ITBMS</span></label>' +
+        '<div class="saved-item-actions"><strong data-saved-line-total="' + index + '">' + money(purchaseLineBreakdown(item).total) + '</strong><button class="icon-button danger-ghost" type="button" data-action="remove-saved-purchase-item" data-index="' + index + '" aria-label="Quitar producto ' + (index + 1) + '">' + icon('close', 17) + '</button></div></div>'
       ).join('');
       inner = '<form data-form="edit-saved-purchase" class="saved-purchase-form"><div class="saved-purchase-fields"><label class="field"><span>Establecimiento</span><select name="purchaseStoreId">' + storeOptions(edited.storeId) + savedStore + '</select></label>' +
         '<label class="field"><span>Fecha de compra</span><input type="date" name="purchaseDate" value="' + safe(edited.date) + '" required></label></div>' +
         '<label class="check-option saved-paid"><input type="checkbox" name="purchasePaid" ' + (edited.paid ? 'checked' : '') + '><span>Compra pagada</span></label>' +
         '<div class="saved-purchase-list saved-purchase-editor">' + lines + '</div>' +
         '<button type="button" class="btn btn-secondary" data-action="add-saved-purchase-item">' + icon('plus', 16) + 'Agregar producto</button>' +
-        '<div class="saved-purchase-grand"><span>Total corregido</span><strong id="saved-purchase-total">' + money(computePurchaseTotal(edited.items)) + '</strong></div>' +
+        '<div class="saved-purchase-tax-summary" id="saved-purchase-tax-summary">' + purchaseTaxSummary(edited.items) + '</div><div class="saved-purchase-grand"><span>Total corregido</span><strong id="saved-purchase-total">' + money(computePurchaseTotal(edited.items)) + '</strong></div>' +
         '<p class="saved-purchase-note">' + (purchase.inventoryLinked || workspace.movements.some(row => row.reason === 'Compra ' + purchase.id) ?
           'Se ajustarán las existencias vinculadas a esta compra. Los movimientos anteriores quedarán registrados; si faltan existencias para descontar, se solicitará revisar el inventario.' :
           'Esta compra no sumó productos al inventario; su corrección modificará el historial y las finanzas, sin agregar existencias.') + '</p>' +
@@ -630,6 +631,8 @@ function readSavedPurchaseEditForm(form) {
   const units = data.getAll('savedItemUnit');
   const prices = data.getAll('savedItemPrice');
   const discounts = data.getAll('savedItemDiscount');
+  const taxes = data.getAll('savedItemTax');
+  const taxesIncluded = [...form.querySelectorAll('[name="savedItemTaxIncluded"]')].map(input => input.checked);
   return {
     storeId: String(data.get('purchaseStoreId') || ''),
     date: String(data.get('purchaseDate') || ''),
@@ -638,7 +641,7 @@ function readSavedPurchaseEditForm(form) {
       id: String(id), name: String(names[index] || ''),
       quantity: String(quantities[index] || ''),
       unit: String(units[index] || 'unidad'),
-      unitPrice: String(prices[index] || '0'), discount: String(discounts[index] || '0')
+      unitPrice: String(prices[index] || '0'), discount: String(discounts[index] || '0'), taxRate: Number(taxes[index] || 0), taxIncluded: taxesIncluded[index] === true
     }))
   };
 }
@@ -652,9 +655,11 @@ function updateSavedPurchaseEditTotals(form) {
   const current = readSavedPurchaseEditForm(form);
   const total = form.querySelector('#saved-purchase-total');
   if (total) total.textContent = money(computePurchaseTotal(current.items));
+  const taxSummary = form.querySelector('#saved-purchase-tax-summary');
+  if (taxSummary) taxSummary.innerHTML = purchaseTaxSummary(current.items);
   current.items.forEach((item, index) => {
     const element = form.querySelector('[data-saved-line-total="' + index + '"]');
-    if (element) element.textContent = money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)));
+    if (element) element.textContent = money(purchaseLineBreakdown(item).total);
   });
 }
 function loadSavedPurchaseReceipts(purchaseId) {
@@ -814,7 +819,7 @@ function handleAction(action, target) {
     if (modalName !== 'saved-purchase' || modalData.mode !== 'edit' || savedPurchaseBusy) return;
     captureSavedPurchaseEditForm();
     if (action === 'add-saved-purchase-item') {
-      modalData.editForm.items.push({ id: createId('pit'), name: '', quantity: 1, unit: 'unidad', unitPrice: 0, discount: 0 });
+      modalData.editForm.items.push({ id: createId('pit'), name: '', quantity: 1, unit: 'unidad', unitPrice: 0, discount: 0, taxRate: 0, taxIncluded: false });
     } else {
       modalData.editForm.items.splice(Number(target.dataset.index), 1);
     }
