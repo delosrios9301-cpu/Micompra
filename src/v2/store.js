@@ -163,7 +163,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
       if (!snap.exists()) throw new Error('El espacio de compras no está disponible.');
       const actual = normalizeSharedDraft(snap.data()?.activePurchaseDraft);
       // Firestore puede devolver las claves de cada objeto en un orden distinto.
-      const comparable = items => (items || []).map(item => [item.id, String(item.name || ''), Number(item.quantity), String(item.unit || ''), Number(item.unitPrice), Number(item.discount || 0)]);
+      const comparable = items => (items || []).map(item => [item.id, String(item.name || ''), Number(item.quantity), String(item.unit || ''), Number(item.unitPrice), Number(item.discount || 0), Number(item.taxRate || 0), item.taxIncluded === true]);
       if (!actual.id || actual.id !== expectedDraftId || JSON.stringify(comparable(actual.items)) !== JSON.stringify(comparable(expectedItems))) {
         throw new Error('La compra se modificó en otro dispositivo. Actualiza los precios antes de confirmar; no se ha perdido nada.');
       }
