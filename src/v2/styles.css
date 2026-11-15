@@ -316,3 +316,88 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 /* Evitar capas GPU permanentes en listas largas; activarlas solo durante el gesto. */
 .list-card-front{will-change:auto}
 .list-card.is-swiping .list-card-front{will-change:transform}
+
+
+/* Escritorio y tablet: navegación completa, tipografía legible y ancho fluido. */
+@media (min-width: 621px) {
+  html, body, #app, .app-shell {max-width:100%; min-width:0;}
+  .main-workspace, .page-container, .app-view, .surface-panel,
+  .settings-layout, .report-grid, .dashboard-grid, .buy-layout {min-width:0;}
+  .main-workspace {width:auto;}
+  .page-container {max-width:1480px;}
+  .auth-card {width:min(100%,460px);}
+  .auth-gate-copy, .auth-note, .auth-card .field>span {font-size:12px;}
+  .auth-card .field input {font-size:14px;}
+  .page-heading p, .settings-description, .modal-description, .data-note {font-size:12px;line-height:1.55;}
+  .nav-link {font-size:13px;}
+  .topbar-title strong {font-size:16px;}
+  .btn {font-size:12px;}
+  .field input, .field select, .field textarea, .search-field input {font-size:13px;}
+  .entity-copy strong, .list-item-main strong, .catalog-row strong {font-size:12px;}
+  .entity-copy small, .list-item-main small {font-size:11px;}
+  .report-card h3, .tool-card>strong {font-size:14px;}
+  .report-card p, .tool-card>small {font-size:12px;}
+  .topbar-actions {min-width:0;}
+  .account-button span:not(.account-mini-avatar) {display:inline-block;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .report-card, .settings-card {min-width:0;}
+  .modal-card {max-height:min(88vh,820px);}
+}
+
+/* En tablet, el menú con texto sigue disponible (nada de iconos sin nombre). */
+@media (min-width:621px) and (max-width:1024px) {
+  .sidebar {width:202px;align-items:stretch;padding:22px 10px 14px;}
+  .sidebar .brand {justify-content:flex-start;width:100%;padding:0 8px 22px;gap:8px;}
+  .sidebar .brand-name {display:inline;white-space:nowrap;font-size:19px;}
+  .sidebar .workspace-label {display:block;padding:10px 9px 7px;font-size:9px;}
+  .sidebar .side-nav {width:100%;}
+  .sidebar .nav-link {justify-content:flex-start;gap:9px;padding:0 10px;min-height:43px;}
+  .sidebar .nav-link span {display:inline;white-space:nowrap;}
+  .sidebar .side-divider {width:auto;margin:12px 5px 4px;}
+  .sidebar .sidebar-footer {justify-content:flex-start;width:100%;}
+  .sidebar .sidebar-footer .side-user {display:grid;}
+  .sidebar .sidebar-footer .side-account {display:inline-grid;}
+  .sidebar .side-user strong {max-width:94px;}
+  .main-workspace {width:calc(100% - 202px);margin-left:202px;}
+  .page-container {width:100%;padding:25px 20px;}
+  .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .dashboard-grid, .buy-layout {grid-template-columns:minmax(0,1fr);}
+  .spending-panel {grid-row:auto;}
+  .buy-aside {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .finance-summary-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .topbar {padding:0 20px;}
+  .purchase-fields {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+@media (min-width:621px) and (max-width:760px) {
+  .sidebar {width:178px;}
+  .sidebar .brand-name {font-size:16px;letter-spacing:-.6px;}
+  .sidebar .nav-link {font-size:11px;gap:6px;padding:0 8px;}
+  .sidebar .side-user strong {max-width:70px;}
+  .sidebar .sidebar-footer .side-account {display:none;}
+  .main-workspace {width:calc(100% - 178px);margin-left:178px;}
+  .topbar {padding:0 14px;}
+  .topbar .sync-status {display:none;}
+  .topbar .account-button span:not(.account-mini-avatar) {max-width:55px;}
+  .page-container {padding:20px 13px;}
+  .page-heading {align-items:flex-start;flex-wrap:wrap;}
+  .dashboard-grid, .tools-grid, .settings-layout, .report-grid {grid-template-columns:minmax(0,1fr);}
+  .report-overview, .inventory-kpis {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .buy-aside {grid-template-columns:minmax(0,1fr);}
+  .finance-summary-grid {grid-template-columns:minmax(0,1fr);}
+  .inline-add-form {flex-wrap:wrap;}
+  .inline-add-form .grow {flex-basis:100%;}
+  .purchase-builder .form-grid {grid-template-columns:minmax(0,1fr);}
+  .purchase-fields {grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+/* Textos y formularios largos nunca deben sacar columnas fuera de la pantalla. */
+@media (min-width:621px) {
+  .page-container :is(.surface-panel,.report-card,.tool-card,.entity-card,.draft-line,.modal-card) {min-width:0;}
+  .page-container :is(.panel-heading,.settings-actions,.report-card,.purchase-history-row) {flex-wrap:wrap;}
+  .draft-line > div {min-width:0;}
+  .list-item-main strong, .settings-description, .modal-description, .report-card p {overflow-wrap:anywhere;}
+  .modal-backdrop {overflow-y:auto;overscroll-behavior:contain;}
+}
+/* Adaptación a pantallas táctiles medianas: botones fáciles de presionar. */
+@media (pointer:coarse) and (min-width:621px) {
+  .sidebar .nav-link, .btn, .icon-button {min-height:44px;}
+  .sidebar {overflow-y:auto;}
+}
