@@ -451,3 +451,31 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
   .saved-purchase-view-row {align-items:flex-start;}
   .saved-purchase-grand strong {font-size:17px;}
 }
+
+
+/* Comprobantes asociados a compras finalizadas: móvil, tablet y escritorio. */
+.purchase-receipts{display:grid;gap:10px;margin-top:18px;padding:15px;border:1px solid #d9e9df;border-radius:14px;background:#f8fbf9;min-width:0;}
+.purchase-receipts .panel-heading{margin:0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.purchase-receipts .panel-heading h3{margin:3px 0 0;font-size:15px;color:#244c40;}
+.purchase-receipts .panel-heading .eyebrow{font-size:10px;letter-spacing:.08em;color:#648a78;}
+.purchase-receipt-list{display:grid;gap:7px;}
+.purchase-receipt-row{display:flex;align-items:center;gap:9px;min-width:0;padding:11px 12px;background:#fff;border:1px solid #e1eae4;border-radius:10px;}
+.receipt-file-icon{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:9px;background:#e9f4ed;color:#216f4d;}
+.purchase-receipt-label{display:grid;gap:4px;flex:1;min-width:0;}
+.purchase-receipt-label strong{font-size:12px;color:#264f41;overflow-wrap:anywhere;}
+.purchase-receipt-label small{font-size:10px;color:#698577;line-height:1.4;overflow-wrap:anywhere;}
+.purchase-receipt-row .btn{min-height:38px;white-space:nowrap;}
+.purchase-receipt-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.purchase-receipt-buttons .btn{min-height:40px;font-size:12px;}
+.purchase-receipt-buttons .file-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;}
+.purchase-receipt-buttons .receipt-upload-disabled{opacity:.48;pointer-events:none;}
+.purchase-receipts>.saved-purchase-note{margin:1px 0 0;line-height:1.5;font-size:11px;}
+@media(max-width:620px){
+  .purchase-receipts{padding:12px;}
+  .purchase-receipt-row{flex-wrap:wrap;}
+  .purchase-receipt-label{flex:1 1 150px;}
+  .purchase-receipt-row .btn{min-width:68px;}
+  .purchase-receipt-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .purchase-receipt-buttons .btn:last-child{grid-column:span 2;}
+  .purchase-receipts .panel-heading h3{font-size:14px;}
+}
