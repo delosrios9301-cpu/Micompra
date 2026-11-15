@@ -95,7 +95,13 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     if (!user || !workspaceId) throw new Error('Inicia sesión para guardar tu compra en la nube.');
     const op = { ...data, at: new Date().toISOString() };
     sharedDraft = applySharedDraftOperation(sharedDraft, op, true);
-    pendingDraftOps.push(op);
+    // Reducir escrituras mientras se teclea, sin alterar operaciones en vuelo.
+    const last = pendingDraftOps[pendingDraftOps.length - 1];
+    if (!draftSyncing && op.type === 'patch' && last?.type === 'patch' && last.draftId === op.draftId && last.itemId === op.itemId && Object.keys(last.changes).join(',') === Object.keys(op.changes).join(',')) {
+      pendingDraftOps[pendingDraftOps.length - 1] = op;
+    } else {
+      pendingDraftOps.push(op);
+    }
     persistPendingDraft();
     if (op.type !== 'patch') notifyDraft();
     scheduleDraftSync();
@@ -135,7 +141,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
   async function flushDraft() {
     clearTimeout(draftTimer);
     let attempts = 0;
-    while (pendingDraftOps.length && attempts++ < 5) {
+    while (pendingDraftOps.length && attempts++ < 30) {
       if (draftSyncing) { await new Promise(resolve => setTimeout(resolve, 250)); continue; }
       await syncDraft();
       if (pendingDraftOps.length) await new Promise(resolve => setTimeout(resolve, 100));
@@ -177,7 +183,13 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
   function replaceSharedDraft(items) {
     queueDraftOperation({ type: 'replace', expectedId: sharedDraft.id, expectedUpdatedAt: sharedDraft.updatedAt, id: createId('draft'), items: items.map(item => ({ ...item })) });
   }
-  function addSharedDraftLine(item) { queueDraftOperation({ type: 'add', draftId: sharedDraft.id, item: { ...item } }); }
+  function addSharedDraftLine(item) {
+    if (!sharedDraft.id) {
+      replaceSharedDraft([item]);
+      return;
+    }
+    queueDraftOperation({ type: 'add', draftId: sharedDraft.id, item: { ...item } });
+  }
   function patchSharedDraftLine(itemId, changes) { queueDraftOperation({ type: 'patch', draftId: sharedDraft.id, itemId, changes }); }
   function removeSharedDraftLine(itemId) { queueDraftOperation({ type: 'remove', draftId: sharedDraft.id, itemId }); }
 
