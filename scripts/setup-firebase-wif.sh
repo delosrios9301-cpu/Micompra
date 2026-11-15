@@ -40,11 +40,47 @@ if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/
     --display-name="Mi Compra Firebase Hosting GitHub" --quiet
 fi
 
+# La propagación IAM puede tardar más de un minuto tras crear la cuenta.
+# Reintentar solo el error transitorio "does not exist"; fallar de inmediato
+# con otros errores (permisos insuficientes, políticas organizativas, etc.).
+grant_project_role() {
+  local role="$1"
+  local attempt=1
+  local wait_seconds=5
+  local max_attempts=7
+  local result
+
+  while true; do
+    if result="$(gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="$role" --condition=None --quiet 2>&1)"; then
+      echo "Permiso asignado: $role"
+      return 0
+    fi
+
+    if ! [[ "$result" == *"does not exist"* ]]; then
+      echo "ERROR al asignar $role:" >&2
+      echo "$result" >&2
+      return 1
+    fi
+
+    if (( attempt >= max_attempts )); then
+      echo "ERROR: La cuenta aún no se propaga tras $attempt intentos." >&2
+      echo "$result" >&2
+      echo "Espera unos minutos y vuelve a ejecutar el mismo script." >&2
+      return 1
+    fi
+
+    echo "La cuenta aún se está propagando en IAM. Reintento $attempt/$max_attempts en ${wait_seconds}s..."
+    sleep "$wait_seconds"
+    wait_seconds=$((wait_seconds * 2))
+    attempt=$((attempt + 1))
+  done
+}
+
 # Estos roles NO permiten editar los documentos de Firestore.
 for ROLE in roles/firebasehosting.admin roles/serviceusage.apiKeysViewer; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$SA_EMAIL" \
-    --role="$ROLE" --condition=None --quiet >/dev/null
+  grant_project_role "$ROLE"
 done
 
 echo "Verificando pool de Workload Identity..."
