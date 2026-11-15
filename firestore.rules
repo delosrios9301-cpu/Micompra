@@ -122,6 +122,9 @@ service cloud.firestore {
         && request.resource.data.data.size() > 0
         && request.resource.data.data.size() <= 270000
         && request.resource.data.uploadedByUid == request.auth.uid
+        // Un fragmento solo puede subirse junto a sus metadatos, en el mismo batch.
+        // No admitir fragmentos tardíos que puedan alterar una factura existente.
+        && !exists(/databases/$(database)/documents/userWorkspaces/$(workspaceId)/receiptFiles/$(receiptId))
         && getAfter(/databases/$(database)/documents/userWorkspaces/$(workspaceId)/receiptFiles/$(receiptId)).data.uploadedByUid == request.auth.uid
         && request.resource.data.index < getAfter(/databases/$(database)/documents/userWorkspaces/$(workspaceId)/receiptFiles/$(receiptId)).data.partCount;
       allow update: if false;
