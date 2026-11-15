@@ -36,9 +36,13 @@ test('la restauración de respaldos se centraliza y exige propiedad del espacio'
   assert.match(store, /function restoreBackup\(backup\)/);
   assert.match(store, /workspaceOwnerUid !== user\.uid/);
   assert.match(store, /backup\.app !== 'Mi Compra 2\.0'/);
-  assert.match(store, /const merged = mergeWorkspaces\(restored, workspace\)/);
-  assert.match(store, /restoreBackup, createAccessUser/);
+  assert.match(store, /const merged = mergeWorkspaces\(restored, remote\)/);
+  assert.match(store, /exportBackup, restoreBackup, createAccessUser/);
   assert.match(app, /store\.restoreBackup\(parsed\)/);
+  assert.match(store, /runTransaction\(db, async transaction =>/);
+  assert.match(store, /validateWorkspaceBackup\(backup, workspaceId\)/);
+  assert.match(store, /getDocFromServer\(workspaceRef\(workspaceId\)\)/);
+  assert.match(app, /await store\.exportBackup\(\)/);
   assert.doesNotMatch(app, /workspace = mergeWorkspaces\(restored, workspace\)/);
 });
 
