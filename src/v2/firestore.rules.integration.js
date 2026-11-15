@@ -310,3 +310,19 @@ test('propietario puede retirar comprobante y partes, mientras que los demás no
   deleted.delete(doc(owner, receipt.path));
   await assertSucceeds(deleted.commit());
 });
+
+
+test('permite la carga atómica de los 17 fragmentos del tamaño máximo autorizado', async () => {
+  const db = env.authenticatedContext('member', { email: 'member@example.com' }).firestore();
+  const metadata = doc(db, 'userWorkspaces/owner/receiptFiles/seventeen-part-invoice');
+  const batch = writeBatch(db);
+  batch.set(metadata, {...validInvoiceMeta(),size:3145728,partCount:17});
+  for(let index=0;index<17;index++){
+    const partId=String(index).padStart(3,'0');
+    batch.set(doc(metadata,'parts',partId),{data:'AAAA',index,uploadedByUid:'member'});
+  }
+  await assertSucceeds(batch.commit());
+  const owner = env.authenticatedContext('owner', { email: 'owner@example.com' }).firestore();
+  const parts = await assertSucceeds(getDocs(collection(owner, metadata.path, 'parts')));
+  assert.equal(parts.size,17);
+});
