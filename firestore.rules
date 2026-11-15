@@ -77,15 +77,11 @@ service cloud.firestore {
       allow delete: if isWorkspaceOwner(resource.data.workspaceId);
     }
 
-    // Los comprobantes se guardan en documentos pequeños porque Cloud Storage
-    // exige Blaze; este proyecto debe seguir en el plan gratuito Spark.
+    // Guardar exclusivamente comprobantes pequeños sin Cloud Storage (Blaze).
     match /userWorkspaces/{workspaceId}/receiptFiles/{receiptId} {
       allow read: if isWorkspaceMember(workspaceId);
       allow create: if isWorkspaceMember(workspaceId)
-        && request.resource.data.keys().hasOnly([
-          'purchaseId', 'name', 'mimeType', 'size', 'partCount', 'sha256',
-          'uploadedByUid', 'uploadedByEmail', 'uploadedAt'
-        ])
+        && request.resource.data.keys().hasOnly(['purchaseId', 'name', 'mimeType', 'size', 'partCount', 'sha256', 'uploadedByUid', 'uploadedByEmail', 'uploadedAt'])
         && request.resource.data.purchaseId is string
         && request.resource.data.purchaseId.size() > 0
         && request.resource.data.purchaseId.size() <= 160
@@ -104,46 +100,7 @@ service cloud.firestore {
         && request.resource.data.partCount > 0
         && request.resource.data.partCount <= 17
         && request.resource.data.sha256 is string
-        && request.resource.data.sha256.matches('^[a-f0-9]{64}
-      allow read: if isWorkspaceOwner(workspaceId)
-        || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
-      allow create: if isWorkspaceMember(workspaceId)
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.appVersion == '2.1.0-compat'
-        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
-      allow update: if isWorkspaceMember(workspaceId)
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.appVersion == '2.1.0-compat'
-        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
-      allow delete: if isWorkspaceOwner(workspaceId);
-    }
-
-    match /userWorkspaces/{workspaceId}/records/{recordId} {
-      allow read, create, update: if isWorkspaceOwner(workspaceId);
-      allow delete: if false;
-    }
-
-    match /userWorkspaces/{workspaceId}/migrations/{migrationId} {
-      allow read, create, update: if isWorkspaceOwner(workspaceId);
-      allow delete: if false;
-    }
-
-    match /userWorkspaces/{workspaceId} {
-      allow read: if isWorkspaceMember(workspaceId)
-        || (signedIn() && request.auth.uid == workspaceId);
-      allow create: if signedIn() && (
-        (request.auth.uid == workspaceId && request.resource.data.ownerUid == request.auth.uid)
-        || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
-      );
-      allow update: if isWorkspaceMember(workspaceId)
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.uid == resource.data.uid
-        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
-      allow delete: if isWorkspaceOwner(workspaceId);
-    }
-  }
-})
+        && request.resource.data.sha256.matches('^[a-f0-9]{64}$')
         && request.resource.data.uploadedByUid == request.auth.uid
         && request.resource.data.uploadedByEmail is string
         && request.resource.data.uploadedByEmail.size() <= 160
@@ -156,46 +113,7 @@ service cloud.firestore {
     match /userWorkspaces/{workspaceId}/receiptFiles/{receiptId}/parts/{partId} {
       allow read: if isWorkspaceMember(workspaceId);
       allow create: if isWorkspaceMember(workspaceId)
-        && partId.matches('^[0-9]{3}
-      allow read: if isWorkspaceOwner(workspaceId)
-        || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
-      allow create: if isWorkspaceMember(workspaceId)
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.appVersion == '2.1.0-compat'
-        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
-      allow update: if isWorkspaceMember(workspaceId)
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.appVersion == '2.1.0-compat'
-        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
-      allow delete: if isWorkspaceOwner(workspaceId);
-    }
-
-    match /userWorkspaces/{workspaceId}/records/{recordId} {
-      allow read, create, update: if isWorkspaceOwner(workspaceId);
-      allow delete: if false;
-    }
-
-    match /userWorkspaces/{workspaceId}/migrations/{migrationId} {
-      allow read, create, update: if isWorkspaceOwner(workspaceId);
-      allow delete: if false;
-    }
-
-    match /userWorkspaces/{workspaceId} {
-      allow read: if isWorkspaceMember(workspaceId)
-        || (signedIn() && request.auth.uid == workspaceId);
-      allow create: if signedIn() && (
-        (request.auth.uid == workspaceId && request.resource.data.ownerUid == request.auth.uid)
-        || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
-      );
-      allow update: if isWorkspaceMember(workspaceId)
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.uid == resource.data.uid
-        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
-      allow delete: if isWorkspaceOwner(workspaceId);
-    }
-  }
-})
+        && partId.matches('^[0-9]{3}$')
         && request.resource.data.keys().hasOnly(['data', 'index', 'uploadedByUid'])
         && request.resource.data.index is int
         && request.resource.data.index >= 0
