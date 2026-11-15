@@ -1,0 +1,37 @@
+name: Deploy Mi Compra to Firebase Hosting
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firebase-hosting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run application tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+      - name: Check Firebase deployment credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Configure FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 en los secretos de GitHub para habilitar la publicación de Firebase Hosting."
+            exit 1
+          fi
+      - name: Deploy hosting only (never touch Firestore data or rules)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MI_COMPRA_D9717 }}
+          channelId: live
+          projectId: mi-compra-d9717
