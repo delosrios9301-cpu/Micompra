@@ -479,3 +479,31 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
   .purchase-receipt-buttons .btn:last-child{grid-column:span 2;}
   .purchase-receipts .panel-heading h3{font-size:14px;}
 }
+
+
+/* ITBMS Panamá: desglose accesible en Android, tablet y PC. */
+.purchase-builder .tax-hint, .tax-hint{margin:7px 0 12px;font-size:11px;line-height:1.5;color:#496e60;}
+.purchase-summary #purchase-draft-breakdown{display:grid;gap:7px;min-width:0;padding:8px 0;border-bottom:1px solid #e4eeea;}
+.purchase-summary .tax-summary-line,.saved-purchase-tax-summary .tax-summary-line{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;font-size:12px;}
+.tax-summary-line span{color:#648175;}
+.tax-summary-line strong{font-variant-numeric:tabular-nums;white-space:nowrap;color:#285b4a;font-weight:700;}
+.saved-purchase-tax-summary{display:grid;gap:8px;margin:8px 0;padding:11px 2px;border-bottom:1px solid #d9e8df;}
+.draft-product-copy .draft-tax-field{display:flex;align-items:center;gap:7px;max-width:100%;color:#667e74;font-size:10px;}
+.draft-product-copy .draft-tax-field>span{flex:none;white-space:nowrap;}
+.draft-product-copy .draft-tax-field select{min-width:100px;max-width:170px;min-height:35px;padding:5px 7px;font-size:11px;background:#fff;border:1px solid #dce8e1;border-radius:7px;color:#255b47;}
+.draft-product-copy .draft-tax-included{display:inline-flex;align-items:center;gap:7px;color:#55786a;font-size:10px;}
+.draft-product-copy .draft-tax-included input{width:16px;min-width:16px;height:16px;accent-color:#15805c;}
+.tax-form-option{display:flex;align-items:center;gap:8px;padding:8px 0;line-height:1.4;font-size:12px;}
+.tax-form-option input{flex:none;}
+.saved-purchase-edit-row .saved-tax-included{grid-column:span 2;display:flex;align-items:center;gap:7px;min-height:42px;line-height:1.3;font-size:11px;color:#517466;}
+.saved-purchase-edit-row .saved-tax-included input{width:16px;height:16px;min-height:16px;flex:none;accent-color:#15805c;}
+.catalog-row>.btn[data-action="edit-product-tax"]{flex:none;min-height:36px;padding:0 10px;font-size:11px;}
+@media(max-width:620px){
+  .draft-product-copy .draft-tax-field{flex-wrap:wrap;}
+  .draft-product-copy .draft-tax-field select{flex:1;max-width:140px;}
+  .draft-product-copy .draft-tax-included{max-width:100%;}
+  .purchase-summary #purchase-draft-breakdown{width:100%;}
+  .purchase-summary .tax-summary-line{font-size:11px;}
+  .saved-purchase-edit-row .saved-tax-included{grid-column:span 2;}
+  .catalog-row>.btn[data-action="edit-product-tax"]{min-width:64px;}
+}
