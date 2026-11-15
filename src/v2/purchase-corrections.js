@@ -60,6 +60,13 @@ function adjustLinkedInventory(workspace, purchase, nextItems, actor, now, isDel
       stock = workspace.inventory.find(row => normalizeName(row.name) === normalizeName(item.name) && String(row.unit || 'unidad') === item.unit);
     }
     if (!stock) {
+      // Las compras guardadas antes de la migración no tenían inventoryId en
+      // sus líneas. Recuperar el vínculo del movimiento histórico, no duplicarlo.
+      const originalMovement = workspace.movements.find(row =>
+        row.reason === 'Compra ' + purchase.id && normalizeName(row.productName) === normalizeName(item.name));
+      stock = originalMovement && workspace.inventory.find(row => row.id === originalMovement.inventoryId);
+    }
+    if (!stock) {
       let product = workspace.products.find(row => normalizeName(row.name) === normalizeName(item.name));
       if (!product) {
         product = { id: createId('prd'), name: item.name, category: '', unit: item.unit, active: true, createdAt: now, updatedAt: now };
@@ -115,7 +122,9 @@ export function applySavedPurchaseChange(originalWorkspace, request, actor, at =
   if (kind === 'delete' && !actor.isOwner) {
     throw new Error('Solo el propietario puede eliminar compras confirmadas.');
   }
-  const now = Date.parse(at) > Date.parse(revision) ? at : new Date(Date.parse(revision) + 1).toISOString();
+  const previousTimestamp = Date.parse(revision);
+  const now = Number.isFinite(previousTimestamp) && Date.parse(at) <= previousTimestamp
+    ? new Date(previousTimestamp + 1).toISOString() : at;
   const previous = structuredClone(purchase);
   const edits = request.changes || {};
   let nextPurchase = null;
@@ -151,8 +160,8 @@ export function applySavedPurchaseChange(originalWorkspace, request, actor, at =
     action: kind === 'edit' ? 'Compra corregida' : 'Compra eliminada',
     description: (kind === 'edit' ? 'Compra editada' : 'Compra eliminada') +
       ' por ' + String(actor.email || actor.uid || 'usuario') + ': ' + purchase.storeName +
-      ' · antes ' + round2(purchase.total || 0) + ' USD' +
-      (nextPurchase ? ' · ahora ' + nextPurchase.total + ' USD' : ''),
+      ' · antes ' + round2(purchase.total || 0) + ' ' + (workspace.profile.currency || 'USD') +
+      (nextPurchase ? ' · ahora ' + nextPurchase.total + ' ' + (workspace.profile.currency || 'USD') : ''),
     performedByUid: actor.uid, performedByEmail: actor.email,
     sourcePurchaseId: purchase.id,
     before: previous,
