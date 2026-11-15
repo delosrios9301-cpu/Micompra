@@ -32,8 +32,25 @@ jobs:
         run: npx firebase emulators:exec --only firestore --project demo-mi-compra-rules --non-interactive "node --test src/v2/firestore.rules.integration.js"
       - name: Run application tests
         run: npm test
-      - name: Build Vite for production
+      - name: Build Vite for production (Firebase root)
         run: npm run build
+        env:
+          VITE_BASE_PATH: /
+      - name: Verify that all application scripts use Firebase root paths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path('dist/index.html').read_text(encoding='utf-8')
+          assert '/Micompra/' not in html, 'El build contiene rutas de GitHub Pages y no funcionará en Firebase.'
+          sources = re.findall(r'<script[^>]+src="([^"]+)"', html)
+          assert sources, 'El HTML publicado no contiene los scripts de la aplicación.'
+          for src in sources:
+              assert src.startswith('/assets/'), f'Ruta incorrecta en Firebase: {src}'
+              assert Path('dist', src.lstrip('/')).is_file(), f'Falta el recurso generado: {src}'
+          print('OK: los scripts existen y sus URLs son válidas para Firebase Hosting.')
+          PY
       - name: Upload build for deployment
         uses: actions/upload-artifact@v4
         with:
