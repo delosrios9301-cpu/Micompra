@@ -1,3 +1,5 @@
+import { computePurchaseBreakdown } from './itbms.js';
+
 export const WORKSPACE_VERSION = 2;
 
 export function createEmptyWorkspace() {
@@ -118,12 +120,16 @@ export function mergeWorkspaces(local = {}, remote = {}) {
 }
 
 export function computePurchaseTotal(items = []) {
-  return Math.round(asArray(items).reduce((sum, item) => {
-    const quantity = Math.max(0, asNumber(item.quantity));
-    const unitPrice = Math.max(0, asNumber(item.unitPrice));
-    const discount = Math.max(0, asNumber(item.discount));
-    return sum + Math.max(0, quantity * unitPrice - discount);
-  }, 0) * 100) / 100;
+  // Los historiales sin desglose de impuesto mantienen el total original.
+  if (asArray(items).every(item => item.taxRate === undefined || item.taxRate === null)) {
+    return Math.round(asArray(items).reduce((sum, item) => {
+      const quantity = Math.max(0, asNumber(item.quantity));
+      const unitPrice = Math.max(0, asNumber(item.unitPrice));
+      const discount = Math.max(0, asNumber(item.discount));
+      return sum + Math.max(0, quantity * unitPrice - discount);
+    }, 0) * 100) / 100;
+  }
+  return computePurchaseBreakdown(items).total;
 }
 
 export function monthKey(date = new Date()) {
@@ -219,7 +225,7 @@ export function applySharedDraftOperation(current, operation, strict = false) {
       if (strict) throw new Error('El producto se eliminó en otro dispositivo. No se sobrescribieron otros cambios.');
       return draft;
     }
-    for (const key of ['quantity', 'unitPrice', 'discount']) {
+    for (const key of ['quantity', 'unitPrice', 'discount', 'taxRate', 'taxIncluded']) {
       if (Object.prototype.hasOwnProperty.call(op.changes || {}, key)) item[key] = op.changes[key];
     }
   } else if (op.type === 'remove') {
