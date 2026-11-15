@@ -2,6 +2,7 @@ import './styles.css';
 import { createWorkspaceStore } from './store.js';
 import { validateWorkspaceBackup, backupSummary } from './backup.js';
 import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, receiptCategory, groupDistinctReceipts } from './receipts.js';
+import { computePurchaseBreakdown, purchaseLineBreakdown, suggestPanamaItbms, taxRateForNewItem, validTaxRate } from './itbms.js';
 import {
   createEmptyWorkspace, createId, normalizeWorkspace, mergeWorkspaces, computePurchaseTotal,
   monthKey, monthSpending, inventoryAlerts, currentBudget, formatMoney, csvEscape
@@ -225,9 +226,21 @@ function renderPlanning() {
 function storeOptions(selected = '') {
   return '<option value="">Sin establecimiento</option>' + workspace.stores.filter(row => row.active !== false).map(row => '<option value="' + row.id + '" ' + (selected === row.id ? 'selected' : '') + '>' + safe(row.name) + '</option>').join('');
 }
+function itbmsOptions(selected = 0, allowAutomatic = false) {
+  return (allowAutomatic ? '<option value="auto" ' + (selected === 'auto' ? 'selected' : '') + '>Según producto (automático)</option>' : '') +
+    [0, 7, 10, 15].map(rate => '<option value="' + rate + '" ' + (String(selected) === String(rate) ? 'selected' : '') + '>' +
+    (rate === 0 ? 'Exento · 0%' : rate + '% ITBMS') + '</option>').join('');
+}
+function taxForDraftName(name) { return taxRateForNewItem({ name }, workspace.products); }
+function purchaseTaxSummary(items) {
+  const breakdown = computePurchaseBreakdown(items);
+  return '<div class="tax-summary-line"><span>Subtotal sin ITBMS</span><strong>' + money(breakdown.subtotal) +
+    '</strong></div><div class="tax-summary-line"><span>ITBMS</span><strong>' + money(breakdown.itbms) + '</strong></div>';
+}
 function renderShopping() {
   const storeSelect = '<select name="storeId">' + storeOptions() + '</select>';
-  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><div class="draft-quantity-control"><span>Cantidad</span><button type="button" class="draft-qty-button" data-action="draft-qty-minus" data-index="' + index + '" aria-label="Restar una unidad">−</button><input type="number" min="0.01" step="1" inputmode="decimal" aria-label="Cantidad de ' + safe(item.name) + '" data-draft-qty="' + index + '" value="' + item.quantity + '"><button type="button" class="draft-qty-button" data-action="draft-qty-plus" data-index="' + index + '" aria-label="Sumar una unidad">+</button><small>' + safe(item.unit) + '</small></div><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(Math.max(0, item.quantity * item.unitPrice - item.discount)) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
+  const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><div class="draft-quantity-control"><span>Cantidad</span><button type="button" class="draft-qty-button" data-action="draft-qty-minus" data-index="' + index + '" aria-label="Restar una unidad">−</button><input type="number" min="0.01" step="1" inputmode="decimal" aria-label="Cantidad de ' + safe(item.name) + '" data-draft-qty="' + index + '" value="' + item.quantity + '"><button type="button" class="draft-qty-button" data-action="draft-qty-plus" data-index="' + index + '" aria-label="Sumar una unidad">+</button><small>' + safe(item.unit) + '</small></div><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label><label class="draft-tax-field"><span>ITBMS</span><select data-draft-tax="' + index + '" aria-label="ITBMS de ' + safe(item.name) + '">' + itbmsOptions(item.taxRate ?? 0) + '</select></label>' +
+    '<label class="draft-tax-included"><input type="checkbox" data-draft-tax-included="' + index + '" ' + (item.taxIncluded ? 'checked' : '') + '>Precio incluye ITBMS</label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(purchaseLineBreakdown(item).total) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
   const draftTotal = computePurchaseTotal(purchaseDraft);
   const history = workspace.purchases.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(item =>
     '<article class="purchase-history-row"><span class="entity-symbol symbol-green">' + icon('cart', 18) + '</span><div class="entity-copy"><strong>' + safe(item.storeName || 'Compra sin establecimiento') + '</strong><small>' + dateLabel(item.date) + ' · ' + item.items.length + ' productos · ' + (item.paid ? 'Pagada' : 'Pendiente de pago') + '</small></div><strong class="purchase-total">' + money(item.total) + '</strong><button class="btn btn-secondary btn-small purchase-open-button" data-action="open-saved-purchase" data-id="' + safe(item.id) + '" type="button" aria-label="Abrir la compra de ' + safe(item.storeName || 'sin establecimiento') + '">Ver y editar</button></article>'
@@ -235,9 +248,9 @@ function renderShopping() {
   return sectionHeading('REGISTRA LO QUE REALMENTE COMPRASTE', 'Comprar', 'Introduce los importes de tu recibo. Los precios siempre los escribes tú.', null, '') +
     '<div class="buy-layout"><section class="surface-panel purchase-builder"><div class="panel-heading"><div><span class="eyebrow">NUEVA OPERACIÓN</span><h3>Detalle de compra</h3></div><span class="step-chip">01 · Registro</span></div>' +
     '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + today() + '"></label></div>' +
-    '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" placeholder="Nombre del producto" maxlength="100" required></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label></div><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
+    '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" list="purchase-catalog-names" placeholder="Nombre del producto" maxlength="100" required><datalist id="purchase-catalog-names">' + workspace.products.filter(row => row.active !== false).map(row => '<option value="' + safe(row.name) + '"></option>').join('') + '</datalist></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label><label class="field"><span>ITBMS</span><select name="taxRate">' + itbmsOptions('auto', true) + '</select></label><label class="check-option tax-form-option"><input name="taxIncluded" type="checkbox"><span>Precio ya incluye impuesto</span></label></div><p class="tax-hint">Automático propone 0% en alimentos y 7% en artículos gravados. Verifica la tasa en el recibo.</p><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
     '<div class="draft-list"><div class="draft-title"><strong>Productos registrados</strong><span>' + purchaseDraft.length + '</span></div>' + (draftRows || '<p class="draft-empty">Aún no has agregado productos a esta compra.</p>') + '</div>' +
-    '<div class="purchase-summary"><div><span>Total de la compra</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
+    '<div class="purchase-summary"><div id="purchase-draft-breakdown">' + purchaseTaxSummary(purchaseDraft) + '</div><div><span>Total de la compra con ITBMS</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
     '<aside class="buy-aside"><div class="aside-card"><span class="aside-icon">' + icon('shield', 20) + '</span><strong>Registro transparente</strong><p>Este módulo no consulta tiendas ni descarga precios. Cada importe proviene de lo que introduces.</p></div><div class="aside-card"><span class="aside-icon">' + icon('box', 20) + '</span><strong>Inventario conectado</strong><p>Al confirmar, puedes sumar los productos al inventario con un movimiento registrado.</p></div></aside></div>' +
     '<section class="surface-panel history-panel"><div class="panel-heading"><div><span class="eyebrow">REGISTRO REAL</span><h3>Compras recientes</h3></div><span class="period-chip">' + workspace.purchases.length + ' registros</span></div>' + (history || '<div class="panel-empty"><span>' + icon('cart', 22) + '</span><strong>Aún no tienes compras guardadas</strong><small>Las compras confirmadas se conservarán en tu historial.</small></div>') + '</section>';
 }
@@ -303,7 +316,7 @@ function renderMore() {
 }
 function renderCatalog() {
   const rows = workspace.products.filter(row => row.active !== false && normalizeText(row.name + ' ' + (row.category || '')).includes(normalizeText(searchValue))).map(row =>
-    '<div class="catalog-row"><span class="product-avatar">' + icon('grid', 18) + '</span><div class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + safe(row.category || 'Sin categoría') + ' · ' + safe(row.unit || 'unidad') + '</small></div><button class="icon-button danger-ghost" data-action="deactivate-product" data-id="' + row.id + '" aria-label="Desactivar producto">' + icon('close', 16) + '</button></div>'
+    '<div class="catalog-row"><span class="product-avatar">' + icon('grid', 18) + '</span><div class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + safe(row.category || 'Sin categoría') + ' · ' + safe(row.unit || 'unidad') + ' · ITBMS ' + (validTaxRate(row.taxRate) ? row.taxRate + '%' : 'sin clasificar') + '</small></div><button class="btn btn-secondary btn-small" data-action="edit-product-tax" data-id="' + safe(row.id) + '">ITBMS</button><button class="icon-button danger-ghost" data-action="deactivate-product" data-id="' + row.id + '" aria-label="Desactivar producto">' + icon('close', 16) + '</button></div>'
   ).join('');
   return sectionHeading('CATÁLOGO CENTRAL', 'Productos', 'Un solo catálogo para listas, compras e inventario. Sin registros duplicados.', 'new-product', 'Nuevo producto') +
     '<section class="surface-panel inventory-panel"><div class="panel-heading"><div><span class="eyebrow">PRODUCTOS ACTIVOS</span><h3>' + workspace.products.filter(row => row.active !== false).length + ' productos</h3></div><label class="search-field">' + icon('search', 16) + '<input id="catalog-search" type="search" value="' + safe(searchValue) + '" placeholder="Buscar"></label></div>' +
@@ -415,9 +428,9 @@ function modalHtml() {
     if (!editing) {
       const lines = (purchase.items || []).map(item =>
         '<div class="saved-purchase-view-row"><div><strong>' + safe(item.name) + '</strong><small>' +
-        safe(item.quantity) + ' ' + safe(item.unit || 'unidad') + ' × ' + money(item.unitPrice) +
+        safe(item.quantity) + ' ' + safe(item.unit || 'unidad') + ' × ' + money(item.unitPrice) + ' · ITBMS ' + (item.taxRate === undefined ? 'no desglosado' : (item.taxRate + '%')) + (item.taxIncluded ? ' incluido' : '') +
         (Number(item.discount) ? ' · descuento ' + money(item.discount) : '') + '</small></div><strong>' +
-        money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong></div>'
+        money(purchaseLineBreakdown(item).total) + '</strong></div>'
       ).join('');
       const receipts = purchaseReceiptState.purchaseId === purchase.id ? purchaseReceiptState : { loading: true, items: [], error: '' };
       const receiptGroups = groupDistinctReceipts(receipts.items);
@@ -455,7 +468,8 @@ function modalHtml() {
         (purchaseReceiptBusy ? 'disabled' : '') + '>Actualizar</button></div>' +
         '<p class="saved-purchase-note">Hasta 5 archivos diferentes por compra, máximo 3 MB cada uno. Puedes seleccionar varios PDF a la vez; los archivos idénticos no se duplican. Compartidos de forma privada, sin cambiar el total.</p></section>';
       inner = '<div class="saved-purchase-summary"><div><span>Establecimiento</span><strong>' + safe(purchase.storeName || 'Sin establecimiento') + '</strong></div><div><span>Fecha</span><strong>' + safe(purchase.date || 'Sin fecha') + '</strong></div><div><span>Estado</span><strong>' + (purchase.paid ? 'Pagada' : 'Pendiente de pago') + '</strong></div></div>' +
-        '<div class="saved-purchase-list">' + lines + '</div><div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
+        '<div class="saved-purchase-list">' + lines + '</div>' + (purchase.items.some(row => row.taxRate !== undefined) ? purchaseTaxSummary(purchase.items) : '<p class="saved-purchase-note">Compra anterior: sin desglose fiscal registrado. Se conserva su total original.</p>') +
+        '<div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
         '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' + receiptPanel +
         '<div class="saved-purchase-actions"><button class="btn btn-primary" type="button" data-action="edit-saved-purchase">' + icon('grid', 16) + 'Modificar compra</button>' +
         (store.isWorkspaceOwner() ? '<button class="btn btn-danger" type="button" data-action="delete-saved-purchase">Eliminar compra</button>' : '') + '</div>';
@@ -471,15 +485,15 @@ function modalHtml() {
         '<label class="field"><span>Cantidad</span><input name="savedItemQty" type="number" min="0.01" step="0.01" required value="' + safe(item.quantity) + '"></label>' +
         '<label class="field"><span>Unidad</span><input name="savedItemUnit" maxlength="24" required value="' + safe(item.unit || 'unidad') + '"></label>' +
         '<label class="field"><span>Precio unitario</span><input name="savedItemPrice" type="number" min="0" step="0.01" required value="' + safe(item.unitPrice) + '"></label>' +
-        '<label class="field"><span>Descuento</span><input name="savedItemDiscount" type="number" min="0" step="0.01" required value="' + safe(item.discount || 0) + '"></label>' +
-        '<div class="saved-item-actions"><strong data-saved-line-total="' + index + '">' + money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong><button class="icon-button danger-ghost" type="button" data-action="remove-saved-purchase-item" data-index="' + index + '" aria-label="Quitar producto ' + (index + 1) + '">' + icon('close', 17) + '</button></div></div>'
+        '<label class="field"><span>Descuento</span><input name="savedItemDiscount" type="number" min="0" step="0.01" required value="' + safe(item.discount || 0) + '"></label><label class="field"><span>ITBMS</span><select name="savedItemTax">' + itbmsOptions(item.taxRate ?? 0) + '</select></label><label class="check-option saved-tax-included"><input type="checkbox" name="savedItemTaxIncluded" ' + (item.taxIncluded ? 'checked' : '') + '><span>Precio incluye ITBMS</span></label>' +
+        '<div class="saved-item-actions"><strong data-saved-line-total="' + index + '">' + money(purchaseLineBreakdown(item).total) + '</strong><button class="icon-button danger-ghost" type="button" data-action="remove-saved-purchase-item" data-index="' + index + '" aria-label="Quitar producto ' + (index + 1) + '">' + icon('close', 17) + '</button></div></div>'
       ).join('');
       inner = '<form data-form="edit-saved-purchase" class="saved-purchase-form"><div class="saved-purchase-fields"><label class="field"><span>Establecimiento</span><select name="purchaseStoreId">' + storeOptions(edited.storeId) + savedStore + '</select></label>' +
         '<label class="field"><span>Fecha de compra</span><input type="date" name="purchaseDate" value="' + safe(edited.date) + '" required></label></div>' +
         '<label class="check-option saved-paid"><input type="checkbox" name="purchasePaid" ' + (edited.paid ? 'checked' : '') + '><span>Compra pagada</span></label>' +
         '<div class="saved-purchase-list saved-purchase-editor">' + lines + '</div>' +
         '<button type="button" class="btn btn-secondary" data-action="add-saved-purchase-item">' + icon('plus', 16) + 'Agregar producto</button>' +
-        '<div class="saved-purchase-grand"><span>Total corregido</span><strong id="saved-purchase-total">' + money(computePurchaseTotal(edited.items)) + '</strong></div>' +
+        '<div class="saved-purchase-tax-summary" id="saved-purchase-tax-summary">' + purchaseTaxSummary(edited.items) + '</div><div class="saved-purchase-grand"><span>Total corregido</span><strong id="saved-purchase-total">' + money(computePurchaseTotal(edited.items)) + '</strong></div>' +
         '<p class="saved-purchase-note">' + (purchase.inventoryLinked || workspace.movements.some(row => row.reason === 'Compra ' + purchase.id) ?
           'Se ajustarán las existencias vinculadas a esta compra. Los movimientos anteriores quedarán registrados; si faltan existencias para descontar, se solicitará revisar el inventario.' :
           'Esta compra no sumó productos al inventario; su corrección modificará el historial y las finanzas, sin agregar existencias.') + '</p>' +
@@ -494,7 +508,12 @@ function modalHtml() {
     body = '<form data-form="create-list"><label class="field"><span>Nombre de la lista</span><input name="name" required maxlength="80" placeholder="Ej. Compra quincenal"></label><div class="form-grid"><label class="field"><span>Fecha prevista</span><input name="plannedDate" type="date" value="' + today() + '"></label><label class="field"><span>Presupuesto estimado</span><input name="budget" type="number" min="0" step="0.01" placeholder="0.00"></label></div><label class="field"><span>Establecimiento (opcional)</span><select name="storeId">' + storeOptions() + '</select></label><label class="field"><span>Notas</span><textarea name="notes" rows="2" placeholder="Detalles de esta compra"></textarea></label><button class="btn btn-primary btn-wide" type="submit">Crear lista ' + icon('arrow', 15) + '</button></form>';
   } else if (modalName === 'new-product') {
     title = 'Añadir producto al catálogo';
-    body = '<form data-form="create-product"><label class="field"><span>Nombre del producto</span><input name="name" required maxlength="100" placeholder="Ej. Arroz integral"></label><div class="form-grid"><label class="field"><span>Categoría</span><input name="category" maxlength="50" placeholder="Alimentos"></label><label class="field"><span>Unidad habitual</span><input name="unit" maxlength="24" value="unidad"></label></div><button class="btn btn-primary btn-wide" type="submit">Guardar producto</button></form>';
+    body = '<form data-form="create-product"><label class="field"><span>Nombre del producto</span><input name="name" required maxlength="100" placeholder="Ej. Arroz integral"></label><div class="form-grid"><label class="field"><span>Categoría</span><input name="category" maxlength="50" placeholder="Alimentos"></label><label class="field"><span>Unidad habitual</span><input name="unit" maxlength="24" value="unidad"></label><label class="field"><span>ITBMS</span><select name="taxRate">' + itbmsOptions('auto', true) + '</select></label></div><p class="modal-description">La tasa automática es una sugerencia según el tipo de producto. Puedes cambiarla.</p><button class="btn btn-primary btn-wide" type="submit">Guardar producto</button></form>';
+  } else if (modalName === 'edit-product-tax') {
+    const product = workspace.products.find(row => row.id === modalData.id);
+    if (!product) return '';
+    title = 'ITBMS del producto';
+    body = '<form data-form="update-product-tax"><input type="hidden" name="id" value="' + safe(product.id) + '"><p class="modal-description">' + safe(product.name) + '</p><label class="field"><span>Tasa para futuras compras</span><select name="taxRate" required>' + itbmsOptions(validTaxRate(product.taxRate) ? product.taxRate : taxForDraftName(product.name)) + '</select></label><p class="modal-description">Esta configuración no modifica compras anteriores. Confirma la clasificación con el recibo.</p><button class="btn btn-primary btn-wide" type="submit">Guardar ITBMS</button></form>';
   } else if (modalName === 'new-store') {
     title = 'Nuevo establecimiento';
     body = '<form data-form="create-store"><label class="field"><span>Nombre</span><input name="name" required maxlength="80" placeholder="Nombre del comercio"></label><label class="field"><span>Ubicación o sucursal (opcional)</span><input name="location" maxlength="100" placeholder="Zona o sucursal"></label><button class="btn btn-primary btn-wide" type="submit">Guardar establecimiento</button></form>';
@@ -541,7 +560,7 @@ function findOrCreateProduct(name, unit, category = '') {
   const normalized = normalizeText(name);
   let product = workspace.products.find(row => normalizeText(row.name) === normalized);
   if (!product) {
-    product = { id: createId('prd'), name: String(name).trim(), category, unit: unit || 'unidad', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    product = { id: createId('prd'), name: String(name).trim(), category, unit: unit || 'unidad', taxRate: taxRateForNewItem({ name, category }, []), active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     workspace.products.unshift(product);
   }
   return product;
@@ -570,10 +589,11 @@ function exportCsv(name, rows) {
   showToast('Archivo CSV preparado.');
 }
 function exportPurchases() {
-  const rows = [['Fecha', 'Establecimiento', 'Producto', 'Cantidad', 'Unidad', 'Precio unitario', 'Descuento', 'Total de línea', 'Total de compra', 'Pagada']];
+  const rows = [['Fecha', 'Establecimiento', 'Producto', 'Cantidad', 'Unidad', 'Precio unitario', 'Descuento', 'ITBMS %', 'Precio incluye ITBMS', 'Base imponible/exenta', 'ITBMS de línea', 'Total de línea', 'Total de compra', 'Pagada']];
   workspace.purchases.forEach(purchase => purchase.items.forEach(item => rows.push([
     purchase.date, purchase.storeName, item.name, item.quantity, item.unit, item.unitPrice, item.discount,
-    Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)), purchase.total, purchase.paid ? 'Sí' : 'No'
+    item.taxRate === undefined ? 'No desglosado' : item.taxRate, item.taxIncluded ? 'Sí' : 'No',
+    purchaseLineBreakdown(item).base, purchaseLineBreakdown(item).tax, purchaseLineBreakdown(item).total, purchase.total, purchase.paid ? 'Sí' : 'No'
   ])));
   exportCsv('mi-compra-compras.csv', rows);
 }
@@ -612,6 +632,8 @@ function readSavedPurchaseEditForm(form) {
   const units = data.getAll('savedItemUnit');
   const prices = data.getAll('savedItemPrice');
   const discounts = data.getAll('savedItemDiscount');
+  const taxes = data.getAll('savedItemTax');
+  const taxesIncluded = [...form.querySelectorAll('[name="savedItemTaxIncluded"]')].map(input => input.checked);
   return {
     storeId: String(data.get('purchaseStoreId') || ''),
     date: String(data.get('purchaseDate') || ''),
@@ -620,7 +642,7 @@ function readSavedPurchaseEditForm(form) {
       id: String(id), name: String(names[index] || ''),
       quantity: String(quantities[index] || ''),
       unit: String(units[index] || 'unidad'),
-      unitPrice: String(prices[index] || '0'), discount: String(discounts[index] || '0')
+      unitPrice: String(prices[index] || '0'), discount: String(discounts[index] || '0'), taxRate: Number(taxes[index] || 0), taxIncluded: taxesIncluded[index] === true
     }))
   };
 }
@@ -634,9 +656,11 @@ function updateSavedPurchaseEditTotals(form) {
   const current = readSavedPurchaseEditForm(form);
   const total = form.querySelector('#saved-purchase-total');
   if (total) total.textContent = money(computePurchaseTotal(current.items));
+  const taxSummary = form.querySelector('#saved-purchase-tax-summary');
+  if (taxSummary) taxSummary.innerHTML = purchaseTaxSummary(current.items);
   current.items.forEach((item, index) => {
     const element = form.querySelector('[data-saved-line-total="' + index + '"]');
-    if (element) element.textContent = money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)));
+    if (element) element.textContent = money(purchaseLineBreakdown(item).total);
   });
 }
 function loadSavedPurchaseReceipts(purchaseId) {
@@ -796,7 +820,7 @@ function handleAction(action, target) {
     if (modalName !== 'saved-purchase' || modalData.mode !== 'edit' || savedPurchaseBusy) return;
     captureSavedPurchaseEditForm();
     if (action === 'add-saved-purchase-item') {
-      modalData.editForm.items.push({ id: createId('pit'), name: '', quantity: 1, unit: 'unidad', unitPrice: 0, discount: 0 });
+      modalData.editForm.items.push({ id: createId('pit'), name: '', quantity: 1, unit: 'unidad', unitPrice: 0, discount: 0, taxRate: 0, taxIncluded: false });
     } else {
       modalData.editForm.items.splice(Number(target.dataset.index), 1);
     }
@@ -883,7 +907,7 @@ function handleAction(action, target) {
     const list = workspace.lists.find(row => row.id === selectedListId);
     if (list) {
       if (purchaseDraft.length && !window.confirm('Ya existe una compra en curso con precios registrados. ¿Reemplazar ese borrador por esta lista? Los precios del borrador anterior se perderán. Pulsa Cancelar para conservarlo.')) return;
-      const prepared = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
+      const prepared = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0, taxRate: taxForDraftName(item.name), taxIncluded: false }));
       try { store.replaceSharedDraft(prepared); }
       catch (error) { showToast(error.message, 'info'); return; }
       currentView = 'comprar';
@@ -923,6 +947,8 @@ function handleAction(action, target) {
       logActivity('Finanzas', 'Gasto eliminado', row.title + ' · ' + money(row.amount));
       persist('Gasto eliminado.');
     }
+  } else if (action === 'edit-product-tax') {
+    openModal('edit-product-tax', { id });
   } else if (action === 'deactivate-product') {
     const row = workspace.products.find(item => item.id === id);
     if (row) {
@@ -958,12 +984,14 @@ function confirmPurchase() {
   const addInventory = Boolean(document.querySelector('#purchase-to-inventory')?.checked);
   const items = purchaseDraft.map(item => ({
     id: createId('pit'), name: item.name, quantity: Number(item.quantity), unit: item.unit,
-    unitPrice: Number(item.unitPrice), discount: Number(item.discount) || 0
+    unitPrice: Number(item.unitPrice), discount: Number(item.discount) || 0,
+    taxRate: validTaxRate(item.taxRate) ? Number(item.taxRate) : taxForDraftName(item.name),
+    taxIncluded: item.taxIncluded === true
   }));
-  const total = computePurchaseTotal(items);
+  const { subtotal, itbms, total } = computePurchaseBreakdown(items);
   const purchase = {
     id: createId('buy'), date, storeId, storeName: store?.name || 'Compra sin establecimiento',
-    items, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    items, subtotal, itbms, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   workspace.purchases.unshift(purchase);
   if (addInventory) {
@@ -1092,9 +1120,18 @@ function handleSubmit(event) {
   } else if (action === 'create-product') {
     const exists = workspace.products.find(row => normalizeText(row.name) === normalizeText(data.name));
     if (exists) { showToast('Ese producto ya existe en el catálogo.', 'info'); return; }
-    workspace.products.unshift({ id: createId('prd'), name: data.name.trim(), category: data.category || '', unit: data.unit || 'unidad', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    const chosenTax = data.taxRate === 'auto' ? taxRateForNewItem({ name: data.name, category: data.category }, []) : Number(data.taxRate);
+    if (!validTaxRate(chosenTax)) { showToast('Selecciona una tasa válida de ITBMS.', 'info'); return; }
+    workspace.products.unshift({ id: createId('prd'), name: data.name.trim(), category: data.category || '', unit: data.unit || 'unidad', taxRate: chosenTax, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     logActivity('Catálogo', 'Producto creado', data.name);
     closeModal(); persist('Producto añadido al catálogo.');
+  } else if (action === 'update-product-tax') {
+    const product = workspace.products.find(row => row.id === data.id);
+    if (!product || !validTaxRate(data.taxRate)) { showToast('Producto o tasa de ITBMS inválidos.', 'info'); return; }
+    product.taxRate = Number(data.taxRate);
+    product.updatedAt = new Date().toISOString();
+    logActivity('Catálogo', 'ITBMS actualizado', product.name + ' · ' + product.taxRate + '%');
+    closeModal(); persist('ITBMS guardado para futuras compras.');
   } else if (action === 'create-store') {
     if (workspace.stores.some(row => normalizeText(row.name) === normalizeText(data.name))) { showToast('Ese establecimiento ya está registrado.', 'info'); return; }
     workspace.stores.unshift({ id: createId('str'), name: data.name.trim(), location: data.location || '', active: true, createdAt: new Date().toISOString() });
@@ -1152,7 +1189,9 @@ function handleSubmit(event) {
       showToast('Revisa el producto, cantidad, precio y descuento.', 'info'); return;
     }
     try {
-      store.addSharedDraftLine({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
+      const taxRate = data.taxRate === 'auto' ? taxForDraftName(data.name) : Number(data.taxRate);
+      if (!validTaxRate(taxRate)) { showToast('Selecciona un ITBMS válido.', 'info'); return; }
+      store.addSharedDraftLine({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount, taxRate, taxIncluded: form.querySelector('[name="taxIncluded"]')?.checked === true });
       render();
     } catch (error) { showToast(error.message, 'info'); return; }
     showToast('Producto añadido a la compra.');
@@ -1251,6 +1290,17 @@ root.addEventListener('input', event => {
     updateSavedPurchaseEditTotals(event.target.closest('form'));
     return;
   }
+  if (event.target.matches('[name="name"]') && event.target.closest('form[data-form="purchase-line"]')) {
+    const hint = document.querySelector('.tax-hint');
+    if (hint) {
+      const categoryRate = suggestPanamaItbms(event.target.value, workspace.products.find(row => normalizeText(row.name) === normalizeText(event.target.value))?.category);
+      const rate = taxForDraftName(event.target.value);
+      hint.textContent = categoryRate === null && !workspace.products.some(row => normalizeText(row.name) === normalizeText(event.target.value) && validTaxRate(row.taxRate))
+        ? 'Tasa general sugerida: 7%. Verifica si este producto está exento o tiene una tarifa especial.'
+        : 'ITBMS sugerido para este producto: ' + rate + '%. Puedes cambiarlo antes de agregar.';
+    }
+    return;
+  }
   if (event.target.matches('[data-draft-price], [data-draft-qty]')) {
     const isPrice = event.target.matches('[data-draft-price]');
     const index = Number(isPrice ? event.target.dataset.draftPrice : event.target.dataset.draftQty);
@@ -1261,9 +1311,11 @@ root.addEventListener('input', event => {
       try { store.patchSharedDraftLine(item.id, isPrice ? { unitPrice: item.unitPrice } : { quantity: item.quantity }); }
       catch (error) { showToast(error.message, 'info'); }
       const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
-      if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
+      if (lineTotal) lineTotal.textContent = money(purchaseLineBreakdown(item).total);
       const total = document.getElementById('purchase-draft-total');
       if (total) total.textContent = money(computePurchaseTotal(purchaseDraft));
+      const breakdown = document.getElementById('purchase-draft-breakdown');
+      if (breakdown) breakdown.innerHTML = purchaseTaxSummary(purchaseDraft);
     }
     return;
   }
@@ -1279,6 +1331,21 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
+  if (event.target.matches('[data-draft-tax], [data-draft-tax-included]')) {
+    const isRate = event.target.hasAttribute('data-draft-tax');
+    const index = Number(isRate ? event.target.dataset.draftTax : event.target.dataset.draftTaxIncluded);
+    const item = purchaseDraft[index];
+    if (item) {
+      const changes = isRate
+        ? { taxRate: Number(event.target.value) }
+        : { taxIncluded: event.target.checked };
+      if (isRate && !validTaxRate(changes.taxRate)) { showToast('Tasa de ITBMS inválida.', 'info'); return; }
+      try { store.patchSharedDraftLine(item.id, changes); }
+      catch (error) { showToast(error.message, 'info'); }
+      render();
+    }
+    return;
+  }
   if (event.target.id === 'purchase-receipt-file' || event.target.id === 'purchase-receipt-camera') {
     void attachReceiptFromInput(event.target);
     return;
