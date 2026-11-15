@@ -77,6 +77,139 @@ service cloud.firestore {
       allow delete: if isWorkspaceOwner(resource.data.workspaceId);
     }
 
+    // Los comprobantes se guardan en documentos pequeños porque Cloud Storage
+    // exige Blaze; este proyecto debe seguir en el plan gratuito Spark.
+    match /userWorkspaces/{workspaceId}/receiptFiles/{receiptId} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow create: if isWorkspaceMember(workspaceId)
+        && request.resource.data.keys().hasOnly([
+          'purchaseId', 'name', 'mimeType', 'size', 'partCount', 'sha256',
+          'uploadedByUid', 'uploadedByEmail', 'uploadedAt'
+        ])
+        && request.resource.data.purchaseId is string
+        && request.resource.data.purchaseId.size() > 0
+        && request.resource.data.purchaseId.size() <= 160
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 140
+        && request.resource.data.mimeType in [
+          'image/jpeg', 'image/png', 'image/webp', 'application/pdf',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel', 'text/csv'
+        ]
+        && request.resource.data.size is int
+        && request.resource.data.size > 0
+        && request.resource.data.size <= 3145728
+        && request.resource.data.partCount is int
+        && request.resource.data.partCount > 0
+        && request.resource.data.partCount <= 17
+        && request.resource.data.sha256 is string
+        && request.resource.data.sha256.matches('^[a-f0-9]{64}
+      allow read: if isWorkspaceOwner(workspaceId)
+        || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
+      allow create: if isWorkspaceMember(workspaceId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow update: if isWorkspaceMember(workspaceId)
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+
+    match /userWorkspaces/{workspaceId}/records/{recordId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
+    match /userWorkspaces/{workspaceId}/migrations/{migrationId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
+    match /userWorkspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(workspaceId)
+        || (signedIn() && request.auth.uid == workspaceId);
+      allow create: if signedIn() && (
+        (request.auth.uid == workspaceId && request.resource.data.ownerUid == request.auth.uid)
+        || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
+      );
+      allow update: if isWorkspaceMember(workspaceId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.uid == resource.data.uid
+        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+  }
+})
+        && request.resource.data.uploadedByUid == request.auth.uid
+        && request.resource.data.uploadedByEmail is string
+        && request.resource.data.uploadedByEmail.size() <= 160
+        && request.resource.data.uploadedAt is string
+        && request.resource.data.uploadedAt.size() <= 40;
+      allow update: if false;
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+
+    match /userWorkspaces/{workspaceId}/receiptFiles/{receiptId}/parts/{partId} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow create: if isWorkspaceMember(workspaceId)
+        && partId.matches('^[0-9]{3}
+      allow read: if isWorkspaceOwner(workspaceId)
+        || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
+      allow create: if isWorkspaceMember(workspaceId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow update: if isWorkspaceMember(workspaceId)
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.appVersion == '2.1.0-compat'
+        && request.resource.data.keys().hasOnly(['uid', 'appVersion', 'userAgent', 'firstSeenAt', 'lastSeenAt']);
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+
+    match /userWorkspaces/{workspaceId}/records/{recordId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
+    match /userWorkspaces/{workspaceId}/migrations/{migrationId} {
+      allow read, create, update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+    }
+
+    match /userWorkspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(workspaceId)
+        || (signedIn() && request.auth.uid == workspaceId);
+      allow create: if signedIn() && (
+        (request.auth.uid == workspaceId && request.resource.data.ownerUid == request.auth.uid)
+        || (isPrimaryOwner() && request.resource.data.ownerUid == request.auth.uid)
+      );
+      allow update: if isWorkspaceMember(workspaceId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.uid == resource.data.uid
+        && (!isEmptyWorkspaceReset() || isWorkspaceOwner(workspaceId));
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+  }
+})
+        && request.resource.data.keys().hasOnly(['data', 'index', 'uploadedByUid'])
+        && request.resource.data.index is int
+        && request.resource.data.index >= 0
+        && request.resource.data.index < 17
+        && request.resource.data.data is string
+        && request.resource.data.data.size() > 0
+        && request.resource.data.data.size() <= 270000
+        && request.resource.data.uploadedByUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/userWorkspaces/$(workspaceId)/receiptFiles/$(receiptId)).data.uploadedByUid == request.auth.uid
+        && request.resource.data.index < getAfter(/databases/$(database)/documents/userWorkspaces/$(workspaceId)/receiptFiles/$(receiptId)).data.partCount;
+      allow update: if false;
+      allow delete: if isWorkspaceOwner(workspaceId);
+    }
+
     match /userWorkspaces/{workspaceId}/clientDevices/{deviceId} {
       allow read: if isWorkspaceOwner(workspaceId)
         || (isWorkspaceMember(workspaceId) && resource.data.uid == request.auth.uid);
