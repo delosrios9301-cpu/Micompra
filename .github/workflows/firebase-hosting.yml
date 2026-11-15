@@ -24,6 +24,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Validate keyless setup script syntax
+        run: bash -n scripts/setup-firebase-wif.sh
       - name: Install Firestore emulator test dependencies
         run: npm install --no-save --no-package-lock --no-audit --no-fund firebase-tools@15.36.0 @firebase/rules-unit-testing@5.0.0
       - name: Verify Firestore security rules in emulator
