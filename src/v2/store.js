@@ -9,6 +9,7 @@ import {
 import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, normalizeSharedDraft, applySharedDraftOperation, createId } from './model.js';
 import { createWorkspaceBackup, validateWorkspaceBackup, shouldRecoverBackupDraft } from './backup.js';
+import { applySavedPurchaseChange } from './purchase-corrections.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -52,6 +53,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
   let dirty = false;
   let localRevision = 0;
   let syncFailures = 0;
+  let purchaseMutationBusy = false;
   let disposed = false;
   const retryOnReconnect = () => { if (user && !disposed) { if (dirty) { syncFailures = 0; scheduleSync(); } if (pendingDraftOps.length) { draftFailures = 0; scheduleDraftSync(); } } };
   let unsubscribeAccess = null;
@@ -183,6 +185,54 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     notifyDraft();
     return result.merged;
   }
+  async function changeSavedPurchase(request) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para corregir una compra.');
+    if (purchaseMutationBusy) throw new Error('Hay otra corrección de compra en curso. Espera a que termine.');
+    if (dirty || syncing) throw new Error('Hay datos pendientes de sincronizar. Espera a que termine el guardado y vuelve a intentarlo.');
+    if (request?.kind === 'delete' && workspaceOwnerUid !== user.uid) {
+      throw new Error('Solo el propietario puede eliminar compras confirmadas.');
+    }
+    purchaseMutationBusy = true;
+    const startRevision = localRevision;
+    const actingUser = { uid: user.uid, email: user.email || '', isOwner: workspaceOwnerUid === user.uid };
+    try {
+      const result = await runTransaction(db, async transaction => {
+        const ref = workspaceRef(workspaceId);
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists() || !snapshot.data()?.workspace) throw new Error('El espacio de compras no está disponible.');
+        if (snapshot.data().ownerUid !== workspaceOwnerUid) {
+          throw new Error('Los permisos del espacio cambiaron. Vuelve a iniciar sesión.');
+        }
+        if (request.kind === 'delete' && snapshot.data().ownerUid !== user.uid) {
+          throw new Error('Solo el propietario puede eliminar compras confirmadas.');
+        }
+        // Se parte siempre del estado fresco en Firebase y se rechazan versiones
+        // modificadas por otro dispositivo desde que se abrió el historial.
+        const changed = applySavedPurchaseChange(snapshot.data().workspace, request, actingUser);
+        transaction.set(ref, {
+          workspace: changed.workspace,
+          schemaVersion: 2,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        return changed;
+      });
+      if (localRevision === startRevision && !dirty) {
+        workspace = normalizeWorkspace(result.workspace);
+        dirty = false;
+      } else {
+        // Nunca perder cambios locales iniciados mientras se ejecuta la transacción.
+        workspace = mergeWorkspaces(workspace, result.workspace);
+        dirty = true;
+        scheduleSync();
+      }
+      notify();
+      setStatus(dirty ? 'Guardando cambios recientes' : 'Sincronizado con Firebase');
+      return result;
+    } finally {
+      purchaseMutationBusy = false;
+    }
+  }
+
   function replaceSharedDraft(items) {
     queueDraftOperation({ type: 'replace', expectedId: sharedDraft.id, expectedUpdatedAt: sharedDraft.updatedAt, id: createId('draft'), items: items.map(item => ({ ...item })) });
   }
@@ -913,7 +963,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
 
   return {
     initialize, save, signIn, signOut, resetPassword, resetWorkspace, exportBackup, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
-    getSharedDraft: () => normalizeSharedDraft(sharedDraft), replaceSharedDraft, addSharedDraftLine, patchSharedDraftLine, removeSharedDraftLine, confirmSharedPurchase, flushDraft,
+    getSharedDraft: () => normalizeSharedDraft(sharedDraft), replaceSharedDraft, addSharedDraftLine, patchSharedDraftLine, removeSharedDraftLine, confirmSharedPurchase, flushDraft, changeSavedPurchase,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
