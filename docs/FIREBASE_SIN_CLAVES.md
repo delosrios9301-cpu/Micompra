@@ -44,6 +44,7 @@ Después de la configuración inicial, cualquier `push` o fusión de cambios a `
 ## Si ocurre un error
 - **Falta FIREBASE_GCP_PROJECT_NUMBER:** agrega la variable en GitHub, no un secreto.
 - **No se puede crear la identidad:** comprueba que el usuario de Cloud Shell tenga permisos de administrador de IAM y que la organización permita Workload Identity Federation.
+- **La cuenta de servicio figura como inexistente justo después de crearla:** Google IAM puede tardar en propagarla. El script reintenta automáticamente con esperas crecientes. Si sigue fallando, espera varios minutos y ejecuta otra vez `bash scripts/setup-firebase-wif.sh`; no es necesario borrar ni recrear la cuenta.
 - **IAM permission denied / invalid grant:** espera cinco minutos y vuelve a ejecutar el workflow; si persiste, revisa el proyecto, proveedor y las restricciones de repo/main.
 - **Permisos insuficientes de Firebase CLI:** revisa las funciones de la cuenta `mi-compra-hosting-gh@mi-compra-d9717.iam.gserviceaccount.com`; no le concedas Owner ni Editor.
 - **No aparecen cambios:** verifica que se publicó el workflow de Firebase y actualiza la PWA; una caché del service worker puede retrasar la visualización.
