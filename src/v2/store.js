@@ -1,13 +1,14 @@
 import {
-  getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, inMemoryPersistence,
+  getAuth, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut,
   deleteUser, sendPasswordResetEmail
 } from 'firebase/auth';
 import {
-  doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where, writeBatch
+  doc, getDoc, getDocFromServer, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where, writeBatch
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
 import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, normalizeSharedDraft, applySharedDraftOperation, createId } from './model.js';
+import { createWorkspaceBackup, validateWorkspaceBackup, shouldRecoverBackupDraft } from './backup.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -427,8 +428,21 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
   async function initialize() {
     disposed = false;
     window.addEventListener('online', retryOnReconnect);
-    await setPersistence(auth, indexedDBLocalPersistence);
-    await setPersistence(memberAuth, inMemoryPersistence);
+    // En PC (navegación privada, cookies restringidas, IndexedDB bloqueado)
+    // usar una alternativa en lugar de impedir el inicio de sesión.
+    let authStorageReady = false;
+    for (const persistence of [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence]) {
+      try {
+        await setPersistence(auth, persistence);
+        authStorageReady = true;
+        break;
+      } catch (error) {
+        console.warn('Almacenamiento de sesión no disponible, probando alternativa:', error?.code || error?.message);
+      }
+    }
+    if (!authStorageReady) throw new Error('El navegador bloquea todos los mecanismos de sesión. Revisa la configuración de privacidad.');
+    try { await setPersistence(memberAuth, inMemoryPersistence); }
+    catch (error) { console.warn('No se pudo configurar la sesión auxiliar:', error?.message || error); }
     await new Promise(resolve => {
       let first = true;
       unsubscribeAuth = onAuthStateChanged(auth, async nextUser => {
@@ -791,24 +805,74 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
     setStatus('Sincronizado con Firebase');
   }
 
-  function restoreBackup(backup) {
+  async function exportBackup() {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para descargar una copia.');
+    if (dirty || syncing || pendingDraftOps.length || draftSyncing) {
+      throw new Error('Hay cambios aún por sincronizar. Espera a que se guarden antes de descargar el respaldo.');
+    }
+    // Solo lectura de la última versión confirmada en el servidor.
+    const snapshot = await getDocFromServer(workspaceRef(workspaceId));
+    if (!snapshot.exists() || !snapshot.data()?.workspace) {
+      throw new Error('No se encontró el espacio compartido en Firebase.');
+    }
+    return createWorkspaceBackup({
+      workspace: snapshot.data().workspace,
+      activePurchaseDraft: snapshot.data().activePurchaseDraft,
+      workspaceId
+    });
+  }
+
+  async function restoreBackup(backup) {
     if (!user) throw new Error('Inicia sesión para restaurar una copia de seguridad.');
     if (workspaceOwnerUid !== user.uid) throw new Error('Solo la cuenta propietaria puede restaurar copias de seguridad.');
-    if (!backup || backup.app !== 'Mi Compra 2.0' || !backup.workspace || typeof backup.workspace !== 'object' || Array.isArray(backup.workspace)) {
-      throw new Error('El archivo no corresponde a una copia válida de Mi Compra 2.0.');
+    validateWorkspaceBackup(backup, workspaceId);
+    if (dirty || syncing || pendingDraftOps.length || draftSyncing) {
+      throw new Error('Hay cambios pendientes. Espera a sincronizar antes de restaurar.');
     }
     const restored = normalizeWorkspace(backup.workspace);
-    const merged = mergeWorkspaces(restored, workspace);
-    merged.activity.unshift({
-      id: 'act_restore_' + Date.now().toString(36),
-      module: 'Configuración',
-      action: 'Respaldo restaurado',
-      description: 'Se importó una copia de seguridad.',
-      createdAt: new Date().toISOString()
+    const restoreEventId = createId('act_restore');
+    const result = await runTransaction(db, async transaction => {
+      const ref = workspaceRef(workspaceId);
+      const latest = await transaction.get(ref);
+      if (!latest.exists() || latest.data()?.ownerUid !== user.uid) {
+        throw new Error('No se pudo confirmar la propiedad del espacio compartido.');
+      }
+      const remote = normalizeWorkspace(latest.data()?.workspace);
+      const merged = mergeWorkspaces(restored, remote);
+      merged.activity.unshift({
+        id: restoreEventId,
+        module: 'Configuración',
+        action: 'Respaldo restaurado',
+        description: 'El propietario combinó un respaldo con los datos actuales.',
+        createdAt: new Date().toISOString()
+      });
+      const recovered = normalizeWorkspace(merged);
+      const remoteDraft = normalizeSharedDraft(latest.data()?.activePurchaseDraft);
+      const recoverDraft = shouldRecoverBackupDraft(backup.activePurchaseDraft, remoteDraft);
+      const changes = {
+        workspace: recovered,
+        schemaVersion: 2,
+        updatedAt: serverTimestamp()
+      };
+      // Jamás reemplazar una compra activa ni resucitar una compra cerrada.
+      if (recoverDraft) changes.activePurchaseDraft = normalizeSharedDraft(backup.activePurchaseDraft);
+      transaction.set(ref, changes, { merge: true });
+      return { workspace: recovered, draft: recoverDraft ? changes.activePurchaseDraft : remoteDraft, draftRecovered: recoverDraft };
     });
-    workspace = normalizeWorkspace(merged);
-    save(workspace);
-    return workspace;
+    if (!dirty) {
+      workspace = result.workspace;
+      notify();
+      setStatus('Sincronizado con Firebase');
+    } else {
+      // Si hubo una edición local mientras corría la transacción, conservarla.
+      workspace = mergeWorkspaces(workspace, result.workspace);
+      scheduleSync();
+    }
+    if (!pendingDraftOps.length) {
+      sharedDraft = result.draft;
+      notifyDraft();
+    }
+    return result;
   }
 
   function save(next) {
@@ -848,7 +912,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {},
   }
 
   return {
-    initialize, save, signIn, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
+    initialize, save, signIn, signOut, resetPassword, resetWorkspace, exportBackup, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
     getSharedDraft: () => normalizeSharedDraft(sharedDraft), replaceSharedDraft, addSharedDraftLine, patchSharedDraftLine, removeSharedDraftLine, confirmSharedPurchase, flushDraft,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
