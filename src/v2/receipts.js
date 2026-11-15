@@ -88,3 +88,40 @@ export function receiptCategory(mimeType) {
   if (mimeType === 'application/pdf') return 'PDF';
   return 'Excel';
 }
+
+
+/**
+ * El mismo archivo dentro de la misma compra recibe siempre el mismo ID.
+ * Dos dispositivos que suben simultáneamente un PDF idéntico intentarán
+ * crear el mismo documento, y las reglas Firestore prohíben sobrescribirlo.
+ * Distintas compras y archivos diferentes generan IDs distintos.
+ */
+export async function deterministicReceiptId(purchaseId, sha256) {
+  if (typeof purchaseId !== 'string' || !purchaseId.trim() ||
+      typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256)) {
+    throw new Error('No se pudo identificar la factura para evitar duplicados.');
+  }
+  const input = new TextEncoder().encode(purchaseId + '\u0000' + sha256);
+  const hash = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+  return 'receipt_' + [...hash].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Algunas compras anteriores pueden contener documentos duplicados por cargas
+ * simultáneas. Los agrupamos al visualizar, pero JAMÁS los borramos sin
+ * intervención explícita del propietario.
+ */
+export function groupDistinctReceipts(receipts = []) {
+  const seen = new Set();
+  const unique = [];
+  const duplicates = [];
+  for (const row of receipts) {
+    const digest = String(row?.sha256 || '');
+    const key = /^[a-f0-9]{64}$/.test(digest)
+      ? String(row.purchaseId || '') + ':' + digest
+      : 'legacy:' + String(row.id);
+    if (seen.has(key)) duplicates.push(row);
+    else { seen.add(key); unique.push(row); }
+  }
+  return { unique, duplicates };
+}
