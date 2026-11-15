@@ -1,4 +1,5 @@
 import { createId, normalizeWorkspace, computePurchaseTotal } from './model.js';
+import { computePurchaseBreakdown, validTaxRate } from './itbms.js';
 
 const normalizeName = value => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const round2 = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -15,6 +16,11 @@ function validatedItems(rows, previousItems, now) {
     const quantity = Number(row?.quantity);
     const unitPrice = Number(row?.unitPrice);
     const discount = Number(row?.discount || 0);
+    const taxRate = row?.taxRate === undefined && previousItems.find(item => item.id === row?.id)?.taxRate === undefined
+      ? undefined : Number(row?.taxRate ?? previousItems.find(item => item.id === row?.id)?.taxRate);
+    if (taxRate !== undefined && !validTaxRate(taxRate)) {
+      throw new Error('Selecciona un ITBMS válido para el producto ' + (index + 1) + '.');
+    }
     if (!name || name.length > 100 || !unit || unit.length > 24 ||
         !Number.isFinite(quantity) || quantity <= 0 ||
         !Number.isFinite(unitPrice) || unitPrice < 0 ||
@@ -28,7 +34,9 @@ function validatedItems(rows, previousItems, now) {
     return {
       ...previous,
       id, name, unit, quantity: round2(quantity), unitPrice: round2(unitPrice),
-      discount: round2(discount), createdAt: previous?.createdAt || now, updatedAt: now
+      discount: round2(discount),
+      ...(taxRate !== undefined ? { taxRate, taxIncluded: row.taxIncluded === true } : {}),
+      createdAt: previous?.createdAt || now, updatedAt: now
     };
   });
 }
@@ -145,6 +153,10 @@ export function applySavedPurchaseChange(originalWorkspace, request, actor, at =
       storeName: selectedStore?.name || (storeId && storeId === purchase.storeId ? purchase.storeName : 'Compra sin establecimiento'),
       paid: edits.paid === true, items: nextItems,
       total: computePurchaseTotal(nextItems),
+      ...(nextItems.some(item => item.taxRate !== undefined) ? {
+        subtotal: computePurchaseBreakdown(nextItems).subtotal,
+        itbms: computePurchaseBreakdown(nextItems).itbms
+      } : {}),
       inventoryLinked: stockResult.linked,
       updatedAt: now
     };
