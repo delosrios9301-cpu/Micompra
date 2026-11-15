@@ -1,6 +1,7 @@
 import './styles.css';
 import { createWorkspaceStore } from './store.js';
 import { validateWorkspaceBackup, backupSummary } from './backup.js';
+import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, receiptCategory } from './receipts.js';
 import {
   createEmptyWorkspace, createId, normalizeWorkspace, mergeWorkspaces, computePurchaseTotal,
   monthKey, monthSpending, inventoryAlerts, currentBudget, formatMoney, csvEscape
@@ -17,6 +18,9 @@ let authReady = false;
 let purchaseDraft = [];
 let purchaseSaving = false;
 let savedPurchaseBusy = false;
+let purchaseReceiptState = { purchaseId: null, loading: false, items: [], error: '' };
+let purchaseReceiptBusy = false;
+let purchaseReceiptOpeningId = '';
 let backupBusy = false;
 function renderUnlessDraftEditing() {
   // No recrear los campos del diálogo mientras se escribe una corrección.
@@ -415,9 +419,39 @@ function modalHtml() {
         (Number(item.discount) ? ' · descuento ' + money(item.discount) : '') + '</small></div><strong>' +
         money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong></div>'
       ).join('');
+      const receipts = purchaseReceiptState.purchaseId === purchase.id ? purchaseReceiptState : { loading: true, items: [], error: '' };
+      const receiptItems = receipts.items.map(entry =>
+        '<div class="purchase-receipt-row"><span class="receipt-file-icon">' +
+        (entry.mimeType === 'application/pdf' ? icon('download', 17) : entry.mimeType.startsWith('image/') ? icon('camera', 17) : icon('grid', 17)) +
+        '</span><div class="purchase-receipt-label"><strong>' + safe(entry.name) + '</strong><small>' +
+        receiptCategory(entry.mimeType) + ' · ' + Math.max(1, Math.round(entry.size / 1024)) + ' KB · ' +
+        safe(entry.uploadedByEmail || 'Usuario autorizado') + '</small></div>' +
+        '<button class="btn btn-secondary btn-small" type="button" data-action="open-purchase-receipt" data-id="' + safe(entry.id) + '"' +
+        (purchaseReceiptOpeningId === entry.id ? ' disabled' : '') + '>' + (purchaseReceiptOpeningId === entry.id ? 'Abriendo…' : 'Abrir') + '</button>' +
+        (store.isWorkspaceOwner() ? '<button class="icon-button danger-ghost" type="button" data-action="delete-purchase-receipt" data-id="' +
+          safe(entry.id) + '" aria-label="Retirar comprobante ' + safe(entry.name) + '">' + icon('close', 15) + '</button>' : '') +
+        '</div>'
+      ).join('');
+      const canUploadReceipt = !purchaseReceiptBusy && !receipts.loading && receipts.items.length < MAX_RECEIPTS_PER_PURCHASE;
+      const receiptPanel = '<section class="purchase-receipts"><div class="panel-heading"><div><span class="eyebrow">DOCUMENTACIÓN DE LA COMPRA</span><h3>Facturas y comprobantes</h3></div><span class="status-chip chip-open">' +
+        receipts.items.length + ' / ' + MAX_RECEIPTS_PER_PURCHASE + '</span></div>' +
+        (receipts.loading ? '<p class="saved-purchase-note">Consultando comprobantes seguros…</p>' :
+         receipts.error ? '<p class="saved-purchase-note">' + safe(receipts.error) + '</p>' :
+         (receiptItems || '<p class="saved-purchase-note">Todavía no hay facturas adjuntas a esta compra.</p>')) +
+        '<div class="purchase-receipt-list">' + receiptItems + '</div>' +
+        '<div class="purchase-receipt-buttons">' +
+        '<label class="btn btn-secondary file-button ' + (!canUploadReceipt ? 'receipt-upload-disabled' : '') + '">' + icon('camera', 15) +
+        'Tomar foto<input type="file" id="purchase-receipt-camera" accept="image/*" capture="environment" hidden ' +
+        (!canUploadReceipt ? 'disabled' : '') + '></label>' +
+        '<label class="btn btn-secondary file-button ' + (!canUploadReceipt ? 'receipt-upload-disabled' : '') + '">' + icon('plus', 15) +
+        'Adjuntar archivo<input type="file" id="purchase-receipt-file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.xls,.xlsx,.csv" hidden ' +
+        (!canUploadReceipt ? 'disabled' : '') + '></label>' +
+        '<button class="btn btn-secondary btn-small" type="button" data-action="refresh-purchase-receipts" ' +
+        (purchaseReceiptBusy ? 'disabled' : '') + '>Actualizar</button></div>' +
+        '<p class="saved-purchase-note">Hasta 5 archivos por compra, máximo 3 MB cada uno. Foto, PDF, Excel y CSV. Compartidos de forma privada entre las cuentas autorizadas, sin cambiar el total de la compra.</p></section>';
       inner = '<div class="saved-purchase-summary"><div><span>Establecimiento</span><strong>' + safe(purchase.storeName || 'Sin establecimiento') + '</strong></div><div><span>Fecha</span><strong>' + safe(purchase.date || 'Sin fecha') + '</strong></div><div><span>Estado</span><strong>' + (purchase.paid ? 'Pagada' : 'Pendiente de pago') + '</strong></div></div>' +
         '<div class="saved-purchase-list">' + lines + '</div><div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
-        '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' +
+        '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' + receiptPanel +
         '<div class="saved-purchase-actions"><button class="btn btn-primary" type="button" data-action="edit-saved-purchase">' + icon('grid', 16) + 'Modificar compra</button>' +
         (store.isWorkspaceOwner() ? '<button class="btn btn-danger" type="button" data-action="delete-saved-purchase">Eliminar compra</button>' : '') + '</div>';
     } else {
@@ -600,6 +634,71 @@ function updateSavedPurchaseEditTotals(form) {
     if (element) element.textContent = money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)));
   });
 }
+function loadSavedPurchaseReceipts(purchaseId) {
+  if (!purchaseId) return;
+  purchaseReceiptState = { purchaseId, loading: true, items: [], error: '' };
+  if (modalName === 'saved-purchase' && modalData.mode === 'view') render();
+  store.listPurchaseReceipts(purchaseId).then(items => {
+    if (purchaseReceiptState.purchaseId !== purchaseId) return;
+    purchaseReceiptState = { purchaseId, loading: false, items, error: '' };
+    if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
+  }).catch(error => {
+    if (purchaseReceiptState.purchaseId !== purchaseId) return;
+    purchaseReceiptState = { purchaseId, loading: false, items: [], error: 'No se pudieron consultar las facturas: ' + (error.message || 'verifica la conexión') };
+    if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
+  });
+}
+async function compressPurchaseReceiptPhoto(file) {
+  if (!file.type.startsWith('image/') || file.size <= MAX_RECEIPT_BYTES) return file;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('El navegador no pudo procesar la fotografía.');
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .78));
+    if (!blob) throw new Error('El navegador no pudo convertir la fotografía.');
+    const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([blob], newName, { type: 'image/jpeg' });
+  } catch (error) {
+    throw new Error('La foto es demasiado grande y no se pudo comprimir. Usa JPG de hasta 3 MB. ' + (error.message || ''));
+  } finally {
+    bitmap?.close?.();
+  }
+}
+async function attachReceiptFromInput(input) {
+  const file = input.files?.[0];
+  const purchaseId = modalData.id;
+  input.value = '';
+  if (!file || purchaseReceiptBusy || modalName !== 'saved-purchase' || modalData.mode !== 'view') return;
+  purchaseReceiptBusy = true;
+  render();
+  try {
+    const processed = await compressPurchaseReceiptPhoto(file);
+    await store.attachPurchaseReceipt(purchaseId, processed);
+    showToast('Factura adjuntada a la compra y disponible en tus dispositivos.');
+    loadSavedPurchaseReceipts(purchaseId);
+  } catch (error) {
+    showToast('No se pudo adjuntar la factura: ' + (error.message || 'error de conexión'), 'info');
+  } finally {
+    purchaseReceiptBusy = false;
+    if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
+  }
+}
+function downloadReceiptFile(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
 function handleAction(action, target) {
   const id = target.dataset.id;
   if (action === 'open-saved-purchase') {
@@ -607,7 +706,51 @@ function handleAction(action, target) {
     if (!saved) { showToast('Esa compra ya no está disponible.', 'info'); return; }
     modalName = 'saved-purchase';
     modalData = { id: saved.id, mode: 'view' };
+    purchaseReceiptState = { purchaseId: saved.id, loading: true, items: [], error: '' };
     render();
+    loadSavedPurchaseReceipts(saved.id);
+  }
+  else if (action === 'refresh-purchase-receipts') {
+    if (modalName === 'saved-purchase' && modalData.id) loadSavedPurchaseReceipts(modalData.id);
+  }
+  else if (action === 'open-purchase-receipt') {
+    const receipt = purchaseReceiptState.items.find(entry => entry.id === id);
+    if (!receipt || purchaseReceiptOpeningId) return;
+    const purchaseId = modalData.id;
+    const previewable = receipt.mimeType.startsWith('image/') || receipt.mimeType === 'application/pdf';
+    const windowRef = previewable ? window.open('about:blank', '_blank') : null;
+    if (windowRef) windowRef.opener = null;
+    purchaseReceiptOpeningId = id;
+    render();
+    store.loadPurchaseReceipt(id, purchaseId).then(result => {
+      const blob = new Blob([result.bytes], { type: result.mimeType });
+      if (windowRef && !windowRef.closed) {
+        const url = URL.createObjectURL(blob);
+        windowRef.location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+      } else {
+        downloadReceiptFile(blob, result.name);
+      }
+    }).catch(error => {
+      if (windowRef && !windowRef.closed) windowRef.close();
+      showToast('No se pudo abrir la factura: ' + (error.message || 'error de conexión'), 'info');
+    }).finally(() => {
+      purchaseReceiptOpeningId = '';
+      if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
+    });
+  }
+  else if (action === 'delete-purchase-receipt') {
+    if (purchaseReceiptBusy || !store.isWorkspaceOwner()) return;
+    const entry = purchaseReceiptState.items.find(row => row.id === id);
+    if (!entry || !window.confirm('¿Retirar el comprobante «' + entry.name + '» de esta compra? La compra y sus importes no cambiarán.')) return;
+    const purchaseId = modalData.id;
+    purchaseReceiptBusy = true;
+    render();
+    store.deletePurchaseReceipt(entry.id, purchaseId).then(() => {
+      showToast('Comprobante retirado. La compra se conserva sin cambios.');
+      loadSavedPurchaseReceipts(purchaseId);
+    }).catch(error => showToast(error.message || 'No se pudo retirar el comprobante.', 'info'))
+      .finally(() => { purchaseReceiptBusy = false; if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render(); });
   }
   else if (action === 'edit-saved-purchase') {
     const saved = workspace.purchases.find(row => row.id === modalData.id);
@@ -1112,6 +1255,10 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
+  if (event.target.id === 'purchase-receipt-file' || event.target.id === 'purchase-receipt-camera') {
+    void attachReceiptFromInput(event.target);
+    return;
+  }
   if (event.target.matches('[data-draft-price], [data-draft-qty]')) { renderUnlessDraftEditing(); return; }
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
