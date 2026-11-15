@@ -1,7 +1,7 @@
 import './styles.css';
 import { createWorkspaceStore } from './store.js';
 import { validateWorkspaceBackup, backupSummary } from './backup.js';
-import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, receiptCategory } from './receipts.js';
+import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE, receiptCategory, groupDistinctReceipts } from './receipts.js';
 import {
   createEmptyWorkspace, createId, normalizeWorkspace, mergeWorkspaces, computePurchaseTotal,
   monthKey, monthSpending, inventoryAlerts, currentBudget, formatMoney, csvEscape
@@ -420,10 +420,13 @@ function modalHtml() {
         money(Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0))) + '</strong></div>'
       ).join('');
       const receipts = purchaseReceiptState.purchaseId === purchase.id ? purchaseReceiptState : { loading: true, items: [], error: '' };
-      const receiptItems = receipts.items.map(entry =>
+      const receiptGroups = groupDistinctReceipts(receipts.items);
+      const visibleReceipts = receipts.showDuplicates ? receipts.items : receiptGroups.unique;
+      const receiptItems = visibleReceipts.map(entry =>
         '<div class="purchase-receipt-row"><span class="receipt-file-icon">' +
         (entry.mimeType === 'application/pdf' ? icon('download', 17) : entry.mimeType.startsWith('image/') ? icon('camera', 17) : icon('grid', 17)) +
         '</span><div class="purchase-receipt-label"><strong>' + safe(entry.name) + '</strong><small>' +
+        (receiptGroups.duplicates.some(copy => copy.id === entry.id) ? 'Copia repetida · ' : '') +
         receiptCategory(entry.mimeType) + ' · ' + Math.max(1, Math.round(entry.size / 1024)) + ' KB · ' +
         safe(entry.uploadedByEmail || 'Usuario autorizado') + '</small></div>' +
         '<button class="btn btn-secondary btn-small" type="button" data-action="open-purchase-receipt" data-id="' + safe(entry.id) + '"' +
@@ -432,23 +435,25 @@ function modalHtml() {
           safe(entry.id) + '" aria-label="Retirar comprobante ' + safe(entry.name) + '">' + icon('close', 15) + '</button>' : '') +
         '</div>'
       ).join('');
-      const canUploadReceipt = !purchaseReceiptBusy && !receipts.loading && receipts.items.length < MAX_RECEIPTS_PER_PURCHASE;
+      const canUploadReceipt = !purchaseReceiptBusy && !receipts.loading && receiptGroups.unique.length < MAX_RECEIPTS_PER_PURCHASE;
       const receiptPanel = '<section class="purchase-receipts"><div class="panel-heading"><div><span class="eyebrow">DOCUMENTACIÓN DE LA COMPRA</span><h3>Facturas y comprobantes</h3></div><span class="status-chip chip-open">' +
-        receipts.items.length + ' / ' + MAX_RECEIPTS_PER_PURCHASE + '</span></div>' +
+        receiptGroups.unique.length + ' / ' + MAX_RECEIPTS_PER_PURCHASE + '</span></div>' +
         (receipts.loading ? '<p class="saved-purchase-note">Consultando comprobantes seguros…</p>' :
          receipts.error ? '<p class="saved-purchase-note">' + safe(receipts.error) + '</p>' :
-         (receiptItems || '<p class="saved-purchase-note">Todavía no hay facturas adjuntas a esta compra.</p>')) +
-        '<div class="purchase-receipt-list">' + receiptItems + '</div>' +
+         (receiptGroups.unique.length ? '' : '<p class="saved-purchase-note">Todavía no hay facturas adjuntas a esta compra.</p>')) +
+        '<div class="purchase-receipt-list">' + (receipts.loading || receipts.error ? '' : receiptItems) + '</div>' +
+        (receiptGroups.duplicates.length ? '<div class="saved-purchase-note">Hay ' + receiptGroups.duplicates.length + ' copia(s) repetida(s) guardadas anteriormente. Se muestran agrupadas, sin borrar archivos. <button class="text-action" data-action="toggle-duplicate-receipts" type="button">' +
+          (receipts.showDuplicates ? 'Ocultar copias repetidas' : 'Ver copias repetidas') + '</button></div>' : '') +
         '<div class="purchase-receipt-buttons">' +
         '<label class="btn btn-secondary file-button ' + (!canUploadReceipt ? 'receipt-upload-disabled' : '') + '">' + icon('camera', 15) +
         'Tomar foto<input type="file" id="purchase-receipt-camera" accept="image/*" capture="environment" hidden ' +
         (!canUploadReceipt ? 'disabled' : '') + '></label>' +
         '<label class="btn btn-secondary file-button ' + (!canUploadReceipt ? 'receipt-upload-disabled' : '') + '">' + icon('plus', 15) +
-        'Adjuntar archivo<input type="file" id="purchase-receipt-file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.xls,.xlsx,.csv" hidden ' +
+        'Adjuntar archivos<input type="file" id="purchase-receipt-file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.xls,.xlsx,.csv" hidden ' +
         (!canUploadReceipt ? 'disabled' : '') + '></label>' +
         '<button class="btn btn-secondary btn-small" type="button" data-action="refresh-purchase-receipts" ' +
         (purchaseReceiptBusy ? 'disabled' : '') + '>Actualizar</button></div>' +
-        '<p class="saved-purchase-note">Hasta 5 archivos por compra, máximo 3 MB cada uno. Foto, PDF, Excel y CSV. Compartidos de forma privada entre las cuentas autorizadas, sin cambiar el total de la compra.</p></section>';
+        '<p class="saved-purchase-note">Hasta 5 archivos diferentes por compra, máximo 3 MB cada uno. Puedes seleccionar varios PDF a la vez; los archivos idénticos no se duplican. Compartidos de forma privada, sin cambiar el total.</p></section>';
       inner = '<div class="saved-purchase-summary"><div><span>Establecimiento</span><strong>' + safe(purchase.storeName || 'Sin establecimiento') + '</strong></div><div><span>Fecha</span><strong>' + safe(purchase.date || 'Sin fecha') + '</strong></div><div><span>Estado</span><strong>' + (purchase.paid ? 'Pagada' : 'Pendiente de pago') + '</strong></div></div>' +
         '<div class="saved-purchase-list">' + lines + '</div><div class="saved-purchase-grand"><span>Total registrado</span><strong>' + money(purchase.total) + '</strong></div>' +
         '<div class="saved-purchase-note">Puedes corregir esta compra sin crear una nueva ni alterar la compra que tengas en curso. Los cambios quedarán registrados en Actividad.</div>' + receiptPanel +
@@ -636,15 +641,16 @@ function updateSavedPurchaseEditTotals(form) {
 }
 function loadSavedPurchaseReceipts(purchaseId) {
   if (!purchaseId) return;
-  purchaseReceiptState = { purchaseId, loading: true, items: [], error: '' };
+  const showDuplicates = purchaseReceiptState.purchaseId === purchaseId && Boolean(purchaseReceiptState.showDuplicates);
+  purchaseReceiptState = { purchaseId, loading: true, items: [], error: '', showDuplicates };
   if (modalName === 'saved-purchase' && modalData.mode === 'view') render();
   store.listPurchaseReceipts(purchaseId).then(items => {
     if (purchaseReceiptState.purchaseId !== purchaseId) return;
-    purchaseReceiptState = { purchaseId, loading: false, items, error: '' };
+    purchaseReceiptState = { purchaseId, loading: false, items, error: '', showDuplicates: purchaseReceiptState.showDuplicates };
     if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
   }).catch(error => {
     if (purchaseReceiptState.purchaseId !== purchaseId) return;
-    purchaseReceiptState = { purchaseId, loading: false, items: [], error: 'No se pudieron consultar las facturas: ' + (error.message || 'verifica la conexión') };
+    purchaseReceiptState = { purchaseId, loading: false, items: [], error: 'No se pudieron consultar las facturas: ' + (error.message || 'verifica la conexión'), showDuplicates: purchaseReceiptState.showDuplicates };
     if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
   });
 }
@@ -671,19 +677,33 @@ async function compressPurchaseReceiptPhoto(file) {
   }
 }
 async function attachReceiptFromInput(input) {
-  const file = input.files?.[0];
+  const files = Array.from(input.files || []);
   const purchaseId = modalData.id;
   input.value = '';
-  if (!file || purchaseReceiptBusy || modalName !== 'saved-purchase' || modalData.mode !== 'view') return;
+  if (!files.length || purchaseReceiptBusy || modalName !== 'saved-purchase' || modalData.mode !== 'view') return;
   purchaseReceiptBusy = true;
   render();
+  let uploaded = 0;
+  let alreadyPresent = 0;
+  const problems = [];
   try {
-    const processed = await compressPurchaseReceiptPhoto(file);
-    await store.attachPurchaseReceipt(purchaseId, processed);
-    showToast('Factura adjuntada a la compra y disponible en tus dispositivos.');
+    for (const file of files) {
+      try {
+        const processed = await compressPurchaseReceiptPhoto(file);
+        await store.attachPurchaseReceipt(purchaseId, processed);
+        uploaded += 1;
+      } catch (error) {
+        if (/ya está adjunta|misma factura|otra copia/i.test(error.message || '')) alreadyPresent += 1;
+        else problems.push(file.name + ': ' + (error.message || 'error desconocido'));
+      }
+    }
+    if (uploaded || alreadyPresent) {
+      showToast(uploaded + ' archivo(s) adjuntado(s). ' + (alreadyPresent ? alreadyPresent + ' repetido(s) omitido(s). ' : '') +
+        (problems.length ? problems.length + ' sin guardar.' : ''));
+    } else if (problems.length) {
+      showToast('No se guardó ningún archivo. ' + problems[0], 'info');
+    }
     loadSavedPurchaseReceipts(purchaseId);
-  } catch (error) {
-    showToast('No se pudo adjuntar la factura: ' + (error.message || 'error de conexión'), 'info');
   } finally {
     purchaseReceiptBusy = false;
     if (modalName === 'saved-purchase' && modalData.id === purchaseId && modalData.mode === 'view') render();
@@ -706,9 +726,13 @@ function handleAction(action, target) {
     if (!saved) { showToast('Esa compra ya no está disponible.', 'info'); return; }
     modalName = 'saved-purchase';
     modalData = { id: saved.id, mode: 'view' };
-    purchaseReceiptState = { purchaseId: saved.id, loading: true, items: [], error: '' };
+    purchaseReceiptState = { purchaseId: saved.id, loading: true, items: [], error: '', showDuplicates: false };
     render();
     loadSavedPurchaseReceipts(saved.id);
+  }
+  else if (action === 'toggle-duplicate-receipts') {
+    purchaseReceiptState.showDuplicates = !purchaseReceiptState.showDuplicates;
+    render();
   }
   else if (action === 'refresh-purchase-receipts') {
     if (modalName === 'saved-purchase' && modalData.id) loadSavedPurchaseReceipts(modalData.id);
