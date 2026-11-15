@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   validateReceiptFile, encodeReceiptParts, decodeReceiptParts, receiptCategory,
-  canAttachToPurchase, MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE,
+  canAttachToPurchase, deterministicReceiptId, groupDistinctReceipts, MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_PURCHASE,
   MAX_RECEIPT_PARTS
 } from './receipts.js';
 
@@ -59,4 +59,47 @@ test('la UI y el almacén vinculan recibos a la compra finalizada sin modificar 
   assert.match(store,/receiptFiles/);
   assert.match(store,/MAX_RECEIPTS_PER_PURCHASE/);
   assert.match(store,/crypto\.subtle\.digest\('SHA-256'/);
+});
+
+
+test('un PDF idéntico se identifica igual aunque cambie el nombre o el dispositivo', async () => {
+  const digest = 'a'.repeat(64);
+  const id1 = await deterministicReceiptId('compra-100', digest);
+  const id2 = await deterministicReceiptId('compra-100', digest);
+  const otherInvoice = await deterministicReceiptId('compra-100', 'b'.repeat(64));
+  const otherPurchase = await deterministicReceiptId('compra-101', digest);
+  assert.match(id1, /^receipt_[a-f0-9]{64}$/);
+  assert.equal(id1, id2);
+  assert.notEqual(id1, otherInvoice);
+  assert.notEqual(id1, otherPurchase);
+  await assert.rejects(deterministicReceiptId('', digest), /identificar/);
+  await assert.rejects(deterministicReceiptId('compra-100', 'invalid'), /identificar/);
+});
+
+test('se agrupan facturas antiguas repetidas sin borrar ninguna del registro', () => {
+  const sha = 'c'.repeat(64);
+  const rows = [
+    { id:'copia-nueva', sha256:sha, purchaseId:'buy-1', name:'Factura final.pdf' },
+    { id:'copia-vieja', sha256:sha, purchaseId:'buy-1', name:'Factura (1).pdf' },
+    { id:'otro-documento', sha256:'d'.repeat(64), purchaseId:'buy-1', name:'Comprobante extra.pdf' },
+    { id:'otra-compra', sha256:sha, purchaseId:'buy-2', name:'Factura final.pdf' },
+    { id:'legacy-sin-hash', sha256:'', purchaseId:'buy-1', name:'Factura antigua.pdf' }
+  ];
+  const result = groupDistinctReceipts(rows);
+  assert.deepEqual(result.unique.map(row => row.id), ['copia-nueva','otro-documento','otra-compra','legacy-sin-hash']);
+  assert.deepEqual(result.duplicates.map(row => row.id), ['copia-vieja']);
+  assert.equal(rows.length, 5, 'los datos originales se conservan');
+});
+
+test('cada comprobante se muestra una sola vez, pero pueden elegirse varios distintos', async () => {
+  const app = await readFile(new URL('./app.js',import.meta.url), 'utf8');
+  const store = await readFile(new URL('./store.js',import.meta.url), 'utf8');
+  assert.match(app, /const visibleReceipts = receipts.showDuplicates \? receipts.items : receiptGroups.unique/);
+  assert.match(app, /purchase-receipt-file" multiple accept=/);
+  assert.match(app, /Array.from\(input.files \|\| \[\]\)/);
+  assert.match(app, /groupDistinctReceipts\(receipts.items\)/);
+  assert.doesNotMatch(app, /\(receiptItems \|\| '<p class="saved-purchase-note"/);
+  assert.match(store, /const receiptId = await deterministicReceiptId\(purchaseId, digest\)/);
+  assert.match(store, /const alreadyStored = await getDocFromServer\(receiptRef\)/);
+  assert.match(store, /await batch.commit\(\)/);
 });
