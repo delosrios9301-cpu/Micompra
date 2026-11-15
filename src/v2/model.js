@@ -180,3 +180,53 @@ export function csvEscape(value) {
   const text = String(value ?? '');
   return '"' + text.replace(/"/g, '""') + '"';
 }
+
+/**
+ * Borrador de compra almacenado en la raíz del documento de Firebase,
+ * FUERA de workspace. Los clientes antiguos solo escriben workspace.
+ * Cada operación se combina dentro de una transacción y conserva las
+ * modificaciones de otras cuentas en productos distintos.
+ */
+export function normalizeSharedDraft(value = {}) {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    id: typeof raw.id === 'string' ? raw.id : '',
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : '',
+    items: Array.isArray(raw.items) ? raw.items.filter(item => item && typeof item === 'object' && typeof item.id === 'string' && item.id).map(item => ({ ...item })) : []
+  };
+}
+
+export function applySharedDraftOperation(current, operation, strict = false) {
+  const draft = normalizeSharedDraft(current);
+  const op = operation || {};
+  if (op.type === 'replace' || op.type === 'clear') {
+    if (strict && (draft.id !== op.expectedId || draft.updatedAt !== op.expectedUpdatedAt)) {
+      throw new Error('La compra cambió en otro dispositivo. Se conservaron los datos; actualiza y vuelve a intentarlo.');
+    }
+    return op.type === 'clear'
+      ? { id: '', items: [], updatedAt: op.at }
+      : { id: op.id, items: (op.items || []).map(item => ({ ...item })), updatedAt: op.at };
+  }
+  if (!draft.id || op.draftId !== draft.id) {
+    if (strict) throw new Error('Otra persona cambió la compra activa. Tus cambios pendientes se han conservado en este dispositivo.');
+    return draft;
+  }
+  if (op.type === 'add') {
+    if (!draft.items.some(item => item.id === op.item.id)) draft.items.push({ ...op.item });
+  } else if (op.type === 'patch') {
+    const item = draft.items.find(row => row.id === op.itemId);
+    if (!item) {
+      if (strict) throw new Error('El producto se eliminó en otro dispositivo. No se sobrescribieron otros cambios.');
+      return draft;
+    }
+    for (const key of ['quantity', 'unitPrice', 'discount']) {
+      if (Object.prototype.hasOwnProperty.call(op.changes || {}, key)) item[key] = op.changes[key];
+    }
+  } else if (op.type === 'remove') {
+    draft.items = draft.items.filter(item => item.id !== op.itemId);
+  } else {
+    throw new Error('Operación desconocida para el borrador compartido.');
+  }
+  draft.updatedAt = op.at;
+  return draft;
+}

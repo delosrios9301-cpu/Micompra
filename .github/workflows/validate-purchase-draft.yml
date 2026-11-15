@@ -1,0 +1,27 @@
+name: Validate shared purchase draft
+on:
+  push:
+    branches:
+      - fix/shared-purchase-draft-protection
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://srebdjlnthhsgufstwjr.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_XG2gIm5VPBQwPlKIVZ4UPA_B7InUKQ_

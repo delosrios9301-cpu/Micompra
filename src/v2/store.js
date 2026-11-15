@@ -7,7 +7,7 @@ import {
   doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, collection, query, where, writeBatch
 } from 'firebase/firestore';
 import { app, db, memberAuth } from './firebase.js';
-import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces } from './model.js';
+import { createEmptyWorkspace, normalizeWorkspace, mergeWorkspaces, normalizeSharedDraft, applySharedDraftOperation, createId } from './model.js';
 
 // Supabase is retained only as a one-time legacy data importer. All new reads/writes
 // and authentication use Firebase. Remove the legacy importer after every account migrates.
@@ -39,7 +39,7 @@ function timestampToIso(value) {
   return value ? String(value) : '';
 }
 
-export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} } = {}) {
+export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {}, onDraftChange = () => {}, onDraftError = () => {} } = {}) {
   let workspace = createEmptyWorkspace();
   let user = null;
   let status = 'Conectando con Firebase';
@@ -52,7 +52,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let localRevision = 0;
   let syncFailures = 0;
   let disposed = false;
-  const retryOnReconnect = () => { if (user && dirty && !disposed) { syncFailures = 0; scheduleSync(); } };
+  const retryOnReconnect = () => { if (user && !disposed) { if (dirty) { syncFailures = 0; scheduleSync(); } if (pendingDraftOps.length) { draftFailures = 0; scheduleDraftSync(); } } };
   let unsubscribeAccess = null;
   let unsubscribeRevoked = null;
   let pendingCredentials = null;
@@ -60,10 +60,140 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
   let initialized = false;
   let workspaceId = null;
   let workspaceOwnerUid = null;
+  let sharedDraft = normalizeSharedDraft();
+  let pendingDraftOps = [];
+  let draftTimer = null;
+  let draftSyncing = false;
+  let draftFailures = 0;
 
   const setStatus = value => { status = value; onStatus(status); };
   const notify = () => onChange(workspace, user);
   const workspaceRef = uid => doc(db, COLLECTION, uid);
+  const pendingDraftKey = () => 'mi-compra-pending-draft-ops:' + workspaceId + ':' + (user?.uid || '');
+  const notifyDraft = () => onDraftChange(normalizeSharedDraft(sharedDraft));
+  function persistPendingDraft() {
+    if (!workspaceId || !user) return;
+    try {
+      if (pendingDraftOps.length) localStorage.setItem(pendingDraftKey(), JSON.stringify(pendingDraftOps));
+      else localStorage.removeItem(pendingDraftKey());
+    } catch (error) {
+      console.warn('El navegador no pudo conservar los cambios pendientes:', error);
+    }
+  }
+  function restorePendingDraft() {
+    try {
+      const loaded = JSON.parse(localStorage.getItem(pendingDraftKey()) || '[]');
+      pendingDraftOps = Array.isArray(loaded) ? loaded.filter(op => op && typeof op.type === 'string').slice(0, 1000) : [];
+    } catch { pendingDraftOps = []; }
+  }
+  function scheduleDraftSync() {
+    if (!user || !workspaceId || !pendingDraftOps.length || disposed) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => { void syncDraft(); }, draftFailures ? Math.min(30000, 1000 * 2 ** Math.min(draftFailures, 5)) : 400);
+  }
+  function queueDraftOperation(data) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para guardar tu compra en la nube.');
+    const op = { ...data, at: new Date().toISOString() };
+    sharedDraft = applySharedDraftOperation(sharedDraft, op, true);
+    // Reducir escrituras mientras se teclea, sin alterar operaciones en vuelo.
+    const last = pendingDraftOps[pendingDraftOps.length - 1];
+    if (!draftSyncing && op.type === 'patch' && last?.type === 'patch' && last.draftId === op.draftId && last.itemId === op.itemId && Object.keys(last.changes).join(',') === Object.keys(op.changes).join(',')) {
+      pendingDraftOps[pendingDraftOps.length - 1] = op;
+    } else {
+      pendingDraftOps.push(op);
+    }
+    persistPendingDraft();
+    if (op.type !== 'patch') notifyDraft();
+    scheduleDraftSync();
+  }
+  async function syncDraft() {
+    if (!user || !workspaceId || !pendingDraftOps.length || disposed) return;
+    if (draftSyncing) return;
+    draftSyncing = true;
+    const batch = pendingDraftOps.slice();
+    try {
+      const ref = workspaceRef(workspaceId);
+      const saved = await runTransaction(db, async tx => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists()) throw new Error('El espacio compartido no está disponible.');
+        let next = normalizeSharedDraft(snapshot.data()?.activePurchaseDraft);
+        for (const op of batch) next = applySharedDraftOperation(next, op, true);
+        tx.set(ref, { activePurchaseDraft: next, updatedAt: serverTimestamp() }, { merge: true });
+        return next;
+      });
+      pendingDraftOps.splice(0, batch.length);
+      persistPendingDraft();
+      sharedDraft = pendingDraftOps.reduce((draft, op) => applySharedDraftOperation(draft, op), saved);
+      draftFailures = 0;
+      notifyDraft();
+      if (pendingDraftOps.length) scheduleDraftSync();
+    } catch (error) {
+      draftFailures += 1;
+      console.error('No se pudo guardar el borrador compartido:', error);
+      setStatus('Precios pendientes de sincronización: ' + (error.message || 'reintentando'));
+      onDraftError(error.message || 'No se pudo sincronizar la compra.');
+      if (navigator.onLine && draftFailures < 3) scheduleDraftSync();
+      // Las operaciones se conservan localmente; no se sobrescribe la versión remota.
+    } finally {
+      draftSyncing = false;
+    }
+  }
+  async function flushDraft() {
+    clearTimeout(draftTimer);
+    let attempts = 0;
+    while (pendingDraftOps.length && attempts++ < 30) {
+      if (draftSyncing) { await new Promise(resolve => setTimeout(resolve, 250)); continue; }
+      await syncDraft();
+      if (pendingDraftOps.length) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (pendingDraftOps.length) throw new Error('Los precios todavía no están sincronizados. Conéctate y vuelve a intentar; tus datos pendientes siguen guardados en este dispositivo.');
+  }
+  async function confirmSharedPurchase(nextWorkspace, expectedDraftId, expectedItems) {
+    if (!user || !workspaceId) throw new Error('Inicia sesión para confirmar la compra.');
+    await flushDraft();
+    const ref = workspaceRef(workspaceId);
+    const startRevision = localRevision;
+    const now = new Date().toISOString();
+    const result = await runTransaction(db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('El espacio de compras no está disponible.');
+      const actual = normalizeSharedDraft(snap.data()?.activePurchaseDraft);
+      // Firestore puede devolver las claves de cada objeto en un orden distinto.
+      const comparable = items => (items || []).map(item => [item.id, String(item.name || ''), Number(item.quantity), String(item.unit || ''), Number(item.unitPrice), Number(item.discount || 0)]);
+      if (!actual.id || actual.id !== expectedDraftId || JSON.stringify(comparable(actual.items)) !== JSON.stringify(comparable(expectedItems))) {
+        throw new Error('La compra se modificó en otro dispositivo. Actualiza los precios antes de confirmar; no se ha perdido nada.');
+      }
+      const remoteWorkspace = normalizeWorkspace(snap.data()?.workspace);
+      const merged = mergeWorkspaces(nextWorkspace, remoteWorkspace);
+      const emptied = { id: '', items: [], updatedAt: now };
+      tx.set(ref, { workspace: merged, activePurchaseDraft: emptied, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+      return { merged, emptied };
+    });
+    if (localRevision === startRevision) {
+      workspace = normalizeWorkspace(result.merged);
+      dirty = false;
+    } else {
+      workspace = mergeWorkspaces(workspace, result.merged);
+      dirty = true;
+      scheduleSync();
+    }
+    sharedDraft = result.emptied;
+    notify();
+    notifyDraft();
+    return result.merged;
+  }
+  function replaceSharedDraft(items) {
+    queueDraftOperation({ type: 'replace', expectedId: sharedDraft.id, expectedUpdatedAt: sharedDraft.updatedAt, id: createId('draft'), items: items.map(item => ({ ...item })) });
+  }
+  function addSharedDraftLine(item) {
+    if (!sharedDraft.id) {
+      replaceSharedDraft([item]);
+      return;
+    }
+    queueDraftOperation({ type: 'add', draftId: sharedDraft.id, item: { ...item } });
+  }
+  function patchSharedDraftLine(itemId, changes) { queueDraftOperation({ type: 'patch', draftId: sharedDraft.id, itemId, changes }); }
+  function removeSharedDraftLine(itemId) { queueDraftOperation({ type: 'remove', draftId: sharedDraft.id, itemId }); }
 
   async function migrateLegacyWorkspace(firebaseUser, credentials) {
     if (!LEGACY_URL || !LEGACY_KEY || !credentials?.email || !credentials?.password) return false;
@@ -130,7 +260,11 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     const nextId = nextUser?.uid || null;
     if ((user?.uid || null) === nextId && initialized) return;
     stopWorkspaceListener();
+    clearTimeout(draftTimer);
+    pendingDraftOps = [];
+    sharedDraft = normalizeSharedDraft();
     user = nextUser || null;
+    notifyDraft();
     workspace = createEmptyWorkspace();
     workspaceOwnerUid = null;
     notify();
@@ -169,6 +303,7 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         return;
       }
       workspaceId = access.workspaceId || user.uid;
+      restorePendingDraft();
 
       const ref = workspaceRef(workspaceId);
       const existingWorkspace = await getDoc(ref);
@@ -252,10 +387,15 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
         if (snapshot.exists() && snapshot.data()?.workspace) {
           workspaceOwnerUid = snapshot.data()?.ownerUid || null;
           const incoming = normalizeWorkspace(snapshot.data().workspace);
+          sharedDraft = pendingDraftOps.reduce((draft, op) => applySharedDraftOperation(draft, op), normalizeSharedDraft(snapshot.data()?.activePurchaseDraft));
+          notifyDraft();
+          if (pendingDraftOps.length) scheduleDraftSync();
           workspace = dirty ? mergeWorkspaces(workspace, incoming) : incoming;
           if (dirty) scheduleSync();
         } else if (firstSnapshot) {
           workspace = createEmptyWorkspace();
+          sharedDraft = normalizeSharedDraft();
+          notifyDraft();
           try {
             await setDoc(ref, {
               uid: workspaceId,
@@ -638,10 +778,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
       for (const group of groups) for (const row of remote[group]) empty.deletedRecords[group + ':' + row.id] = { deletedAt: now };
       for (const list of remote.lists) for (const item of list.items || []) empty.deletedRecords['listItems:' + list.id + ':' + item.id] = { deletedAt: now };
       const result = mergeWorkspaces(empty, remote);
-      transaction.set(ref, { uid: workspaceId || user.uid, ownerUid: workspaceOwnerUid, email: user.email || '', workspace: result, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+      transaction.set(ref, { uid: workspaceId || user.uid, ownerUid: workspaceOwnerUid, email: user.email || '', workspace: result, activePurchaseDraft: { id: '', items: [], updatedAt: now }, schemaVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
       return result;
     });
     workspace = normalizeWorkspace(cleared);
+    sharedDraft = normalizeSharedDraft();
+    pendingDraftOps = [];
+    persistPendingDraft();
+    notifyDraft();
     dirty = false; localRevision += 1;
     notify();
     setStatus('Sincronizado con Firebase');
@@ -698,12 +842,14 @@ export function createWorkspaceStore({ onChange = () => {}, onStatus = () => {} 
     disposed = true;
     window.removeEventListener('online', retryOnReconnect);
     clearTimeout(timer);
+    clearTimeout(draftTimer);
     stopWorkspaceListener();
     unsubscribeAuth?.();
   }
 
   return {
     initialize, save, signIn, signOut, resetPassword, resetWorkspace, restoreBackup, createAccessUser, listAccessUsers, listClientDevices, migrateWorkspaceToRecords, revokeAccessUser, dispose,
+    getSharedDraft: () => normalizeSharedDraft(sharedDraft), replaceSharedDraft, addSharedDraftLine, patchSharedDraftLine, removeSharedDraftLine, confirmSharedPurchase, flushDraft,
     isWorkspaceOwner: () => Boolean(user && workspaceOwnerUid === user.uid),
     getState: () => workspace,
     getUser: () => user,
