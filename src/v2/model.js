@@ -14,7 +14,8 @@ export function createEmptyWorkspace() {
     financeCategories: [],
     budgets: [],
     activity: [],
-    deletedRecords: {}
+    deletedRecords: {},
+    shoppingDraft: { id: '', items: [], updatedAt: '' }
   };
 }
 
@@ -55,8 +56,10 @@ export function normalizeWorkspace(raw = {}) {
     financeCategories: asArray(source.financeCategories),
     budgets: asArray(source.budgets),
     activity: asArray(source.activity),
-    deletedRecords: source.deletedRecords && typeof source.deletedRecords === 'object' && !Array.isArray(source.deletedRecords) ? source.deletedRecords : {}
+    deletedRecords: source.deletedRecords && typeof source.deletedRecords === 'object' && !Array.isArray(source.deletedRecords) ? source.deletedRecords : {},
+    shoppingDraft: source.shoppingDraft && typeof source.shoppingDraft === 'object' && !Array.isArray(source.shoppingDraft) ? source.shoppingDraft : empty.shoppingDraft
   };
+  workspace.shoppingDraft = { id: asText(workspace.shoppingDraft.id), updatedAt: asText(workspace.shoppingDraft.updatedAt), items: asArray(workspace.shoppingDraft.items).map(item => ({ ...item, id: asText(item.id) || createId('dit') })) };
   workspace.profile.currency = ['USD', 'PAB'].includes(workspace.profile.currency) ? workspace.profile.currency : 'USD';
   workspace.products = workspace.products.map(item => ({ ...item, id: asText(item.id) || createId('prd'), name: asText(item.name), active: item.active !== false }));
   workspace.stores = workspace.stores.map(item => ({ ...item, id: asText(item.id) || createId('str'), name: asText(item.name), active: item.active !== false }));
@@ -99,6 +102,7 @@ export function mergeWorkspaces(local = {}, remote = {}) {
   }
   const merged = {
     ...b, ...a, deletedRecords, profile: { ...b.profile, ...a.profile },
+    shoppingDraft: stamp(a.shoppingDraft.updatedAt) >= stamp(b.shoppingDraft.updatedAt) ? a.shoppingDraft : b.shoppingDraft,
     products: mergeRecords(a.products, b.products, deletedRecords, 'products:'),
     stores: mergeRecords(a.stores, b.stores, deletedRecords, 'stores:'),
     lists: mergeRecords(a.lists, b.lists, deletedRecords, 'lists:').map(list => {
