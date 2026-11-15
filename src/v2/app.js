@@ -1,5 +1,6 @@
 import './styles.css';
 import { createWorkspaceStore } from './store.js';
+import { validateWorkspaceBackup, backupSummary } from './backup.js';
 import {
   createEmptyWorkspace, createId, normalizeWorkspace, mergeWorkspaces, computePurchaseTotal,
   monthKey, monthSpending, inventoryAlerts, currentBudget, formatMoney, csvEscape
@@ -15,6 +16,7 @@ let authMode = 'signin';
 let authReady = false;
 let purchaseDraft = [];
 let purchaseSaving = false;
+let backupBusy = false;
 function renderUnlessDraftEditing() {
   if (!document.activeElement?.matches?.('[data-draft-price], [data-draft-qty]')) render();
 }
@@ -357,8 +359,8 @@ function renderSettings() {
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">FINANZAS</span><h3>Categorías de gastos</h3></div></div><p class="settings-description">Crea categorías personalizadas para organizar tus gastos. Las categorías estarán disponibles al registrar un gasto en Finanzas y se sincronizarán entre dispositivos.</p><div class="settings-actions"><button class="btn btn-primary" data-action="new-finance-category">' + icon('plus', 15) + 'Nueva categoría</button></div><p class="settings-description">' + financeCategoryNames().map(name => safe(name)).join(' · ') + '</p></section>' +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">PREFERENCIAS</span><h3>Moneda de visualización</h3></div></div><form data-form="currency" class="settings-form"><label class="field"><span>Moneda</span><select name="currency"><option value="USD" ' + (workspace.profile.currency === 'USD' ? 'selected' : '') + '>Dólar estadounidense (USD)</option><option value="PAB" ' + (workspace.profile.currency === 'PAB' ? 'selected' : '') + '>Balboa panameño (PAB)</option></select></label><button class="btn btn-primary" type="submit">Guardar preferencia</button></form></section>' +
     (isOwner ? '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">MIGRACIÓN SEGURA</span><h3>Copiar datos a la nueva estructura</h3></div><span class="status-chip chip-open">Sin borrar originales</span></div><p class="settings-description">Copia productos, establecimientos, listas y artículos, compras, inventario, movimientos, gastos, presupuestos, actividad, perfil y registros de eliminación. Después comprueba cada registro. Esta etapa no cambia la lectura ni la escritura de la aplicación.</p><div class="settings-actions"><button class="btn btn-primary" data-action="run-workspace-migration">Iniciar copia y verificación</button></div><p class="settings-description">Puedes volver a ejecutarla: utiliza identificadores estables y actualiza la copia sin crear duplicados. El documento original se conserva.</p></section>' : '') +
-    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">TUS DATOS</span><h3>Respaldo y recuperación</h3></div></div><p class="settings-description">Mantén una copia de seguridad antes de cambiar de dispositivo o restaurar información.</p><div class="settings-actions"><button class="btn btn-secondary" data-action="download-backup">' + icon('download', 15) + 'Descargar copia</button><label class="btn btn-secondary file-button">' + icon('upload', 15) + 'Restaurar copia<input id="restore-file" type="file" accept="application/json,.json" hidden></label></div></section>' +
-    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">RESTABLECIMIENTO</span><h3>Restablecer aplicación</h3></div><span class="status-chip chip-open">Acción irreversible</span></div><p class="settings-description">Borra todos los datos de Mi Compra: listas, catálogo, establecimientos, compras, inventario, movimientos, gastos, presupuestos e historial. El borrado también se sincroniza con la nube y los demás dispositivos.</p><div class="settings-actions"><button class="btn btn-danger" data-action="open-reset">Restablecer y borrar todos los datos</button></div><p class="settings-description">Tu cuenta y contraseña seguirán activas. Se eliminará únicamente la información guardada dentro de la aplicación.</p></section>' +
+    '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">TUS DATOS</span><h3>Respaldo y recuperación</h3></div></div><p class="settings-description">Descarga una copia verificada desde Firebase: incluye productos, compras, historial y la compra compartida en curso. Si hay cambios pendientes, espera su sincronización antes de exportar.</p><div class="settings-actions"><button class="btn btn-secondary" data-action="download-backup">' + icon('download', 15) + 'Descargar copia</button>' + (isOwner ? '<label class="btn btn-secondary file-button">' + icon('upload', 15) + 'Restaurar copia<input id="restore-file" type="file" accept="application/json,.json" hidden></label>' : '') + '</div><p class="settings-description">La recuperación solo está disponible para el propietario y combina registros en una transacción; nunca sustituye una compra activa en otro dispositivo. Antes de restaurar se intentará descargar automáticamente una copia de lo que hay ahora.</p></section>' +
+    (isOwner ? '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">RESTABLECIMIENTO</span><h3>Restablecer aplicación</h3></div><span class="status-chip chip-open">Acción irreversible</span></div><p class="settings-description">Borra todos los datos de Mi Compra: listas, catálogo, establecimientos, compras, inventario, movimientos, gastos, presupuestos e historial. El borrado también se sincroniza con la nube y los demás dispositivos.</p><div class="settings-actions"><button class="btn btn-danger" data-action="open-reset">Restablecer y borrar todos los datos</button></div><p class="settings-description">Tu cuenta y contraseña seguirán activas. Se eliminará únicamente la información guardada dentro de la aplicación.</p></section>' : '') +
     '<section class="surface-panel settings-card"><div class="panel-heading"><div><span class="eyebrow">PLATAFORMA</span><h3>Mi Compra 2.0</h3></div><span class="version-tag">v2.0</span></div><p class="settings-description">Nueva estructura de planificación, compras, inventario y finanzas. Las funcionalidades de la versión anterior ya no forman parte de la navegación de esta aplicación.</p><div class="settings-footnote">' + statusLabel() + '</div></section></div>';
 }
 function viewContent() {
@@ -467,7 +469,9 @@ function downloadFile(name, content, type) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
-  URL.revokeObjectURL(url);
+  // Windows/Chrome/Edge: no revocar la URL mientras el navegador
+  // todavía está preparando la descarga.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 function exportCsv(name, rows) {
   if (!rows.length) { showToast('No hay datos para exportar.', 'info'); return; }
@@ -497,14 +501,18 @@ function exportFinance() {
     ...workspace.budgets.map(row => ['Presupuesto', row.month, 'Presupuesto mensual', '', row.amount, 'Configurado'])
   ]);
 }
-function backupWorkspace() {
-  downloadFile('mi-compra-2-respaldo-' + today() + '.json', JSON.stringify({
-    app: 'Mi Compra 2.0',
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    workspace
-  }, null, 2), 'application/json;charset=utf-8');
-  showToast('Copia de seguridad descargada.');
+async function backupWorkspace() {
+  if (backupBusy) return;
+  backupBusy = true;
+  try {
+    const backup = await store.exportBackup();
+    downloadFile('mi-compra-2-respaldo-' + today() + '.json', JSON.stringify(backup, null, 2), 'application/json;charset=utf-8');
+    showToast('Respaldo completo de Firebase descargado. Consérvalo en un lugar seguro.');
+  } catch (error) {
+    showToast('No se pudo preparar el respaldo: ' + (error.message || 'error de conexión'), 'info');
+  } finally {
+    backupBusy = false;
+  }
 }
 function handleAction(action, target) {
   const id = target.dataset.id;
@@ -952,17 +960,33 @@ root.addEventListener('change', event => {
   if (event.target.matches('[data-draft-price], [data-draft-qty]')) { renderUnlessDraftEditing(); return; }
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
-    file.text().then(text => {
-      const parsed = JSON.parse(text);
-      if (!parsed || parsed.app !== 'Mi Compra 2.0' || !parsed.workspace || typeof parsed.workspace !== 'object') {
-        throw new Error('El archivo no corresponde a una copia válida de Mi Compra 2.0.');
+    const input = event.target;
+    if (file.size > 20 * 1024 * 1024) {
+      showToast('El respaldo supera 20 MB. Revisa que sea un archivo válido.', 'info');
+      input.value = '';
+      return;
+    }
+    (async () => {
+      try {
+        if (!store.isWorkspaceOwner()) throw new Error('Solo la cuenta propietaria puede restaurar copias de seguridad.');
+        const parsed = JSON.parse(await file.text());
+        validateWorkspaceBackup(parsed);
+        const summary = backupSummary(parsed);
+        const message = 'Se incorporarán los registros de esta copia al espacio actual:\n' +
+          summary.products + ' productos, ' + summary.lists + ' listas, ' + summary.purchases + ' compras y ' + summary.draftItems + ' productos en borrador.\n\n' +
+          'No se borrarán las compras actuales. Si hay borradores nuevos, tampoco se sustituirán.\n\n¿Deseas continuar?';
+        if (!window.confirm(message)) return;
+        // Copia de rescate del estado remoto antes de realizar cualquier escritura.
+        const before = await store.exportBackup();
+        downloadFile('mi-compra-antes-de-restaurar-' + today() + '.json', JSON.stringify(before, null, 2), 'application/json;charset=utf-8');
+        const result = await store.restoreBackup(parsed);
+        showToast(result.draftRecovered ? 'Datos restaurados. También se recuperó el borrador pendiente.' : 'Datos restaurados sin reemplazar la compra compartida actual.');
+      } catch (error) {
+        showToast('No se pudo restaurar: ' + (error.message || 'error desconocido'), 'info');
+      } finally {
+        input.value = '';
       }
-      if (!store.isWorkspaceOwner()) throw new Error('Solo la cuenta propietaria puede restaurar copias de seguridad.');
-      if (!window.confirm('¿Restaurar esta copia? Los datos actuales se combinarán con la copia y no se eliminarán registros coincidentes más recientes.')) return;
-      store.restoreBackup(parsed);
-      showToast('Copia restaurada y combinada con los datos actuales.');
-    }).catch(error => showToast('No se pudo leer el respaldo: ' + error.message, 'info'))
-      .finally(() => { event.target.value = ''; });
+    })();
   }
 });
 window.addEventListener('keydown', event => {
