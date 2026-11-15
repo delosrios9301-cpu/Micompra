@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
 
 // GitHub Pages publica en /Micompra/; Firebase Hosting publica en la raíz.
+// Firebase Hosting es la sede principal; por defecto los recursos van en /.
+// GitHub Pages configura explícitamente /Micompra/ en su propio workflow.
 const base = process.env.VITE_BASE_PATH
-  || (process.env.CAPACITOR_BUILD === 'true' ? './' : '/Micompra/');
+  || (process.env.CAPACITOR_BUILD === 'true' ? './' : '/');
 
 export default defineConfig({
   base,

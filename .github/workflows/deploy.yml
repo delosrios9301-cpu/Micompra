@@ -30,6 +30,7 @@ jobs:
       - name: Build production app
         run: npm run build
         env:
+          VITE_BASE_PATH: /Micompra/
           VITE_SUPABASE_URL: https://srebdjlnthhsgufstwjr.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_XG2gIm5VPBQwPlKIVZ4UPA_B7InUKQ_
       - name: Configure GitHub Pages
