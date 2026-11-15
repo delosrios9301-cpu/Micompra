@@ -14,17 +14,9 @@ let modalData = {};
 let authMode = 'signin';
 let authReady = false;
 let purchaseDraft = [];
-let draftSaveTimer = null;
-function saveSharedDraft() {
-  if (!store.getUser()) return;
-  clearTimeout(draftSaveTimer);
-  draftSaveTimer = null;
-  workspace.shoppingDraft = { id: workspace.shoppingDraft?.id || createId('draft'), items: purchaseDraft.map(item => ({ ...item })), updatedAt: new Date().toISOString() };
-  store.save(workspace);
-}
-function scheduleSharedDraft() {
-  clearTimeout(draftSaveTimer);
-  draftSaveTimer = setTimeout(saveSharedDraft, 1800);
+let purchaseSaving = false;
+function renderUnlessDraftEditing() {
+  if (!document.activeElement?.matches?.('[data-draft-price], [data-draft-qty]')) render();
 }
 
 let toastTimer = null;
@@ -235,7 +227,7 @@ function renderShopping() {
     '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + today() + '"></label></div>' +
     '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" placeholder="Nombre del producto" maxlength="100" required></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label></div><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
     '<div class="draft-list"><div class="draft-title"><strong>Productos registrados</strong><span>' + purchaseDraft.length + '</span></div>' + (draftRows || '<p class="draft-empty">Aún no has agregado productos a esta compra.</p>') + '</div>' +
-    '<div class="purchase-summary"><div><span>Total de la compra</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length ? 'disabled' : '') + '>Confirmar y guardar compra ' + icon('arrow', 16) + '</button></div></section>' +
+    '<div class="purchase-summary"><div><span>Total de la compra</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
     '<aside class="buy-aside"><div class="aside-card"><span class="aside-icon">' + icon('shield', 20) + '</span><strong>Registro transparente</strong><p>Este módulo no consulta tiendas ni descarga precios. Cada importe proviene de lo que introduces.</p></div><div class="aside-card"><span class="aside-icon">' + icon('box', 20) + '</span><strong>Inventario conectado</strong><p>Al confirmar, puedes sumar los productos al inventario con un movimiento registrado.</p></div></aside></div>' +
     '<section class="surface-panel history-panel"><div class="panel-heading"><div><span class="eyebrow">REGISTRO REAL</span><h3>Compras recientes</h3></div><span class="period-chip">' + workspace.purchases.length + ' registros</span></div>' + (history || '<div class="panel-empty"><span>' + icon('cart', 22) + '</span><strong>Aún no tienes compras guardadas</strong><small>Las compras confirmadas se conservarán en tu historial.</small></div>') + '</section>';
 }
@@ -585,18 +577,27 @@ function handleAction(action, target) {
     const list = workspace.lists.find(row => row.id === selectedListId);
     if (list) {
       if (purchaseDraft.length && !window.confirm('Ya existe una compra en curso con precios registrados. ¿Reemplazar ese borrador por esta lista? Los precios del borrador anterior se perderán. Pulsa Cancelar para conservarlo.')) return;
-      purchaseDraft = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
-      saveSharedDraft();
+      const prepared = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
+      try { store.replaceSharedDraft(prepared); }
+      catch (error) { showToast(error.message, 'info'); return; }
       currentView = 'comprar';
       render();
       showToast('Lista preparada. Revisa y completa los precios reales.');
     }
   } else if (action === 'draft-qty-plus' || action === 'draft-qty-minus') {
     const item = purchaseDraft[Number(target.dataset.index)];
-    if (item) { item.quantity = Math.max(0.01, Math.round((Number(item.quantity || 1) + (action === 'draft-qty-plus' ? 1 : -1)) * 100) / 100); saveSharedDraft(); render(); }
+    if (item) {
+      const quantity = Math.max(0.01, Math.round((Number(item.quantity || 1) + (action === 'draft-qty-plus' ? 1 : -1)) * 100) / 100);
+      try { store.patchSharedDraftLine(item.id, { quantity }); render(); }
+      catch (error) { showToast(error.message, 'info'); }
+    }
   } else if (action === 'remove-draft-line') {
     if (!window.confirm('¿Quitar este producto de la compra en curso?')) return;
-    purchaseDraft.splice(Number(target.dataset.index), 1); saveSharedDraft(); render();
+    const item = purchaseDraft[Number(target.dataset.index)];
+    if (item) {
+      try { store.removeSharedDraftLine(item.id); render(); }
+      catch (error) { showToast(error.message, 'info'); }
+    }
   } else if (action === 'confirm-purchase') confirmPurchase();
   else if (action === 'stock-in' || action === 'stock-out') {
     const row = workspace.inventory.find(item => item.id === id);
@@ -640,7 +641,10 @@ function handleAction(action, target) {
   }
 }
 function confirmPurchase() {
+  if (purchaseSaving) return;
   if (!purchaseDraft.length) { showToast('Añade al menos un producto a la compra.', 'info'); return; }
+  const draftSnapshot = store.getSharedDraft();
+  const draftItems = purchaseDraft.map(item => ({ ...item }));
   const storeId = document.querySelector('[name="storeId"]')?.value || '';
   const store = workspace.stores.find(row => row.id === storeId);
   const date = document.querySelector('#purchase-date')?.value || today();
@@ -670,9 +674,20 @@ function confirmPurchase() {
     });
   }
   logActivity('Comprar', 'Compra confirmada', purchase.storeName + ' · ' + money(total));
-  purchaseDraft = [];
-  workspace.shoppingDraft = { id: '', items: [], updatedAt: new Date().toISOString() };
-  persist('Compra guardada correctamente.');
+  purchaseSaving = true;
+  render();
+  store.confirmSharedPurchase(workspace, draftSnapshot.id, draftItems).then(merged => {
+    workspace = normalizeWorkspace(merged);
+    purchaseSaving = false;
+    render();
+    showToast('Compra guardada correctamente en Firebase.');
+  }).catch(error => {
+    // La transacción falló: nunca vaciar el borrador ni inventar una compra guardada.
+    workspace = normalizeWorkspace(store.getState());
+    purchaseSaving = false;
+    render();
+    showToast(error.message || 'No se guardó la compra. Los precios permanecen en el borrador.', 'info');
+  });
 }
 function handleSubmit(event) {
   const form = event.target.closest('form[data-form]');
@@ -810,9 +825,10 @@ function handleSubmit(event) {
     if (!data.name.trim() || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0 || discount < 0 || discount > quantity * unitPrice) {
       showToast('Revisa el producto, cantidad, precio y descuento.', 'info'); return;
     }
-    purchaseDraft.push({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
-    saveSharedDraft();
-    render();
+    try {
+      store.addSharedDraftLine({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
+      render();
+    } catch (error) { showToast(error.message, 'info'); return; }
     showToast('Producto añadido a la compra.');
   } else if (action === 'currency') {
     workspace.profile.currency = data.currency;
@@ -823,10 +839,14 @@ function handleSubmit(event) {
 const store = createWorkspaceStore({
   onChange: next => {
     workspace = normalizeWorkspace(next);
-    if (!draftSaveTimer) purchaseDraft = workspace.shoppingDraft.items.map(item => ({ ...item }));
-    render();
+    renderUnlessDraftEditing();
   },
-  onStatus: () => render()
+  onDraftChange: next => {
+    purchaseDraft = next.items.map(item => ({ ...item }));
+    renderUnlessDraftEditing();
+  },
+  onDraftError: message => showToast(message, 'info'),
+  onStatus: () => renderUnlessDraftEditing()
 });
 
 let listSwipeStart = null;
@@ -908,7 +928,8 @@ root.addEventListener('input', event => {
     if (item) {
       if (isPrice) item.unitPrice = Math.max(0, Number(event.target.value) || 0);
       else item.quantity = Math.max(0.01, Number(event.target.value) || 0.01);
-      scheduleSharedDraft();
+      try { store.patchSharedDraftLine(item.id, isPrice ? { unitPrice: item.unitPrice } : { quantity: item.quantity }); }
+      catch (error) { showToast(error.message, 'info'); }
       const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
       if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
       const total = document.getElementById('purchase-draft-total');
@@ -928,7 +949,7 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
-  if (event.target.matches('[data-draft-price], [data-draft-qty]')) { saveSharedDraft(); return; }
+  if (event.target.matches('[data-draft-price], [data-draft-qty]')) { renderUnlessDraftEditing(); return; }
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
     file.text().then(text => {
@@ -947,7 +968,9 @@ root.addEventListener('change', event => {
 window.addEventListener('keydown', event => {
   if (event.key === 'Escape' && modalName) closeModal();
 });
-window.addEventListener('pagehide', () => { if (draftSaveTimer) saveSharedDraft(); });
+root.addEventListener('focusout', event => {
+  if (event.target.matches('[data-draft-price], [data-draft-qty]')) setTimeout(renderUnlessDraftEditing, 0);
+});
 window.addEventListener('beforeunload', () => store.dispose());
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(error => console.warn('PWA service worker:', error)));
