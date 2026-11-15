@@ -316,7 +316,7 @@ function renderMore() {
 }
 function renderCatalog() {
   const rows = workspace.products.filter(row => row.active !== false && normalizeText(row.name + ' ' + (row.category || '')).includes(normalizeText(searchValue))).map(row =>
-    '<div class="catalog-row"><span class="product-avatar">' + icon('grid', 18) + '</span><div class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + safe(row.category || 'Sin categoría') + ' · ' + safe(row.unit || 'unidad') + '</small></div><button class="icon-button danger-ghost" data-action="deactivate-product" data-id="' + row.id + '" aria-label="Desactivar producto">' + icon('close', 16) + '</button></div>'
+    '<div class="catalog-row"><span class="product-avatar">' + icon('grid', 18) + '</span><div class="entity-copy"><strong>' + safe(row.name) + '</strong><small>' + safe(row.category || 'Sin categoría') + ' · ' + safe(row.unit || 'unidad') + ' · ITBMS ' + (validTaxRate(row.taxRate) ? row.taxRate + '%' : 'sin clasificar') + '</small></div><button class="btn btn-secondary btn-small" data-action="edit-product-tax" data-id="' + safe(row.id) + '">ITBMS</button><button class="icon-button danger-ghost" data-action="deactivate-product" data-id="' + row.id + '" aria-label="Desactivar producto">' + icon('close', 16) + '</button></div>'
   ).join('');
   return sectionHeading('CATÁLOGO CENTRAL', 'Productos', 'Un solo catálogo para listas, compras e inventario. Sin registros duplicados.', 'new-product', 'Nuevo producto') +
     '<section class="surface-panel inventory-panel"><div class="panel-heading"><div><span class="eyebrow">PRODUCTOS ACTIVOS</span><h3>' + workspace.products.filter(row => row.active !== false).length + ' productos</h3></div><label class="search-field">' + icon('search', 16) + '<input id="catalog-search" type="search" value="' + safe(searchValue) + '" placeholder="Buscar"></label></div>' +
@@ -507,7 +507,12 @@ function modalHtml() {
     body = '<form data-form="create-list"><label class="field"><span>Nombre de la lista</span><input name="name" required maxlength="80" placeholder="Ej. Compra quincenal"></label><div class="form-grid"><label class="field"><span>Fecha prevista</span><input name="plannedDate" type="date" value="' + today() + '"></label><label class="field"><span>Presupuesto estimado</span><input name="budget" type="number" min="0" step="0.01" placeholder="0.00"></label></div><label class="field"><span>Establecimiento (opcional)</span><select name="storeId">' + storeOptions() + '</select></label><label class="field"><span>Notas</span><textarea name="notes" rows="2" placeholder="Detalles de esta compra"></textarea></label><button class="btn btn-primary btn-wide" type="submit">Crear lista ' + icon('arrow', 15) + '</button></form>';
   } else if (modalName === 'new-product') {
     title = 'Añadir producto al catálogo';
-    body = '<form data-form="create-product"><label class="field"><span>Nombre del producto</span><input name="name" required maxlength="100" placeholder="Ej. Arroz integral"></label><div class="form-grid"><label class="field"><span>Categoría</span><input name="category" maxlength="50" placeholder="Alimentos"></label><label class="field"><span>Unidad habitual</span><input name="unit" maxlength="24" value="unidad"></label></div><button class="btn btn-primary btn-wide" type="submit">Guardar producto</button></form>';
+    body = '<form data-form="create-product"><label class="field"><span>Nombre del producto</span><input name="name" required maxlength="100" placeholder="Ej. Arroz integral"></label><div class="form-grid"><label class="field"><span>Categoría</span><input name="category" maxlength="50" placeholder="Alimentos"></label><label class="field"><span>Unidad habitual</span><input name="unit" maxlength="24" value="unidad"></label><label class="field"><span>ITBMS</span><select name="taxRate">' + itbmsOptions('auto', true) + '</select></label></div><p class="modal-description">La tasa automática es una sugerencia según el tipo de producto. Puedes cambiarla.</p><button class="btn btn-primary btn-wide" type="submit">Guardar producto</button></form>';
+  } else if (modalName === 'edit-product-tax') {
+    const product = workspace.products.find(row => row.id === modalData.id);
+    if (!product) return '';
+    title = 'ITBMS del producto';
+    body = '<form data-form="update-product-tax"><input type="hidden" name="id" value="' + safe(product.id) + '"><p class="modal-description">' + safe(product.name) + '</p><label class="field"><span>Tasa para futuras compras</span><select name="taxRate" required>' + itbmsOptions(validTaxRate(product.taxRate) ? product.taxRate : taxForDraftName(product.name)) + '</select></label><p class="modal-description">Esta configuración no modifica compras anteriores. Confirma la clasificación con el recibo.</p><button class="btn btn-primary btn-wide" type="submit">Guardar ITBMS</button></form>';
   } else if (modalName === 'new-store') {
     title = 'Nuevo establecimiento';
     body = '<form data-form="create-store"><label class="field"><span>Nombre</span><input name="name" required maxlength="80" placeholder="Nombre del comercio"></label><label class="field"><span>Ubicación o sucursal (opcional)</span><input name="location" maxlength="100" placeholder="Zona o sucursal"></label><button class="btn btn-primary btn-wide" type="submit">Guardar establecimiento</button></form>';
@@ -936,6 +941,8 @@ function handleAction(action, target) {
       logActivity('Finanzas', 'Gasto eliminado', row.title + ' · ' + money(row.amount));
       persist('Gasto eliminado.');
     }
+  } else if (action === 'edit-product-tax') {
+    openModal('edit-product-tax', { id });
   } else if (action === 'deactivate-product') {
     const row = workspace.products.find(item => item.id === id);
     if (row) {
@@ -1105,9 +1112,18 @@ function handleSubmit(event) {
   } else if (action === 'create-product') {
     const exists = workspace.products.find(row => normalizeText(row.name) === normalizeText(data.name));
     if (exists) { showToast('Ese producto ya existe en el catálogo.', 'info'); return; }
-    workspace.products.unshift({ id: createId('prd'), name: data.name.trim(), category: data.category || '', unit: data.unit || 'unidad', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    const chosenTax = data.taxRate === 'auto' ? taxRateForNewItem({ name: data.name, category: data.category }, []) : Number(data.taxRate);
+    if (!validTaxRate(chosenTax)) { showToast('Selecciona una tasa válida de ITBMS.', 'info'); return; }
+    workspace.products.unshift({ id: createId('prd'), name: data.name.trim(), category: data.category || '', unit: data.unit || 'unidad', taxRate: chosenTax, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     logActivity('Catálogo', 'Producto creado', data.name);
     closeModal(); persist('Producto añadido al catálogo.');
+  } else if (action === 'update-product-tax') {
+    const product = workspace.products.find(row => row.id === data.id);
+    if (!product || !validTaxRate(data.taxRate)) { showToast('Producto o tasa de ITBMS inválidos.', 'info'); return; }
+    product.taxRate = Number(data.taxRate);
+    product.updatedAt = new Date().toISOString();
+    logActivity('Catálogo', 'ITBMS actualizado', product.name + ' · ' + product.taxRate + '%');
+    closeModal(); persist('ITBMS guardado para futuras compras.');
   } else if (action === 'create-store') {
     if (workspace.stores.some(row => normalizeText(row.name) === normalizeText(data.name))) { showToast('Ese establecimiento ya está registrado.', 'info'); return; }
     workspace.stores.unshift({ id: createId('str'), name: data.name.trim(), location: data.location || '', active: true, createdAt: new Date().toISOString() });
