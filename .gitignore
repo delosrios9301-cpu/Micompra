@@ -4,3 +4,5 @@ dist
 .env.local
 .env.*.local
 .DS_Store
+# Ephemeral Google GitHub Actions credentials (never commit)
+gha-creds-*.json
