@@ -14,6 +14,19 @@ let modalData = {};
 let authMode = 'signin';
 let authReady = false;
 let purchaseDraft = [];
+let draftSaveTimer = null;
+function saveSharedDraft() {
+  if (!store.getUser()) return;
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = null;
+  workspace.shoppingDraft = { id: workspace.shoppingDraft?.id || createId('draft'), items: purchaseDraft.map(item => ({ ...item })), updatedAt: new Date().toISOString() };
+  store.save(workspace);
+}
+function scheduleSharedDraft() {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(saveSharedDraft, 1800);
+}
+
 let toastTimer = null;
 let searchValue = '';
 let planningFilter = 'all';
@@ -571,16 +584,19 @@ function handleAction(action, target) {
   } else if (action === 'make-purchase') {
     const list = workspace.lists.find(row => row.id === selectedListId);
     if (list) {
-      purchaseDraft = list.items.map(item => ({ name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
+      if (purchaseDraft.length && !window.confirm('Ya existe una compra en curso con precios registrados. ¿Reemplazar ese borrador por esta lista? Los precios del borrador anterior se perderán. Pulsa Cancelar para conservarlo.')) return;
+      purchaseDraft = list.items.map(item => ({ id: createId('dit'), name: item.name, quantity: Number(item.quantity) || 1, unit: item.unit || 'unidad', unitPrice: Number(item.estimatedPrice) || 0, discount: 0 }));
+      saveSharedDraft();
       currentView = 'comprar';
       render();
       showToast('Lista preparada. Revisa y completa los precios reales.');
     }
   } else if (action === 'draft-qty-plus' || action === 'draft-qty-minus') {
     const item = purchaseDraft[Number(target.dataset.index)];
-    if (item) { item.quantity = Math.max(0.01, Math.round((Number(item.quantity || 1) + (action === 'draft-qty-plus' ? 1 : -1)) * 100) / 100); render(); }
+    if (item) { item.quantity = Math.max(0.01, Math.round((Number(item.quantity || 1) + (action === 'draft-qty-plus' ? 1 : -1)) * 100) / 100); saveSharedDraft(); render(); }
   } else if (action === 'remove-draft-line') {
-    purchaseDraft.splice(Number(target.dataset.index), 1); render();
+    if (!window.confirm('¿Quitar este producto de la compra en curso?')) return;
+    purchaseDraft.splice(Number(target.dataset.index), 1); saveSharedDraft(); render();
   } else if (action === 'confirm-purchase') confirmPurchase();
   else if (action === 'stock-in' || action === 'stock-out') {
     const row = workspace.inventory.find(item => item.id === id);
@@ -655,6 +671,7 @@ function confirmPurchase() {
   }
   logActivity('Comprar', 'Compra confirmada', purchase.storeName + ' · ' + money(total));
   purchaseDraft = [];
+  workspace.shoppingDraft = { id: '', items: [], updatedAt: new Date().toISOString() };
   persist('Compra guardada correctamente.');
 }
 function handleSubmit(event) {
@@ -793,7 +810,8 @@ function handleSubmit(event) {
     if (!data.name.trim() || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0 || discount < 0 || discount > quantity * unitPrice) {
       showToast('Revisa el producto, cantidad, precio y descuento.', 'info'); return;
     }
-    purchaseDraft.push({ name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
+    purchaseDraft.push({ id: createId('dit'), name: data.name.trim(), quantity, unit: data.unit || 'unidad', unitPrice, discount });
+    saveSharedDraft();
     render();
     showToast('Producto añadido a la compra.');
   } else if (action === 'currency') {
@@ -803,7 +821,11 @@ function handleSubmit(event) {
   }
 }
 const store = createWorkspaceStore({
-  onChange: next => { workspace = normalizeWorkspace(next); render(); },
+  onChange: next => {
+    workspace = normalizeWorkspace(next);
+    if (!draftSaveTimer) purchaseDraft = workspace.shoppingDraft.items.map(item => ({ ...item }));
+    render();
+  },
   onStatus: () => render()
 });
 
@@ -886,6 +908,7 @@ root.addEventListener('input', event => {
     if (item) {
       if (isPrice) item.unitPrice = Math.max(0, Number(event.target.value) || 0);
       else item.quantity = Math.max(0.01, Number(event.target.value) || 0.01);
+      scheduleSharedDraft();
       const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
       if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
       const total = document.getElementById('purchase-draft-total');
@@ -905,6 +928,7 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
+  if (event.target.matches('[data-draft-price], [data-draft-qty]')) { saveSharedDraft(); return; }
   if (event.target.id === 'restore-file' && event.target.files?.[0]) {
     const file = event.target.files[0];
     file.text().then(text => {
@@ -923,6 +947,7 @@ root.addEventListener('change', event => {
 window.addEventListener('keydown', event => {
   if (event.key === 'Escape' && modalName) closeModal();
 });
+window.addEventListener('pagehide', () => { if (draftSaveTimer) saveSharedDraft(); });
 window.addEventListener('beforeunload', () => store.dispose());
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(error => console.warn('PWA service worker:', error)));
