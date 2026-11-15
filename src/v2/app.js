@@ -250,7 +250,7 @@ function renderShopping() {
     '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + today() + '"></label></div>' +
     '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" list="purchase-catalog-names" placeholder="Nombre del producto" maxlength="100" required><datalist id="purchase-catalog-names">' + workspace.products.filter(row => row.active !== false).map(row => '<option value="' + safe(row.name) + '"></option>').join('') + '</datalist></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label><label class="field"><span>ITBMS</span><select name="taxRate">' + itbmsOptions('auto', true) + '</select></label><label class="check-option tax-form-option"><input name="taxIncluded" type="checkbox"><span>Precio ya incluye impuesto</span></label></div><p class="tax-hint">Automático propone 0% en alimentos y 7% en artículos gravados. Verifica la tasa en el recibo.</p><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
     '<div class="draft-list"><div class="draft-title"><strong>Productos registrados</strong><span>' + purchaseDraft.length + '</span></div>' + (draftRows || '<p class="draft-empty">Aún no has agregado productos a esta compra.</p>') + '</div>' +
-    '<div class="purchase-summary">' + purchaseTaxSummary(purchaseDraft) + '<div><span>Total de la compra con ITBMS</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
+    '<div class="purchase-summary"><div id="purchase-draft-breakdown">' + purchaseTaxSummary(purchaseDraft) + '</div><div><span>Total de la compra con ITBMS</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
     '<aside class="buy-aside"><div class="aside-card"><span class="aside-icon">' + icon('shield', 20) + '</span><strong>Registro transparente</strong><p>Este módulo no consulta tiendas ni descarga precios. Cada importe proviene de lo que introduces.</p></div><div class="aside-card"><span class="aside-icon">' + icon('box', 20) + '</span><strong>Inventario conectado</strong><p>Al confirmar, puedes sumar los productos al inventario con un movimiento registrado.</p></div></aside></div>' +
     '<section class="surface-panel history-panel"><div class="panel-heading"><div><span class="eyebrow">REGISTRO REAL</span><h3>Compras recientes</h3></div><span class="period-chip">' + workspace.purchases.length + ' registros</span></div>' + (history || '<div class="panel-empty"><span>' + icon('cart', 22) + '</span><strong>Aún no tienes compras guardadas</strong><small>Las compras confirmadas se conservarán en tu historial.</small></div>') + '</section>';
 }
@@ -1290,6 +1290,17 @@ root.addEventListener('input', event => {
     updateSavedPurchaseEditTotals(event.target.closest('form'));
     return;
   }
+  if (event.target.matches('[name="name"]') && event.target.closest('form[data-form="purchase-line"]')) {
+    const hint = document.querySelector('.tax-hint');
+    if (hint) {
+      const categoryRate = suggestPanamaItbms(event.target.value, workspace.products.find(row => normalizeText(row.name) === normalizeText(event.target.value))?.category);
+      const rate = taxForDraftName(event.target.value);
+      hint.textContent = categoryRate === null && !workspace.products.some(row => normalizeText(row.name) === normalizeText(event.target.value) && validTaxRate(row.taxRate))
+        ? 'Tasa general sugerida: 7%. Verifica si este producto está exento o tiene una tarifa especial.'
+        : 'ITBMS sugerido para este producto: ' + rate + '%. Puedes cambiarlo antes de agregar.';
+    }
+    return;
+  }
   if (event.target.matches('[data-draft-price], [data-draft-qty]')) {
     const isPrice = event.target.matches('[data-draft-price]');
     const index = Number(isPrice ? event.target.dataset.draftPrice : event.target.dataset.draftQty);
@@ -1300,9 +1311,11 @@ root.addEventListener('input', event => {
       try { store.patchSharedDraftLine(item.id, isPrice ? { unitPrice: item.unitPrice } : { quantity: item.quantity }); }
       catch (error) { showToast(error.message, 'info'); }
       const lineTotal = document.querySelector('[data-line-total="' + index + '"]');
-      if (lineTotal) lineTotal.textContent = money(Math.max(0, item.quantity * item.unitPrice - (Number(item.discount) || 0)));
+      if (lineTotal) lineTotal.textContent = money(purchaseLineBreakdown(item).total);
       const total = document.getElementById('purchase-draft-total');
       if (total) total.textContent = money(computePurchaseTotal(purchaseDraft));
+      const breakdown = document.getElementById('purchase-draft-breakdown');
+      if (breakdown) breakdown.innerHTML = purchaseTaxSummary(purchaseDraft);
     }
     return;
   }
@@ -1318,6 +1331,21 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
+  if (event.target.matches('[data-draft-tax], [data-draft-tax-included]')) {
+    const isRate = event.target.hasAttribute('data-draft-tax');
+    const index = Number(isRate ? event.target.dataset.draftTax : event.target.dataset.draftTaxIncluded);
+    const item = purchaseDraft[index];
+    if (item) {
+      const changes = isRate
+        ? { taxRate: Number(event.target.value) }
+        : { taxIncluded: event.target.checked };
+      if (isRate && !validTaxRate(changes.taxRate)) { showToast('Tasa de ITBMS inválida.', 'info'); return; }
+      try { store.patchSharedDraftLine(item.id, changes); }
+      catch (error) { showToast(error.message, 'info'); }
+      render();
+    }
+    return;
+  }
   if (event.target.id === 'purchase-receipt-file' || event.target.id === 'purchase-receipt-camera') {
     void attachReceiptFromInput(event.target);
     return;
