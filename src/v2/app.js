@@ -499,7 +499,7 @@ function modalHtml() {
         '<p class="saved-purchase-note">' + (purchase.inventoryLinked || workspace.movements.some(row => row.reason === 'Compra ' + purchase.id) ?
           'Se ajustarán las existencias vinculadas a esta compra. Los movimientos anteriores quedarán registrados; si faltan existencias para descontar, se solicitará revisar el inventario.' :
           'Esta compra no sumó productos al inventario; su corrección modificará el historial y las finanzas, sin agregar existencias.') + '</p>' +
-        '<div class="saved-purchase-actions"><button type="button" class="btn btn-secondary" data-action="cancel-edit-saved-purchase">Cancelar edición</button><button type="submit" class="btn btn-primary" ' + (savedPurchaseBusy || !edited.items.length ? 'disabled' : '') + '>' + (savedPurchaseBusy ? 'Guardando…' : 'Guardar corrección') + '</button></div></form>';
+        '<div class="saved-purchase-actions saved-purchase-edit-actions"><button type="submit" class="btn btn-primary" ' + (savedPurchaseBusy || !edited.items.length ? 'disabled' : '') + '>' + (savedPurchaseBusy ? 'Guardando…' : 'Guardar y actualizar compra') + '</button><button type="button" class="btn btn-secondary" data-action="cancel-edit-saved-purchase">Cancelar edición</button></div></form>';
     }
     return '<div class="modal-backdrop" data-action="close-modal"><section class="modal-card saved-purchase-modal" role="dialog" aria-modal="true" aria-label="' + (editing ? 'Modificar compra guardada' : 'Detalle de compra guardada') + '" data-modal-card><div class="modal-heading"><div><span class="eyebrow">COMPRA GUARDADA</span><h2>' + (editing ? 'Modificar compra' : 'Detalle de compra') + '</h2></div>' + close + '</div>' + inner + '</section></div>';
   }
