@@ -978,7 +978,7 @@ function confirmPurchase() {
   const draftSnapshot = store.getSharedDraft();
   const draftItems = purchaseDraft.map(item => ({ ...item }));
   const storeId = document.querySelector('[name="storeId"]')?.value || '';
-  const store = workspace.stores.find(row => row.id === storeId);
+  const selectedStore = workspace.stores.find(row => row.id === storeId);
   const date = document.querySelector('#purchase-date')?.value || today();
   const paid = Boolean(document.querySelector('#purchase-paid')?.checked);
   const addInventory = Boolean(document.querySelector('#purchase-to-inventory')?.checked);
@@ -990,7 +990,7 @@ function confirmPurchase() {
   }));
   const { subtotal, itbms, total } = computePurchaseBreakdown(items);
   const purchase = {
-    id: createId('buy'), date, storeId, storeName: store?.name || 'Compra sin establecimiento',
+    id: createId('buy'), date, storeId, storeName: selectedStore?.name || 'Compra sin establecimiento',
     items, subtotal, itbms, total, paid, inventoryLinked: addInventory, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   workspace.purchases.unshift(purchase);
