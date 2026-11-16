@@ -18,6 +18,8 @@ let authMode = 'signin';
 let authReady = false;
 let purchaseDraft = [];
 let purchaseSaving = false;
+let selectedPurchaseStoreId = '';
+let selectedPurchaseDate = '';
 let savedPurchaseBusy = false;
 let purchaseReceiptState = { purchaseId: null, loading: false, items: [], error: '' };
 let purchaseReceiptBusy = false;
@@ -238,7 +240,7 @@ function purchaseTaxSummary(items) {
     '</strong></div><div class="tax-summary-line"><span>ITBMS</span><strong>' + money(breakdown.itbms) + '</strong></div>';
 }
 function renderShopping() {
-  const storeSelect = '<select name="storeId">' + storeOptions() + '</select>';
+  const storeSelect = '<select name="storeId">' + storeOptions(selectedPurchaseStoreId) + '</select>';
   const draftRows = purchaseDraft.map((item, index) => '<div class="draft-line"><div class="draft-product-copy"><strong>' + safe(item.name) + '</strong><div class="draft-quantity-control"><span>Cantidad</span><button type="button" class="draft-qty-button" data-action="draft-qty-minus" data-index="' + index + '" aria-label="Restar una unidad">−</button><input type="number" min="0.01" step="1" inputmode="decimal" aria-label="Cantidad de ' + safe(item.name) + '" data-draft-qty="' + index + '" value="' + item.quantity + '"><button type="button" class="draft-qty-button" data-action="draft-qty-plus" data-index="' + index + '" aria-label="Sumar una unidad">+</button><small>' + safe(item.unit) + '</small></div><label class="draft-price-field"><span>Precio unitario</span><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="" aria-label="Precio unitario de ' + safe(item.name) + '" data-draft-price="' + index + '" value="' + (Number(item.unitPrice) > 0 ? Number(item.unitPrice) : '') + '"></label><label class="draft-tax-field"><span>ITBMS</span><select data-draft-tax="' + index + '" aria-label="ITBMS de ' + safe(item.name) + '">' + itbmsOptions(item.taxRate ?? 0) + '</select></label>' +
     '<label class="draft-tax-included"><input type="checkbox" data-draft-tax-included="' + index + '" ' + (item.taxIncluded ? 'checked' : '') + '>Precio incluye ITBMS</label></div><strong class="draft-line-total" data-line-total="' + index + '">' + money(purchaseLineBreakdown(item).total) + '</strong><button class="icon-button danger-ghost" data-action="remove-draft-line" data-index="' + index + '" aria-label="Quitar ' + safe(item.name) + '">' + icon('close', 15) + '</button></div>').join('');
   const draftTotal = computePurchaseTotal(purchaseDraft);
@@ -247,7 +249,7 @@ function renderShopping() {
   ).join('');
   return sectionHeading('REGISTRA LO QUE REALMENTE COMPRASTE', 'Comprar', 'Introduce los importes de tu recibo. Los precios siempre los escribes tú.', null, '') +
     '<div class="buy-layout"><section class="surface-panel purchase-builder"><div class="panel-heading"><div><span class="eyebrow">NUEVA OPERACIÓN</span><h3>Detalle de compra</h3></div><span class="step-chip">01 · Registro</span></div>' +
-    '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + today() + '"></label></div>' +
+    '<div class="form-grid"><label class="field"><span>Establecimiento</span>' + storeSelect + '</label><label class="field"><span>Fecha de compra</span><input id="purchase-date" type="date" value="' + (selectedPurchaseDate || today()) + '"></label></div>' +
     '<form data-form="purchase-line" class="purchase-line-form"><div class="form-grid purchase-fields"><label class="field span-two"><span>Producto</span><input name="name" list="purchase-catalog-names" placeholder="Nombre del producto" maxlength="100" required><datalist id="purchase-catalog-names">' + workspace.products.filter(row => row.active !== false).map(row => '<option value="' + safe(row.name) + '"></option>').join('') + '</datalist></label><label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0.01" step="0.01" value="1" required></label><label class="field"><span>Unidad</span><input name="unit" value="unidad" maxlength="24"></label><label class="field"><span>Precio unitario</span><input name="unitPrice" type="number" min="0" step="0.01" placeholder="0.00" required></label><label class="field"><span>Descuento total</span><input name="discount" type="number" min="0" step="0.01" value="0"></label><label class="field"><span>ITBMS</span><select name="taxRate">' + itbmsOptions('auto', true) + '</select></label><label class="check-option tax-form-option"><input name="taxIncluded" type="checkbox"><span>Precio ya incluye impuesto</span></label></div><p class="tax-hint">Automático propone 0% en alimentos y 7% en artículos gravados. Verifica la tasa en el recibo.</p><button class="btn btn-secondary btn-wide" type="submit">' + icon('plus', 16) + 'Añadir producto a la compra</button></form>' +
     '<div class="draft-list"><div class="draft-title"><strong>Productos registrados</strong><span>' + purchaseDraft.length + '</span></div>' + (draftRows || '<p class="draft-empty">Aún no has agregado productos a esta compra.</p>') + '</div>' +
     '<div class="purchase-summary"><div id="purchase-draft-breakdown">' + purchaseTaxSummary(purchaseDraft) + '</div><div><span>Total de la compra con ITBMS</span><strong id="purchase-draft-total">' + money(draftTotal) + '</strong></div><label class="check-option"><input id="purchase-paid" type="checkbox" checked><span>Compra pagada</span></label><label class="check-option"><input id="purchase-to-inventory" type="checkbox" checked><span>Sumar productos al inventario</span></label><button class="btn btn-primary btn-wide" data-action="confirm-purchase" ' + (!purchaseDraft.length || purchaseSaving ? 'disabled' : '') + '>' + (purchaseSaving ? 'Guardando compra…' : 'Confirmar y guardar compra') + ' ' + icon('arrow', 16) + '</button></div></section>' +
@@ -977,9 +979,9 @@ function confirmPurchase() {
   if (!purchaseDraft.length) { showToast('Añade al menos un producto a la compra.', 'info'); return; }
   const draftSnapshot = store.getSharedDraft();
   const draftItems = purchaseDraft.map(item => ({ ...item }));
-  const storeId = document.querySelector('[name="storeId"]')?.value || '';
+  const storeId = document.querySelector('[name="storeId"]')?.value || selectedPurchaseStoreId;
   const selectedStore = workspace.stores.find(row => row.id === storeId);
-  const date = document.querySelector('#purchase-date')?.value || today();
+  const date = document.querySelector('#purchase-date')?.value || selectedPurchaseDate || today();
   const paid = Boolean(document.querySelector('#purchase-paid')?.checked);
   const addInventory = Boolean(document.querySelector('#purchase-to-inventory')?.checked);
   const items = purchaseDraft.map(item => ({
@@ -1014,6 +1016,8 @@ function confirmPurchase() {
   store.confirmSharedPurchase(workspace, draftSnapshot.id, draftItems).then(merged => {
     workspace = normalizeWorkspace(merged);
     purchaseSaving = false;
+    selectedPurchaseStoreId = '';
+    selectedPurchaseDate = '';
     render();
     showToast('Compra guardada correctamente en Firebase.');
   }).catch(error => {
@@ -1331,6 +1335,14 @@ root.addEventListener('input', event => {
   }
 });
 root.addEventListener('change', event => {
+  if (event.target.matches('[name="storeId"]')) {
+    selectedPurchaseStoreId = event.target.value;
+    return;
+  }
+  if (event.target.id === 'purchase-date') {
+    selectedPurchaseDate = event.target.value;
+    return;
+  }
   if (event.target.matches('[data-draft-tax], [data-draft-tax-included]')) {
     const isRate = event.target.hasAttribute('data-draft-tax');
     const index = Number(isRate ? event.target.dataset.draftTax : event.target.dataset.draftTaxIncluded);
