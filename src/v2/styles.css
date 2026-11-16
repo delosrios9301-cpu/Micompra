@@ -507,3 +507,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
   .saved-purchase-edit-row .saved-tax-included{grid-column:span 2;}
   .catalog-row>.btn[data-action="edit-product-tax"]{min-width:64px;}
 }
+
+/* Acciones visibles al editar una compra larga en móvil y escritorio. */
+.saved-purchase-edit-actions{position:sticky;bottom:0;z-index:2;display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 0 max(12px,env(safe-area-inset-bottom));margin-top:12px;background:#fff;border-top:1px solid #d9e9e1;box-shadow:0 -8px 16px #ffffffed;}
+.saved-purchase-edit-actions .btn-primary{flex:1 1 auto;min-height:48px;}
+.saved-purchase-edit-actions .btn-secondary{flex:0 1 auto;}
+@media(max-width:620px){.saved-purchase-edit-actions{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;}.saved-purchase-edit-actions .btn{width:100%;min-height:48px;}}
