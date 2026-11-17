@@ -332,7 +332,7 @@ function renderStores() {
     (rows || emptyState('Sin establecimientos', 'Registra tiendas o comercios para asociarlos a tus compras.', 'new-store', 'Añadir primero')) + '</section>';
 }
 function renderPriceComparison() {
-  const records = new Map();
+  const products = new Map();
   for (const purchase of workspace.purchases) {
     if (!purchase.storeId || !Array.isArray(purchase.items)) continue;
     const storeName = purchase.storeName || workspace.stores.find(row => row.id === purchase.storeId)?.name || 'Establecimiento';
@@ -342,45 +342,44 @@ function renderPriceComparison() {
       const quantity = Number(item.quantity);
       const price = Number(item.unitPrice);
       if (!name || !(quantity > 0) || !Number.isFinite(price) || price < 0) continue;
-      // Comparar únicamente nombres y presentaciones idénticos, sin mezclar unidades.
       const key = name + '|' + unit;
-      if (!records.has(key)) records.set(key, { name: item.name, unit: item.unit || 'unidad', stores: new Map(), history: [] });
-      const entry = records.get(key);
+      if (!products.has(key)) products.set(key, new Map());
+      const stores = products.get(key);
       const timestamp = String(purchase.date || '') + '|' + String(purchase.createdAt || purchase.updatedAt || '') + '|' + String(purchase.id || '');
-      const observation = { storeId: purchase.storeId, storeName, price, date: purchase.date || '', timestamp };
-      entry.history.push(observation);
-      const prior = entry.stores.get(purchase.storeId);
-      if (!prior || timestamp > prior.timestamp) entry.stores.set(purchase.storeId, observation);
+      const prior = stores.get(purchase.storeId);
+      if (!prior || timestamp > prior.timestamp) stores.set(purchase.storeId, { name: storeName, price, timestamp });
     }
   }
-  const purchased = [...records.values()].sort((a,b) => a.name.localeCompare(b.name,'es'));
-  if (!purchased.length) return '<section class="surface-panel price-compare"><h3>Comparación de productos comprados</h3><p>Cuando confirmes compras con establecimiento, aquí aparecerán sus precios y evolución.</p></section>';
-  const comparableCount = purchased.filter(row => row.stores.size >= 2).length;
-  const rows = purchased.map(row => {
-    const stores = [...row.stores.values()].sort((a,b) => a.price-b.price);
-    const highest = Math.max(0.01,...stores.map(item => item.price));
-    const history = row.history.slice().sort((a,b) => a.timestamp.localeCompare(b.timestamp));
-    const latest = history[history.length-1];
-    const previous = history.length > 1 ? history[history.length-2] : null;
-    const delta = previous ? latest.price-previous.price : null;
-    const trend = delta === null ? 'Sin historial anterior' : delta > 0 ? '▲ Subió ' + money(delta) : delta < 0 ? '▼ Bajó ' + money(Math.abs(delta)) : 'Sin variación';
-    const columns = stores.map(item => {
-      const height = Math.max(4,Math.round(item.price/highest*100));
-      return '<div class="price-chart-col"><strong>' + money(item.price) + '</strong><div class="price-chart-track"><span style="height:' + height + '%"></span></div><small title="' + safe(item.storeName) + '">' + safe(item.storeName) + '</small></div>';
-    }).join('');
-    const recent = history.slice(-8);
-    const max = Math.max(0.01,...recent.map(item => item.price));
-    const min = Math.min(...recent.map(item => item.price));
-    const range = Math.max(0.01,max-min);
-    const points = recent.map((item,index) => {
-      const x = recent.length === 1 ? 50 : 5 + index*90/(recent.length-1);
-      const y = 45 - ((item.price-min)/range)*35;
-      return x.toFixed(2) + ',' + y.toFixed(2);
-    }).join(' ');
-    const evolution = recent.length > 1 ? '<svg class="price-chart-trend" viewBox="0 0 100 50" preserveAspectRatio="none" role="img" aria-label="Evolución de precio en las últimas compras"><polyline fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="' + points + '"/></svg>' : '<p class="price-chart-empty">La evolución aparecerá después de otra compra.</p>';
-    return '<article class="price-chart-card"><div class="price-chart-heading"><h4>' + safe(row.name) + '</h4><small>' + safe(row.unit) + '</small></div><div class="price-chart-columns" role="img" aria-label="Gráfico de precios por establecimiento">' + columns + '</div><div class="price-chart-summary"><span>Menor precio: <strong>' + safe(stores[0].storeName) + '</strong></span><strong>' + money(stores[0].price) + '</strong></div><div class="price-chart-history"><div><strong>Evolución de compras</strong><small>' + safe(trend) + '</small></div>' + evolution + '</div></article>';
+  const comparable = [...products.values()].filter(stores => stores.size >= 2);
+  const empty = '<section class="surface-panel price-compare price-donut-panel"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN POR ESTABLECIMIENTO</span><h3>¿Dónde compraste más barato?</h3></div></div><p>Cuando hayas comprado el mismo producto y presentación en dos establecimientos, aparecerá aquí el gráfico circular comparativo.</p></section>';
+  if (!comparable.length) return empty;
+  const wins = new Map();
+  for (const stores of comparable) {
+    const entries = [...stores.entries()];
+    const min = Math.min(...entries.map(([,value]) => value.price));
+    const winners = entries.filter(([,value]) => Math.abs(value.price-min) < 0.000001);
+    for (const [id,value] of winners) {
+      const prior = wins.get(id) || { name: value.name, count: 0 };
+      prior.count += 1/winners.length;
+      wins.set(id,prior);
+    }
+  }
+  const ranking = [...wins.values()].sort((a,b) => b.count-a.count);
+  const colors = ['#16856c','#51b8a2','#f1b44c','#6876c8','#d8899c','#7b9e60','#9e83b4','#ce8f63'];
+  const total = comparable.length;
+  let offset = 0;
+  const slices = ranking.map((item,index) => {
+    const pct = item.count/total*100;
+    const from = offset;
+    offset += pct;
+    return colors[index%colors.length] + ' ' + from.toFixed(3) + '% ' + offset.toFixed(3) + '%';
+  });
+  const legend = ranking.map((item,index) => {
+    const pct = item.count/total*100;
+    return '<div class="price-donut-legend-item"><span class="price-donut-dot" style="background:' + colors[index%colors.length] + '"></span><span>' + safe(item.name) + '</span><strong>' + pct.toFixed(1) + '%</strong></div>';
   }).join('');
-  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">TUS COMPRAS REALES</span><h3>Gráficos de precios</h3></div><span class="period-chip">' + comparableCount + ' comparables</span></div><p>Columnas: último precio por supermercado. Línea: evolución de tus compras. Solo productos efectivamente comprados, agrupados por nombre y unidad.</p><div class="price-chart-grid">' + rows + '</div></section>';
+  const leader = ranking[0];
+  return '<section class="surface-panel price-compare price-donut-panel"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN POR ESTABLECIMIENTO</span><h3>¿Dónde compraste más barato?</h3></div><span class="period-chip">' + total + ' productos comparables</span></div><div class="price-donut-layout"><div class="price-donut-chart" role="img" aria-label="Porcentaje de productos con menor precio por establecimiento" style="background:conic-gradient(' + slices.join(',') + ')"><div class="price-donut-center"><strong>' + total + '</strong><small>productos</small></div></div><div class="price-donut-legend">' + legend + '</div></div><p class="price-donut-note">Cada producto comprado en dos o más tiendas cuenta una vez. Se compara el último precio unitario registrado para el mismo nombre y unidad; los empates se reparten. Los porcentajes indican cuántos productos resultaron más baratos en cada tienda, no el gasto total.</p></section>';
 }
 function renderReports() {
   const month = monthKey();
