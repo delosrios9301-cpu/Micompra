@@ -330,10 +330,45 @@ function renderStores() {
     '<section class="surface-panel inventory-panel"><div class="panel-heading"><div><span class="eyebrow">TUS ESTABLECIMIENTOS</span><h3>' + workspace.stores.length + ' registrados</h3></div></div>' +
     (rows || emptyState('Sin establecimientos', 'Registra tiendas o comercios para asociarlos a tus compras.', 'new-store', 'Añadir primero')) + '</section>';
 }
+function renderPriceComparison() {
+  const records = new Map();
+  for (const purchase of workspace.purchases) {
+    if (!purchase.storeId || !purchase.items?.length) continue;
+    const storeName = purchase.storeName || workspace.stores.find(row => row.id === purchase.storeId)?.name || 'Establecimiento';
+    for (const item of purchase.items) {
+      const name = normalizeText(item.name || '');
+      const unit = normalizeText(item.unit || 'unidad');
+      const quantity = Number(item.quantity);
+      const price = Number(item.unitPrice);
+      if (!name || !(quantity > 0) || !Number.isFinite(price) || price < 0) continue;
+      const key = name + '|' + unit;
+      if (!records.has(key)) records.set(key, { name: item.name, unit: item.unit || 'unidad', stores: new Map() });
+      const entry = records.get(key);
+      const prior = entry.stores.get(purchase.storeId);
+      const timestamp = String(purchase.date || '') + '|' + String(purchase.updatedAt || purchase.createdAt || '');
+      if (!prior || timestamp > prior.timestamp) entry.stores.set(purchase.storeId, { storeName, price, date: purchase.date || '', timestamp });
+    }
+  }
+  const comparable = [...records.values()].filter(row => row.stores.size >= 2);
+  if (!comparable.length) return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN AUTOMÁTICA</span><h3>Precios por establecimiento</h3></div></div><p>Para comparar precios, registra el mismo producto y unidad en al menos dos establecimientos diferentes. El gráfico se actualizará con tus compras guardadas.</p></section>';
+  const rows = comparable.sort((a,b) => a.name.localeCompare(b.name,'es')).slice(0,30).map(row => {
+    const stores = [...row.stores.values()].sort((a,b) => a.price-b.price);
+    const lowest = stores[0].price;
+    const highest = stores[stores.length-1].price;
+    const savings = highest-lowest;
+    const bars = stores.map(item => {
+      const width = highest > 0 ? Math.max(3,Math.round(item.price/highest*100)) : 3;
+      return '<div class="price-compare-line"><div><strong>' + safe(item.storeName) + '</strong><small>' + safe(item.date || 'Sin fecha') + '</small></div><div class="price-compare-track"><span style="width:' + width + '%"></span></div><strong>' + money(item.price) + '</strong></div>';
+    }).join('');
+    return '<article class="price-compare-product"><h4>' + safe(row.name) + ' <small>· ' + safe(row.unit) + '</small></h4>' + bars + '<p>Más económico: <strong>' + safe(stores[0].storeName) + '</strong> · Diferencia: <strong>' + money(savings) + '</strong></p></article>';
+  }).join('');
+  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN AUTOMÁTICA</span><h3>Precios por establecimiento</h3></div><span class="period-chip">' + comparable.length + ' productos comparables</span></div><p>Último precio registrado por producto, unidad y establecimiento. Valores antes de descuentos e ITBMS; no son cotizaciones en tiempo real.</p><div class="price-compare-grid">' + rows + '</div>' + (comparable.length > 30 ? '<p>Mostrando los primeros 30 productos en orden alfabético.</p>' : '') + '</section>';
+}
 function renderReports() {
   const month = monthKey();
   const stats = monthSpending(workspace, month);
   return sectionHeading('TUS DATOS, SIEMPRE DISPONIBLES', 'Reportes', 'Consulta y exporta la información de tu espacio en formatos reutilizables.', null, '') +
+    renderPriceComparison() +
     '<div class="report-overview"><article><span>Compras registradas</span><strong>' + workspace.purchases.length + '</strong></article><article><span>Productos en inventario</span><strong>' + workspace.inventory.length + '</strong></article><article><span>Gasto este mes</span><strong>' + money(stats.total) + '</strong></article><article><span>Listas creadas</span><strong>' + workspace.lists.length + '</strong></article></div>' +
     '<div class="report-grid"><article class="report-card"><span class="report-icon">' + icon('download', 21) + '</span><h3>Exportar compras</h3><p>Descarga el historial de compras y el detalle de sus productos en CSV.</p><button class="btn btn-secondary" data-action="export-purchases">Descargar CSV</button></article>' +
     '<article class="report-card"><span class="report-icon">' + icon('box', 21) + '</span><h3>Exportar inventario</h3><p>Guarda tus existencias, mínimos, ubicaciones y vencimientos.</p><button class="btn btn-secondary" data-action="export-inventory">Descargar CSV</button></article>' +
