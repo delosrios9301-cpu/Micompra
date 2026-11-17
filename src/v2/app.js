@@ -381,7 +381,6 @@ function renderReports() {
   const month = monthKey();
   const stats = monthSpending(workspace, month);
   return sectionHeading('TUS DATOS, SIEMPRE DISPONIBLES', 'Reportes', 'Consulta y exporta la información de tu espacio en formatos reutilizables.', null, '') +
-    renderPriceComparison() +
     '<div class="report-overview"><article><span>Compras registradas</span><strong>' + workspace.purchases.length + '</strong></article><article><span>Productos en inventario</span><strong>' + workspace.inventory.length + '</strong></article><article><span>Gasto este mes</span><strong>' + money(stats.total) + '</strong></article><article><span>Listas creadas</span><strong>' + workspace.lists.length + '</strong></article></div>' +
     '<div class="report-grid"><article class="report-card"><span class="report-icon">' + icon('download', 21) + '</span><h3>Exportar compras</h3><p>Descarga el historial de compras y el detalle de sus productos en CSV.</p><button class="btn btn-secondary" data-action="export-purchases">Descargar CSV</button></article>' +
     '<article class="report-card"><span class="report-icon">' + icon('box', 21) + '</span><h3>Exportar inventario</h3><p>Guarda tus existencias, mínimos, ubicaciones y vencimientos.</p><button class="btn btn-secondary" data-action="export-inventory">Descargar CSV</button></article>' +
