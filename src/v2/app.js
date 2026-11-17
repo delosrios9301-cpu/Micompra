@@ -358,24 +358,29 @@ function renderPriceComparison() {
   const comparableCount = purchased.filter(row => row.stores.size >= 2).length;
   const rows = purchased.map(row => {
     const stores = [...row.stores.values()].sort((a,b) => a.price-b.price);
-    const lowest = stores[0].price;
-    const highest = stores[stores.length-1].price;
-    const savings = highest-lowest;
+    const highest = Math.max(0.01,...stores.map(item => item.price));
     const history = row.history.slice().sort((a,b) => a.timestamp.localeCompare(b.timestamp));
     const latest = history[history.length-1];
     const previous = history.length > 1 ? history[history.length-2] : null;
     const delta = previous ? latest.price-previous.price : null;
-    const trend = delta === null ? 'Sin compra anterior para comparar' : delta > 0 ? 'Subió ' + money(delta) : delta < 0 ? 'Bajó ' + money(Math.abs(delta)) : 'Sin cambio de precio';
-    const bars = stores.map(item => {
-      const width = highest > 0 ? Math.max(3,Math.round(item.price/highest*100)) : 3;
-      return '<div class="price-compare-line"><div><strong>' + safe(item.storeName) + '</strong><small>' + safe(item.date || 'Sin fecha') + '</small></div><div class="price-compare-track"><span style="width:' + width + '%"></span></div><strong>' + money(item.price) + '</strong></div>';
+    const trend = delta === null ? 'Sin historial anterior' : delta > 0 ? '▲ Subió ' + money(delta) : delta < 0 ? '▼ Bajó ' + money(Math.abs(delta)) : 'Sin variación';
+    const columns = stores.map(item => {
+      const height = Math.max(4,Math.round(item.price/highest*100));
+      return '<div class="price-chart-col"><strong>' + money(item.price) + '</strong><div class="price-chart-track"><span style="height:' + height + '%"></span></div><small title="' + safe(item.storeName) + '">' + safe(item.storeName) + '</small></div>';
     }).join('');
-    const comparison = stores.length > 1
-      ? 'Más económico: <strong>' + safe(stores[0].storeName) + '</strong> · Diferencia: <strong>' + money(savings) + '</strong>'
-      : 'Registrado en un establecimiento; faltan otras tiendas para comparar';
-    return '<article class="price-compare-product"><h4>' + safe(row.name) + ' <small>· ' + safe(row.unit) + '</small></h4>' + bars + '<p>' + comparison + '</p><p>Última compra: ' + safe(latest.date || 'Sin fecha') + ' · <strong>' + safe(trend) + '</strong>' + (previous ? ' respecto a la compra anterior' : '') + '</p></article>';
+    const recent = history.slice(-8);
+    const max = Math.max(0.01,...recent.map(item => item.price));
+    const min = Math.min(...recent.map(item => item.price));
+    const range = Math.max(0.01,max-min);
+    const points = recent.map((item,index) => {
+      const x = recent.length === 1 ? 50 : 5 + index*90/(recent.length-1);
+      const y = 45 - ((item.price-min)/range)*35;
+      return x.toFixed(2) + ',' + y.toFixed(2);
+    }).join(' ');
+    const evolution = recent.length > 1 ? '<svg class="price-chart-trend" viewBox="0 0 100 50" preserveAspectRatio="none" role="img" aria-label="Evolución de precio en las últimas compras"><polyline fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="' + points + '"/></svg>' : '<p class="price-chart-empty">La evolución aparecerá después de otra compra.</p>';
+    return '<article class="price-chart-card"><div class="price-chart-heading"><h4>' + safe(row.name) + '</h4><small>' + safe(row.unit) + '</small></div><div class="price-chart-columns" role="img" aria-label="Gráfico de precios por establecimiento">' + columns + '</div><div class="price-chart-summary"><span>Menor precio: <strong>' + safe(stores[0].storeName) + '</strong></span><strong>' + money(stores[0].price) + '</strong></div><div class="price-chart-history"><div><strong>Evolución de compras</strong><small>' + safe(trend) + '</small></div>' + evolution + '</div></article>';
   }).join('');
-  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">TUS COMPRAS REALES</span><h3>Comparación automática de precios</h3></div><span class="period-chip">' + comparableCount + ' comparables entre tiendas</span></div><p>Se incluyen únicamente productos de compras confirmadas con establecimiento. Las barras muestran el último precio unitario registrado en cada tienda; la tendencia compara las dos últimas compras del producto, incluso si fueron en tiendas distintas. Compara solo presentaciones con el mismo nombre y unidad; precios antes de descuentos e ITBMS.</p><div class="price-compare-grid">' + rows + '</div></section>';
+  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">TUS COMPRAS REALES</span><h3>Gráficos de precios</h3></div><span class="period-chip">' + comparableCount + ' comparables</span></div><p>Columnas: último precio por supermercado. Línea: evolución de tus compras. Solo productos efectivamente comprados, agrupados por nombre y unidad.</p><div class="price-chart-grid">' + rows + '</div></section>';
 }
 function renderReports() {
   const month = monthKey();
