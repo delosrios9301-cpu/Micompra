@@ -333,7 +333,7 @@ function renderStores() {
 function renderPriceComparison() {
   const records = new Map();
   for (const purchase of workspace.purchases) {
-    if (!purchase.storeId || !purchase.items?.length) continue;
+    if (!purchase.storeId || !Array.isArray(purchase.items)) continue;
     const storeName = purchase.storeName || workspace.stores.find(row => row.id === purchase.storeId)?.name || 'Establecimiento';
     for (const item of purchase.items) {
       const name = normalizeText(item.name || '');
@@ -341,28 +341,40 @@ function renderPriceComparison() {
       const quantity = Number(item.quantity);
       const price = Number(item.unitPrice);
       if (!name || !(quantity > 0) || !Number.isFinite(price) || price < 0) continue;
+      // Comparar únicamente nombres y presentaciones idénticos, sin mezclar unidades.
       const key = name + '|' + unit;
-      if (!records.has(key)) records.set(key, { name: item.name, unit: item.unit || 'unidad', stores: new Map() });
+      if (!records.has(key)) records.set(key, { name: item.name, unit: item.unit || 'unidad', stores: new Map(), history: [] });
       const entry = records.get(key);
+      const timestamp = String(purchase.date || '') + '|' + String(purchase.createdAt || purchase.updatedAt || '') + '|' + String(purchase.id || '');
+      const observation = { storeId: purchase.storeId, storeName, price, date: purchase.date || '', timestamp };
+      entry.history.push(observation);
       const prior = entry.stores.get(purchase.storeId);
-      const timestamp = String(purchase.date || '') + '|' + String(purchase.updatedAt || purchase.createdAt || '');
-      if (!prior || timestamp > prior.timestamp) entry.stores.set(purchase.storeId, { storeName, price, date: purchase.date || '', timestamp });
+      if (!prior || timestamp > prior.timestamp) entry.stores.set(purchase.storeId, observation);
     }
   }
-  const comparable = [...records.values()].filter(row => row.stores.size >= 2);
-  if (!comparable.length) return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN AUTOMÁTICA</span><h3>Precios por establecimiento</h3></div></div><p>Para comparar precios, registra el mismo producto y unidad en al menos dos establecimientos diferentes. El gráfico se actualizará con tus compras guardadas.</p></section>';
-  const rows = comparable.sort((a,b) => a.name.localeCompare(b.name,'es')).slice(0,30).map(row => {
+  const purchased = [...records.values()].sort((a,b) => a.name.localeCompare(b.name,'es'));
+  if (!purchased.length) return '<section class="surface-panel price-compare"><h3>Comparación de productos comprados</h3><p>Cuando confirmes compras con establecimiento, aquí aparecerán sus precios y evolución.</p></section>';
+  const comparableCount = purchased.filter(row => row.stores.size >= 2).length;
+  const rows = purchased.map(row => {
     const stores = [...row.stores.values()].sort((a,b) => a.price-b.price);
     const lowest = stores[0].price;
     const highest = stores[stores.length-1].price;
     const savings = highest-lowest;
+    const history = row.history.slice().sort((a,b) => a.timestamp.localeCompare(b.timestamp));
+    const latest = history[history.length-1];
+    const previous = history.length > 1 ? history[history.length-2] : null;
+    const delta = previous ? latest.price-previous.price : null;
+    const trend = delta === null ? 'Sin compra anterior para comparar' : delta > 0 ? 'Subió ' + money(delta) : delta < 0 ? 'Bajó ' + money(Math.abs(delta)) : 'Sin cambio de precio';
     const bars = stores.map(item => {
       const width = highest > 0 ? Math.max(3,Math.round(item.price/highest*100)) : 3;
       return '<div class="price-compare-line"><div><strong>' + safe(item.storeName) + '</strong><small>' + safe(item.date || 'Sin fecha') + '</small></div><div class="price-compare-track"><span style="width:' + width + '%"></span></div><strong>' + money(item.price) + '</strong></div>';
     }).join('');
-    return '<article class="price-compare-product"><h4>' + safe(row.name) + ' <small>· ' + safe(row.unit) + '</small></h4>' + bars + '<p>Más económico: <strong>' + safe(stores[0].storeName) + '</strong> · Diferencia: <strong>' + money(savings) + '</strong></p></article>';
+    const comparison = stores.length > 1
+      ? 'Más económico: <strong>' + safe(stores[0].storeName) + '</strong> · Diferencia: <strong>' + money(savings) + '</strong>'
+      : 'Registrado en un establecimiento; faltan otras tiendas para comparar';
+    return '<article class="price-compare-product"><h4>' + safe(row.name) + ' <small>· ' + safe(row.unit) + '</small></h4>' + bars + '<p>' + comparison + '</p><p>Última compra: ' + safe(latest.date || 'Sin fecha') + ' · <strong>' + safe(trend) + '</strong>' + (previous ? ' respecto a la compra anterior' : '') + '</p></article>';
   }).join('');
-  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN AUTOMÁTICA</span><h3>Precios por establecimiento</h3></div><span class="period-chip">' + comparable.length + ' productos comparables</span></div><p>Último precio registrado por producto, unidad y establecimiento. Valores antes de descuentos e ITBMS; no son cotizaciones en tiempo real.</p><div class="price-compare-grid">' + rows + '</div>' + (comparable.length > 30 ? '<p>Mostrando los primeros 30 productos en orden alfabético.</p>' : '') + '</section>';
+  return '<section class="surface-panel price-compare"><div class="panel-heading"><div><span class="eyebrow">TUS COMPRAS REALES</span><h3>Comparación automática de precios</h3></div><span class="period-chip">' + comparableCount + ' comparables entre tiendas</span></div><p>Se incluyen únicamente productos de compras confirmadas con establecimiento. Las barras muestran el último precio unitario registrado en cada tienda; la tendencia compara las dos últimas compras del producto, incluso si fueron en tiendas distintas. Compara solo presentaciones con el mismo nombre y unidad; precios antes de descuentos e ITBMS.</p><div class="price-compare-grid">' + rows + '</div></section>';
 }
 function renderReports() {
   const month = monthKey();
