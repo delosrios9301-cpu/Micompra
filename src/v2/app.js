@@ -333,53 +333,48 @@ function renderStores() {
 }
 function renderPriceComparison() {
   const products = new Map();
+  const storeNames = new Map();
   for (const purchase of workspace.purchases) {
     if (!purchase.storeId || !Array.isArray(purchase.items)) continue;
     const storeName = purchase.storeName || workspace.stores.find(row => row.id === purchase.storeId)?.name || 'Establecimiento';
+    storeNames.set(purchase.storeId,storeName);
     for (const item of purchase.items) {
       const name = normalizeText(item.name || '');
       const unit = normalizeText(item.unit || 'unidad');
-      const quantity = Number(item.quantity);
       const price = Number(item.unitPrice);
-      if (!name || !(quantity > 0) || !Number.isFinite(price) || price < 0) continue;
-      const key = name + '|' + unit;
-      if (!products.has(key)) products.set(key, new Map());
-      const stores = products.get(key);
-      const timestamp = String(purchase.date || '') + '|' + String(purchase.createdAt || purchase.updatedAt || '') + '|' + String(purchase.id || '');
+      if (!name || !(Number(item.quantity)>0) || !Number.isFinite(price) || price<0) continue;
+      const key = name+'|'+unit;
+      if (!products.has(key)) products.set(key,{name:item.name,unit:item.unit||'unidad',stores:new Map()});
+      const stores = products.get(key).stores;
+      const timestamp = String(purchase.date||'')+'|'+String(purchase.createdAt||purchase.updatedAt||'')+'|'+String(purchase.id||'');
       const prior = stores.get(purchase.storeId);
-      if (!prior || timestamp > prior.timestamp) stores.set(purchase.storeId, { name: storeName, price, timestamp });
+      if (!prior || timestamp>prior.timestamp) stores.set(purchase.storeId,{name:storeName,price,timestamp});
     }
   }
-  const comparable = [...products.values()].filter(stores => stores.size >= 2);
-  const empty = '<section class="surface-panel price-compare price-donut-panel"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN POR ESTABLECIMIENTO</span><h3>¿Dónde compraste más barato?</h3></div></div><p>Cuando hayas comprado el mismo producto y presentación en dos establecimientos, aparecerá aquí el gráfico circular comparativo.</p></section>';
-  if (!comparable.length) return empty;
+  const comparable = [...products.values()].filter(row=>row.stores.size>=2);
+  if (!comparable.length) return '<section class="surface-panel price-compare price-dashboard"><h3>Comparación de precios por establecimiento</h3><p>Al comprar el mismo producto y presentación en dos supermercados aparecerán aquí los gráficos y la tabla comparativa.</p></section>';
   const wins = new Map();
-  for (const stores of comparable) {
-    const entries = [...stores.entries()];
-    const min = Math.min(...entries.map(([,value]) => value.price));
-    const winners = entries.filter(([,value]) => Math.abs(value.price-min) < 0.000001);
-    for (const [id,value] of winners) {
-      const prior = wins.get(id) || { name: value.name, count: 0 };
-      prior.count += 1/winners.length;
-      wins.set(id,prior);
-    }
+  for (const row of comparable) {
+    const entries = [...row.stores.entries()];
+    const minimum = Math.min(...entries.map(([,v])=>v.price));
+    const tied = entries.filter(([,v])=>Math.abs(v.price-minimum)<0.000001);
+    for (const [id] of tied) wins.set(id,(wins.get(id)||0)+1/tied.length);
   }
-  const ranking = [...wins.values()].sort((a,b) => b.count-a.count);
-  const colors = ['#16856c','#51b8a2','#f1b44c','#6876c8','#d8899c','#7b9e60','#9e83b4','#ce8f63'];
+  const ranked = [...wins.entries()].sort((a,b)=>b[1]-a[1]);
+  const colors = ['#7c3aed','#0ea5e9','#10b981','#f59e0b','#f43f5e','#6366f1','#14b8a6','#a855f7'];
   const total = comparable.length;
   let offset = 0;
-  const slices = ranking.map((item,index) => {
-    const pct = item.count/total*100;
-    const from = offset;
-    offset += pct;
-    return colors[index%colors.length] + ' ' + from.toFixed(3) + '% ' + offset.toFixed(3) + '%';
-  });
-  const legend = ranking.map((item,index) => {
-    const pct = item.count/total*100;
-    return '<div class="price-donut-legend-item"><span class="price-donut-dot" style="background:' + colors[index%colors.length] + '"></span><span>' + safe(item.name) + '</span><strong>' + pct.toFixed(1) + '%</strong></div>';
+  const segments = ranked.map(([id,count],i)=>{const start=offset;offset+=count/total*100;return colors[i%colors.length]+' '+start.toFixed(2)+'% '+offset.toFixed(2)+'%';});
+  const legend = ranked.map(([id,count],i)=>'<div class="price-dash-legend-row"><i style="background:'+colors[i%colors.length]+'"></i><span>'+safe(storeNames.get(id)||'Establecimiento')+'</span><strong>'+(count/total*100).toFixed(1)+'%</strong></div>').join('');
+  const bars = ranked.map(([id,count],i)=>'<div class="price-dash-bar"><strong>'+(count/total*100).toFixed(0)+'%</strong><div class="price-dash-bar-track"><i style="height:'+Math.max(3,count/total*100)+'%;background:'+colors[i%colors.length]+'"></i></div><small>'+safe(storeNames.get(id)||'Establecimiento')+'</small></div>').join('');
+  const storeIds = [...new Set(comparable.flatMap(row=>[...row.stores.keys()]))];
+  const tableRows = comparable.sort((a,b)=>a.name.localeCompare(b.name,'es')).map(row=>{
+    const min = Math.min(...[...row.stores.values()].map(v=>v.price));
+    return '<tr><th>'+safe(row.name)+' <small>'+safe(row.unit)+'</small></th>'+storeIds.map(id=>{const entry=row.stores.get(id);return '<td'+(entry&&entry.price===min?' class="price-dash-low"':'')+'>'+(entry?money(entry.price):'—')+'</td>';}).join('')+'</tr>';
   }).join('');
-  const leader = ranking[0];
-  return '<section class="surface-panel price-compare price-donut-panel"><div class="panel-heading"><div><span class="eyebrow">COMPARACIÓN POR ESTABLECIMIENTO</span><h3>¿Dónde compraste más barato?</h3></div><span class="period-chip">' + total + ' productos comparables</span></div><div class="price-donut-layout"><div class="price-donut-chart" role="img" aria-label="Porcentaje de productos con menor precio por establecimiento" style="background:conic-gradient(' + slices.join(',') + ')"><div class="price-donut-center"><strong>' + total + '</strong><small>productos</small></div></div><div class="price-donut-legend">' + legend + '</div></div><p class="price-donut-note">Cada producto comprado en dos o más tiendas cuenta una vez. Se compara el último precio unitario registrado para el mismo nombre y unidad; los empates se reparten. Los porcentajes indican cuántos productos resultaron más baratos en cada tienda, no el gasto total.</p></section>';
+  const table = '<div class="price-dash-table-scroll"><table class="price-dash-table"><thead><tr><th>Producto</th>'+storeIds.map(id=>'<th>'+safe(storeNames.get(id)||'Establecimiento')+'</th>').join('')+'</tr></thead><tbody>'+tableRows+'</tbody></table></div>';
+  const leaderId = ranked[0][0];
+  return '<section class="surface-panel price-compare price-dashboard"><div class="price-dash-header"><span class="eyebrow">MI COMPRA 2.0 · TUS PRECIOS REALES</span><h3>Comparación por establecimiento</h3><p>'+total+' productos comprados y comparables</p></div><div class="price-dash-visuals"><div class="price-dash-chart-card"><h4>Distribución de mejores precios</h4><div class="price-dash-donut-layout"><div class="price-dash-donut" style="background:conic-gradient('+segments.join(',')+')"><div><strong>'+total+'</strong><small>productos</small></div></div><div class="price-dash-legend">'+legend+'</div></div></div><div class="price-dash-chart-card"><h4>Comparación entre supermercados</h4><div class="price-dash-bars">'+bars+'</div></div></div><div class="price-dash-highlight"><span>🏆 Más productos al menor precio: <strong>'+safe(storeNames.get(leaderId)||'Establecimiento')+'</strong></span><span>'+((ranked[0][1]/total)*100).toFixed(1)+'% de los productos comparados</span></div><details class="price-dash-details"><summary>Ver tabla de productos y precios ('+total+')</summary>'+table+'</details><p class="price-donut-note">Los porcentajes representan productos con menor precio registrado, no participación del gasto. Se usan los últimos precios unitarios de compras confirmadas; los empates se reparten y las celdas sin compra muestran —.</p></section>';
 }
 function renderReports() {
   const month = monthKey();
